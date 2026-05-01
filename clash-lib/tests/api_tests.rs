@@ -1,10 +1,37 @@
-use crate::common::{ClashInstance, send_http_request, wait_port_ready};
+use crate::common::{
+    ClashInstance, alloc_ports, make_client_config_str, send_http_request,
+    wait_port_ready,
+};
 use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options};
 use http_body_util::BodyExt;
 use std::{path::PathBuf, time::Duration};
 
 mod common;
+
+// Port layout for client tests: 7 ports per instance
+const CLIENT_PORT_BLOCK: u16 = 7;
+
+/// Allocate a unique port block and start an isolated client Clash instance.
+/// Returns (instance, api_port) where api_port = port_base
+/// (external-controller).
+fn start_unique_client() -> (ClashInstance, u16) {
+    let port_base = alloc_ports(CLIENT_PORT_BLOCK);
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_str = make_client_config_str(port_base);
+    let clash = ClashInstance::start(
+        Options {
+            config: Config::Str(config_str),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
+    )
+    .expect("Failed to start client");
+    (clash, port_base)
+}
 
 async fn get_allow_lan(port: u16) -> bool {
     let url = format!("http://127.0.0.1:{}/configs", port);
@@ -34,55 +61,56 @@ async fn get_allow_lan(port: u16) -> bool {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_config_reload_via_payload() {
     let wd =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
-    assert!(
-        config_path.exists(),
-        "Config file does not exist at: {}",
-        config_path.to_string_lossy()
-    );
+
+    // Allocate 8 ports: 7 for the initial instance + 1 for the reloaded controller
+    let port_base = alloc_ports(8);
+    let config_str = make_client_config_str(port_base);
 
     // Start Clash instance with RAII guard - will auto-cleanup on drop
     let _clash = ClashInstance::start(
         Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
+            config: Config::Str(config_str),
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+        (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
     )
     .expect("Failed to start clash");
 
     // Initial config has allow-lan: true
     assert!(
-        get_allow_lan(9090).await,
+        get_allow_lan(port_base).await,
         "expected allow-lan=true before reload"
     );
 
     // Reload with a new payload that flips allow-lan to false
-    let new_payload = r#"
-socks-port: 7892
+    let new_payload = format!(
+        r#"
+socks-port: {}
 bind-address: 127.0.0.1
 allow-lan: false
 mode: direct
 log-level: info
-external-controller: :9091
+external-controller: :{}
 secret: clash-rs
 tun:
   enable: false
 proxies:
-  - {name: DIRECT_alias, type: direct}
-  - {name: REJECT_alias, type: reject}
-"#;
+  - {{name: DIRECT_alias, type: direct}}
+  - {{name: REJECT_alias, type: reject}}
+"#,
+        port_base + 2,
+        port_base + 7
+    );
     let body = serde_json::json!({ "payload": new_payload }).to_string();
 
-    let configs_url = "http://127.0.0.1:9090/configs";
+    let configs_url = format!("http://127.0.0.1:{}/configs", port_base);
     let req = hyper::Request::builder()
-        .uri(configs_url)
+        .uri(&configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PUT)
@@ -103,42 +131,23 @@ proxies:
 
     // allow-lan should now be false
     assert!(
-        !get_allow_lan(9091).await,
+        !get_allow_lan(port_base + 7).await,
         "expected allow-lan=false after reload"
     );
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_set_allow_lan() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
-    assert!(
-        config_path.exists(),
-        "Config file does not exist at: {}",
-        config_path.to_string_lossy()
-    );
-
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
+    let (_clash, api_port) = start_unique_client();
 
     assert!(
-        get_allow_lan(9090).await,
+        get_allow_lan(api_port).await,
         "'allow_lan' should be true by config"
     );
 
-    let configs_url = "http://127.0.0.1:9090/configs";
+    let configs_url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(configs_url)
+        .uri(&configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -151,7 +160,7 @@ async fn test_get_set_allow_lan() {
     assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
     assert!(
-        !get_allow_lan(9090).await,
+        !get_allow_lan(api_port).await,
         "'allow_lan' should be false after update"
     );
 
@@ -160,58 +169,63 @@ async fn test_get_set_allow_lan() {
 
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_connections_returns_proxy_chain_names() {
     let wd_server =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
     let wd_client =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let server_config = wd_server.join("server.yaml");
-    let client_config = wd_client.join("rules.yaml");
 
-    assert!(
-        server_config.exists(),
-        "Server config file does not exist at: {}",
-        server_config.to_string_lossy()
-    );
-    assert!(
-        client_config.exists(),
-        "Client config file does not exist at: {}",
-        client_config.to_string_lossy()
-    );
+    // Allocate unique ports for the server (API + SS listener)
+    let server_base = alloc_ports(2);
+    // Allocate unique ports for the client (7-port block)
+    let client_base = alloc_ports(CLIENT_PORT_BLOCK);
+
+    // Build server config dynamically from server.yaml
+    let server_config_str = {
+        let tpl = std::fs::read_to_string(wd_server.join("server.yaml"))
+            .expect("Failed to read server.yaml");
+        tpl.replace(":9091", &format!(":{}", server_base))
+            .replace("port: 8901", &format!("port: {}", server_base + 1))
+    };
+
+    // Build client config dynamically: template substitution + SS server port
+    let client_config_str = make_client_config_str(client_base)
+        .replace("127.0.0.1:8901", &format!("127.0.0.1:{}", server_base + 1))
+        .replace("port: 8901", &format!("port: {}", server_base + 1));
 
     // Start server instance with RAII guard
     let _server = ClashInstance::start(
         Options {
-            config: Config::File(server_config.to_string_lossy().to_string()),
+            config: Config::Str(server_config_str),
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         },
-        vec![9091, 8901],
+        vec![server_base, server_base + 1],
     )
     .expect("Failed to start server");
 
     // Start client instance with RAII guard
     let _client = ClashInstance::start(
         Options {
-            config: Config::File(client_config.to_string_lossy().to_string()),
+            config: Config::Str(client_config_str),
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+        (client_base..client_base + CLIENT_PORT_BLOCK).collect(),
     )
     .expect("Failed to start client");
 
     // Also wait for the SOCKS5 port used by the request task —
     // ClashInstance::start() only waits for the API port (first in the list)
     // and the proxy listeners may bind slightly later.
-    wait_port_ready(8899).expect("SOCKS5 port 8899 not ready");
+    wait_port_ready(client_base + 3).expect("mixed-proxy port not ready");
 
-    let request_handle = tokio::spawn(async {
-        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:8899")
-            .expect("Failed to create proxy");
+    let request_handle = tokio::spawn(async move {
+        let proxy =
+            reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", client_base + 3))
+                .expect("Failed to create proxy");
 
         let client = reqwest::Client::builder()
             .proxy(proxy)
@@ -244,13 +258,13 @@ async fn test_connections_returns_proxy_chain_names() {
     // Poll the connections API until at least one connection appears (or 10s
     // timeout). A fixed sleep is flaky under load; polling is robust.
     tokio::task::yield_now().await;
-    let connections_url = "http://127.0.0.1:9090/connections";
+    let connections_url = format!("http://127.0.0.1:{}/connections", client_base);
     let first_connection = {
         let mut found = None;
         for _ in 0..20 {
             tokio::time::sleep(Duration::from_millis(500)).await;
             let req = hyper::Request::builder()
-                .uri(connections_url)
+                .uri(&connections_url)
                 .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
                 .method(http::method::Method::GET)
                 .body(http_body_util::Empty::<Bytes>::new())
@@ -301,26 +315,12 @@ async fn test_connections_returns_proxy_chain_names() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_configs_listeners() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -368,38 +368,35 @@ async fn test_get_configs_listeners() {
         );
     }
 
-    // Verify known ports are present (config has port:8888, socks:8889, mixed:8899)
+    // Verify known ports are present (config has port:+1, socks:+2, mixed:+3)
     let ports: Vec<u64> = listeners
         .iter()
         .filter_map(|l| l.get("port").and_then(|p| p.as_u64()))
         .collect();
-    assert!(ports.contains(&8888), "expected port 8888 in listeners");
-    assert!(ports.contains(&8889), "expected port 8889 in listeners");
-    assert!(ports.contains(&8899), "expected port 8899 in listeners");
+    assert!(
+        ports.contains(&((api_port + 1) as u64)),
+        "expected HTTP proxy port {} in listeners",
+        api_port + 1
+    );
+    assert!(
+        ports.contains(&((api_port + 2) as u64)),
+        "expected SOCKS5 proxy port {} in listeners",
+        api_port + 2
+    );
+    assert!(
+        ports.contains(&((api_port + 3) as u64)),
+        "expected mixed proxy port {} in listeners",
+        api_port + 3
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_configs_lan_ips_when_allow_lan() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    // rules.yaml has allow-lan: true
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -436,37 +433,24 @@ async fn test_get_configs_lan_ips_when_allow_lan() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_configs_dns_listen_when_enabled() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
-
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
+    let (_clash, api_port) = start_unique_client();
 
     // Reload with dns.enable: true so dns-listen is populated
-    let new_payload = r#"
-mixed-port: 8899
+    let new_payload = format!(
+        r#"
+mixed-port: {}
 allow-lan: true
 mode: direct
 log-level: info
-external-controller: :9090
+external-controller: :{}
 secret: clash-rs
 dns:
   enable: true
   ipv6: false
   listen:
-    udp: 127.0.0.1:53553
-    tcp: 127.0.0.1:53553
+    udp: 127.0.0.1:{}
+    tcp: 127.0.0.1:{}
   default-nameserver:
     - 8.8.8.8
   nameserver:
@@ -474,12 +458,17 @@ dns:
 tun:
   enable: false
 proxies:
-  - {name: DIRECT_alias, type: direct}
-"#;
+  - {{name: DIRECT_alias, type: direct}}
+"#,
+        api_port + 3,
+        api_port,
+        api_port + 4,
+        api_port + 4,
+    );
     let body = serde_json::json!({ "payload": new_payload }).to_string();
-    let configs_url = "http://127.0.0.1:9090/configs";
+    let configs_url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(configs_url)
+        .uri(&configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PUT)
@@ -493,9 +482,9 @@ proxies:
 
     // Wait briefly for the reload to propagate
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    wait_port_ready(9090).expect("API port not ready after reload");
+    wait_port_ready(api_port).expect("API port not ready after reload");
     let req = hyper::Request::builder()
-        .uri(configs_url)
+        .uri(&configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -522,13 +511,13 @@ proxies:
         .get("udp")
         .and_then(|v| v.as_str())
         .expect("'dns-listen.udp' field missing");
-    assert_eq!(udp, "127.0.0.1:53553");
+    assert_eq!(udp, format!("127.0.0.1:{}", api_port + 4));
 
     let tcp = dns_listen
         .get("tcp")
         .and_then(|v| v.as_str())
         .expect("'dns-listen.tcp' field missing");
-    assert_eq!(tcp, "127.0.0.1:53553");
+    assert_eq!(tcp, format!("127.0.0.1:{}", api_port + 4));
 }
 
 async fn get_proxy_info(api_port: u16, proxy_name: &str) -> serde_json::Value {
@@ -556,36 +545,22 @@ async fn get_proxy_info(api_port: u16, proxy_name: &str) -> serde_json::Value {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_plain_proxy_api_response_direct_reject() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(
-                wd.join("rules.yaml").to_string_lossy().to_string(),
-            ),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
+    let (_clash, api_port) = start_unique_client();
 
-    let direct = get_proxy_info(9090, "DIRECT").await;
+    let direct = get_proxy_info(api_port, "DIRECT").await;
     assert_eq!(direct["name"], "DIRECT");
     assert_eq!(direct["type"], "Direct");
     assert_eq!(direct["udp"], true);
 
-    let reject = get_proxy_info(9090, "REJECT").await;
+    let reject = get_proxy_info(api_port, "REJECT").await;
     assert_eq!(reject["name"], "REJECT");
     assert_eq!(reject["type"], "Reject");
     assert_eq!(reject["udp"], false);
 
-    let proxies_url = "http://127.0.0.1:9090/proxies";
+    let proxies_url = format!("http://127.0.0.1:{}/proxies", api_port);
     let req = hyper::Request::builder()
-        .uri(proxies_url)
+        .uri(&proxies_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -615,26 +590,35 @@ async fn test_plain_proxy_api_response_direct_reject() {
 /// registered, authenticated correctly, and resets-on-read semantics work.
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_user_stats_endpoint_empty_on_no_traffic() {
     let wd_server =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
-    let server_config = wd_server.join("server_multiuser.yaml");
+
+    // Allocate unique ports for the multiuser server (API + SS listener)
+    let server_base = alloc_ports(2);
+
+    // Build server_multiuser config dynamically
+    let server_config_str = {
+        let tpl = std::fs::read_to_string(wd_server.join("server_multiuser.yaml"))
+            .expect("Failed to read server_multiuser.yaml");
+        tpl.replace(":9092", &format!(":{}", server_base))
+            .replace("port: 8902", &format!("port: {}", server_base + 1))
+    };
 
     let _server = ClashInstance::start(
         Options {
-            config: Config::File(server_config.to_string_lossy().to_string()),
+            config: Config::Str(server_config_str),
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         },
-        vec![9092, 8902],
+        vec![server_base, server_base + 1],
     )
     .expect("Failed to start multiuser server");
 
-    let url = "http://127.0.0.1:9092/user-stats";
+    let url = format!("http://127.0.0.1:{}/user-stats", server_base);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer test-secret")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -672,24 +656,10 @@ async fn test_user_stats_endpoint_empty_on_no_traffic() {
 
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_plain_proxy_api_response_shadowsocks() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(
-                wd.join("rules.yaml").to_string_lossy().to_string(),
-            ),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
+    let (_clash, api_port) = start_unique_client();
 
-    let proxy = get_proxy_info(9090, "ss-simple").await;
+    let proxy = get_proxy_info(api_port, "ss-simple").await;
     assert_eq!(proxy["name"], "ss-simple");
     assert_eq!(proxy["type"], "Shadowsocks");
     assert_eq!(proxy["server"], "127.0.0.1");
@@ -703,26 +673,12 @@ async fn test_plain_proxy_api_response_shadowsocks() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_hello_endpoint() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/";
+    let url = format!("http://127.0.0.1:{}/", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -747,26 +703,12 @@ async fn test_hello_endpoint() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_version_endpoint() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/version";
+    let url = format!("http://127.0.0.1:{}/version", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -799,26 +741,12 @@ async fn test_version_endpoint() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_memory_endpoint() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/memory";
+    let url = format!("http://127.0.0.1:{}/memory", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -851,26 +779,12 @@ async fn test_memory_endpoint() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_rules_endpoint() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/rules";
+    let url = format!("http://127.0.0.1:{}/rules", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -910,26 +824,12 @@ async fn test_rules_endpoint() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_auth_required() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/";
+    let url = format!("http://127.0.0.1:{}/", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
         .expect("Failed to build request");
@@ -945,26 +845,12 @@ async fn test_auth_required() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_delete_all_connections() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/connections";
+    let url = format!("http://127.0.0.1:{}/connections", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::DELETE)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -981,26 +867,12 @@ async fn test_delete_all_connections() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_providers_endpoint() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
+    let (_clash, api_port) = start_unique_client();
 
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
-
-    let url = "http://127.0.0.1:9090/providers/proxies";
+    let url = format!("http://127.0.0.1:{}/providers/proxies", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::GET)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -1032,28 +904,14 @@ async fn test_providers_endpoint() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_update_proxy_selector() {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
-
-    let _clash = ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash");
+    let (_clash, api_port) = start_unique_client();
 
     // "test 🌏" URL-encoded is "test%20%F0%9F%8C%8F"
-    let url = "http://127.0.0.1:9090/proxies/test%20%F0%9F%8C%8F";
+    let url = format!("http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F", api_port);
     let body = r#"{"name": "url-test"}"#.to_string();
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PUT)
@@ -1071,20 +929,8 @@ async fn test_update_proxy_selector() {
 }
 
 /// Helper to start the standard client clash instance.
-fn start_client_clash() -> ClashInstance {
-    let wd =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
-    let config_path = wd.join("rules.yaml");
-    ClashInstance::start(
-        Options {
-            config: Config::File(config_path.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
-            rt: None,
-            log_file: None,
-        },
-        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
-    )
-    .expect("Failed to start clash")
+fn start_client_clash() -> (ClashInstance, u16) {
+    start_unique_client()
 }
 
 /// Helper to build an authenticated GET request with an empty body.
@@ -1117,12 +963,11 @@ async fn parse_json(
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_connections_rest() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/connections";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!("http://127.0.0.1:{}/connections", api_port);
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /connections");
 
@@ -1156,15 +1001,16 @@ async fn test_get_connections_rest() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_delete_connection_by_id() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // Use a random UUID that doesn't correspond to any real connection.
-    let url =
-        "http://127.0.0.1:9090/connections/00000000-0000-0000-0000-000000000000";
+    let url = format!(
+        "http://127.0.0.1:{}/connections/00000000-0000-0000-0000-000000000000",
+        api_port
+    );
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::DELETE)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -1186,12 +1032,14 @@ async fn test_delete_connection_by_id() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_proxy_not_found() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/proxies/nonexistent-proxy-xyz";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!(
+        "http://127.0.0.1:{}/proxies/nonexistent-proxy-xyz",
+        api_port
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /proxies/nonexistent-proxy-xyz");
 
@@ -1207,16 +1055,15 @@ async fn test_proxy_not_found() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_update_proxy_selector_invalid() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // "test 🌏" is a Selector; selecting a proxy name that doesn't exist should
     // return 400.
-    let url = "http://127.0.0.1:9090/proxies/test%20%F0%9F%8C%8F";
+    let url = format!("http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F", api_port);
     let body = r#"{"name": "this-proxy-does-not-exist"}"#.to_string();
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PUT)
@@ -1239,15 +1086,14 @@ async fn test_update_proxy_selector_invalid() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_update_non_selector_proxy_returns_not_found() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // "DIRECT" is not a Selector; the PUT endpoint should return 404.
-    let url = "http://127.0.0.1:9090/proxies/DIRECT";
+    let url = format!("http://127.0.0.1:{}/proxies/DIRECT", api_port);
     let body = r#"{"name": "DIRECT"}"#.to_string();
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PUT)
@@ -1270,13 +1116,12 @@ async fn test_update_non_selector_proxy_returns_not_found() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_provider() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // The "url-test" group creates an internal PlainProvider named "url-test".
-    let url = "http://127.0.0.1:9090/providers/proxies/url-test";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!("http://127.0.0.1:{}/providers/proxies/url-test", api_port);
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/url-test");
 
@@ -1302,13 +1147,12 @@ async fn test_get_provider() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_put_provider() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/providers/proxies/url-test";
+    let url = format!("http://127.0.0.1:{}/providers/proxies/url-test", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .method(http::method::Method::PUT)
         .body(http_body_util::Empty::<Bytes>::new())
@@ -1330,12 +1174,14 @@ async fn test_put_provider() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_provider_healthcheck() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/providers/proxies/url-test/healthcheck";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!(
+        "http://127.0.0.1:{}/providers/proxies/url-test/healthcheck",
+        api_port
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/url-test/healthcheck");
 
@@ -1351,13 +1197,15 @@ async fn test_provider_healthcheck() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_get_proxy_from_provider() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // The "url-test" provider contains "DIRECT" (from rules.yaml group config).
-    let url = "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!(
+        "http://127.0.0.1:{}/providers/proxies/url-test/DIRECT",
+        api_port
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/url-test/DIRECT");
 
@@ -1380,7 +1228,6 @@ async fn test_get_proxy_from_provider() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_provider_proxy_healthcheck() {
     // Start a local mock HTTP server so the test does not rely on external
     // network access and always completes within the timeout.
@@ -1390,13 +1237,14 @@ async fn test_provider_proxy_healthcheck() {
         then.status(200).body("ok");
     });
 
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // URL-encode the mock server URL for use in the query string.
     let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
     let url = format!(
-        "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
-         ?url={encoded_url}&timeout=5000"
+        "http://127.0.0.1:{}/providers/proxies/url-test/DIRECT/healthcheck\
+         ?url={encoded_url}&timeout=5000",
+        api_port
     );
     let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
@@ -1421,12 +1269,14 @@ async fn test_provider_proxy_healthcheck() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_provider_not_found() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/providers/proxies/nonexistent-provider-xyz";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!(
+        "http://127.0.0.1:{}/providers/proxies/nonexistent-provider-xyz",
+        api_port
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/nonexistent-provider-xyz");
 
@@ -1442,13 +1292,15 @@ async fn test_provider_not_found() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_dns_query_when_disabled() {
     // rules.yaml has dns.enable: false, so the resolver is a system stub.
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/dns/query?name=example.com&type=A";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!(
+        "http://127.0.0.1:{}/dns/query?name=example.com&type=A",
+        api_port
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /dns/query");
 
@@ -1464,14 +1316,13 @@ async fn test_dns_query_when_disabled() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_dns_query_invalid_hostname() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // An empty name is invalid; the endpoint must return 400 regardless of
     // whether DNS is enabled.
-    let url = "http://127.0.0.1:9090/dns/query?name=&type=A";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    let url = format!("http://127.0.0.1:{}/dns/query?name=&type=A", api_port);
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /dns/query with invalid name");
 
@@ -1502,18 +1353,17 @@ async fn get_mode(port: u16) -> String {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_mode_direct() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // Initial mode in rules.yaml is "rule".
-    let initial = get_mode(9090).await;
+    let initial = get_mode(api_port).await;
     assert_eq!(initial, "rule", "initial mode should be 'rule'");
 
     // Switch to "direct".
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -1530,18 +1380,17 @@ async fn test_patch_mode_direct() {
     );
 
     // Mode must be reflected immediately by GET /configs.
-    let after = get_mode(9090).await;
+    let after = get_mode(api_port).await;
     assert_eq!(after, "direct", "mode should be 'direct' after PATCH");
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_mode_global() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -1553,24 +1402,23 @@ async fn test_patch_mode_global() {
         .expect("Failed to PATCH /configs mode=global");
     assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
-    let after = get_mode(9090).await;
+    let after = get_mode(api_port).await;
     assert_eq!(after, "global", "mode should be 'global' after PATCH");
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_mode_roundtrip() {
     // rule → direct → global → rule
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let api = "http://127.0.0.1:9090/configs";
+    let api = format!("http://127.0.0.1:{}/configs", api_port);
 
     for (mode_in, expected) in
         [("direct", "direct"), ("global", "global"), ("rule", "rule")]
     {
         let body = format!(r#"{{"mode": "{}"}}"#, mode_in);
         let req = hyper::Request::builder()
-            .uri(api)
+            .uri(&api)
             .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
             .header(hyper::header::CONTENT_TYPE, "application/json")
             .method(http::method::Method::PATCH)
@@ -1582,7 +1430,7 @@ async fn test_patch_mode_roundtrip() {
             .expect("Failed to PATCH /configs mode");
         assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
-        let actual = get_mode(9090).await;
+        let actual = get_mode(api_port).await;
         assert_eq!(
             actual, expected,
             "mode should be '{}' after PATCHing to '{}'",
@@ -1595,15 +1443,14 @@ async fn test_patch_mode_roundtrip() {
 /// is running.  We issue PATCH and GET concurrently via `tokio::join!` and
 /// confirm both complete and return consistent data.
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_mode_does_not_block_get_configs() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
 
     // Build PATCH and GET requests upfront.
     let patch_req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -1613,7 +1460,7 @@ async fn test_patch_mode_does_not_block_get_configs() {
     // Issue both requests concurrently so the GET races against the PATCH.
     let (patch_res, get_res) = tokio::join!(
         send_http_request::<String>(url.parse().unwrap(), patch_req),
-        send_http_request(url.parse().unwrap(), auth_get(url)),
+        send_http_request(url.parse().unwrap(), auth_get(&url)),
     );
 
     let patch_res = patch_res.expect("PATCH /configs should not fail");
@@ -1634,13 +1481,12 @@ async fn test_patch_mode_does_not_block_get_configs() {
 /// PATCH /configs with log-level should return 202 and the change must be
 /// stable (no panic, no deadlock).
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_log_level() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -1656,7 +1502,7 @@ async fn test_patch_log_level() {
         "PATCH /configs log-level should return 202"
     );
 
-    let get_res = send_http_request(url.parse().unwrap(), auth_get(url))
+    let get_res = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to GET /configs after log-level PATCH");
     let json = parse_json(get_res).await;
@@ -1671,13 +1517,12 @@ async fn test_patch_log_level() {
 /// effect.  This exercises the previously-buggy code path where global_state
 /// was held across mode-set and log-level-set in a single critical section.
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_patch_mode_and_log_level_together() {
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/configs";
+    let url = format!("http://127.0.0.1:{}/configs", api_port);
     let req = hyper::Request::builder()
-        .uri(url)
+        .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .method(http::method::Method::PATCH)
@@ -1690,7 +1535,7 @@ async fn test_patch_mode_and_log_level_together() {
     assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
     let after_json = parse_json(
-        send_http_request(url.parse().unwrap(), auth_get(url))
+        send_http_request(url.parse().unwrap(), auth_get(&url))
             .await
             .expect("Failed to GET /configs after combined PATCH"),
     )
@@ -1714,7 +1559,6 @@ async fn test_patch_mode_and_log_level_together() {
 /// Test `GET /proxies/DIRECT/delay` using a local mock HTTP server as the
 /// target so the result is deterministic and independent of external network.
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_proxy_delay_direct() {
     let mock_server = httpmock::MockServer::start();
     mock_server.mock(|when, then| {
@@ -1722,13 +1566,14 @@ async fn test_proxy_delay_direct() {
         then.status(200).body("ok");
     });
 
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     // URL-encode the mock server URL for the query string:
     // `http://127.0.0.1:PORT/` → `http%3A%2F%2F127.0.0.1%3APORT%2F`
     let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
     let url = format!(
-        "http://127.0.0.1:9090/proxies/DIRECT/delay?url={encoded_url}&timeout=5000"
+        "http://127.0.0.1:{}/proxies/DIRECT/delay?url={encoded_url}&timeout=5000",
+        api_port
     );
 
     let response = send_http_request(url.parse().unwrap(), auth_get(&url))
@@ -1760,7 +1605,6 @@ async fn test_proxy_delay_direct() {
 /// target.  The url-test group has DIRECT as its sole member, which makes a
 /// direct connection to the mock server – no external network needed.
 #[tokio::test(flavor = "current_thread")]
-#[serial_test::serial]
 async fn test_group_delay_url_test() {
     let mock_server = httpmock::MockServer::start();
     mock_server.mock(|when, then| {
@@ -1768,11 +1612,12 @@ async fn test_group_delay_url_test() {
         then.status(200).body("ok");
     });
 
-    let _clash = start_client_clash();
+    let (_clash, api_port) = start_client_clash();
 
     let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
     let url = format!(
-        "http://127.0.0.1:9090/group/url-test/delay?url={encoded_url}&timeout=5000"
+        "http://127.0.0.1:{}/group/url-test/delay?url={encoded_url}&timeout=5000",
+        api_port
     );
 
     let response = send_http_request(url.parse().unwrap(), auth_get(&url))

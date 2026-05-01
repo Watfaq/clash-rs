@@ -1,27 +1,69 @@
 use futures::TryFutureExt;
 use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
-use std::net::{Shutdown, TcpStream};
+use std::{
+    net::{Shutdown, TcpStream},
+    sync::atomic::{AtomicU16, Ordering},
+};
 
+/// Backward-compatible wrapper used by integration_tests.rs.
+#[allow(dead_code)]
 pub fn start_clash(options: clash_lib::Options) -> Result<(), clash_lib::Error> {
     clash_lib::start_scaffold(options)
+}
+
+/// Global port counter. Each test claims a contiguous block starting here.
+#[allow(dead_code)]
+static NEXT_PORT: AtomicU16 = AtomicU16::new(20000);
+
+/// Allocate `n` consecutive port numbers (no binding, just counter).
+#[allow(dead_code)]
+pub fn alloc_ports(n: u16) -> u16 {
+    NEXT_PORT.fetch_add(n, Ordering::Relaxed)
+}
+
+/// Build a client config YAML string from the bundled rules.yaml template,
+/// substituting all hardcoded local ports with unique values derived from
+/// `port_base`.
+///
+/// Port layout (offsets from `port_base`):
+///   +0  external-controller (API)
+///   +1  HTTP proxy
+///   +2  SOCKS5 proxy
+///   +3  mixed proxy
+///   +4  DNS UDP/TCP
+///   +5  DNS DoT
+///   +6  DNS DoH / DoH3
+#[allow(dead_code)]
+pub fn make_client_config_str(port_base: u16) -> String {
+    let tpl = include_str!("../data/config/client/rules.yaml");
+    tpl.replace(":9090", &format!(":{}", port_base))
+        .replace("port: 8888", &format!("port: {}", port_base + 1))
+        .replace("\"8889\"", &format!("\"{}\"", port_base + 2))
+        .replace(
+            "mixed-port: 8899",
+            &format!("mixed-port: {}", port_base + 3),
+        )
+        .replace("127.0.0.1:53553", &format!("127.0.0.1:{}", port_base + 4))
+        .replace("127.0.0.1:53554", &format!("127.0.0.1:{}", port_base + 5))
+        .replace("127.0.0.1:53555", &format!("127.0.0.1:{}", port_base + 6))
 }
 
 pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     let addr = format!("127.0.0.1:{}", port);
     let mut attempts = 0;
-    while attempts < 30 {
+    while attempts < 300 {
         if let Ok(stream) = TcpStream::connect(&addr) {
             stream.shutdown(Shutdown::Both).ok();
             return Ok(());
         }
         attempts += 1;
-        // it may take some time for downloading the mmdbs
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        // 100ms polling instead of 2s for faster startup detection
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
     Err(clash_lib::Error::Io(std::io::Error::new(
         std::io::ErrorKind::TimedOut,
-        format!("Port {} is not ready after 30 attempts", port),
+        format!("Port {} is not ready after 300 attempts (30s)", port),
     )))
 }
 
@@ -42,11 +84,16 @@ fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
     )))
 }
 
-/// RAII guard for Clash instance that ensures proper cleanup
+/// RAII guard for an isolated Clash instance.
+///
+/// On drop: cancels this instance's shutdown token, waits for all ports to
+/// close, then joins the background thread. Does NOT touch the global
+/// SHUTDOWN_TOKEN, so concurrent instances are unaffected.
 #[allow(dead_code)]
 pub struct ClashInstance {
     ports: Vec<u16>,
     handle: Option<std::thread::JoinHandle<()>>,
+    token: tokio_util::sync::CancellationToken,
 }
 
 impl ClashInstance {
@@ -55,11 +102,9 @@ impl ClashInstance {
         options: clash_lib::Options,
         ports: Vec<u16>,
     ) -> Result<Self, clash_lib::Error> {
-        let handle = std::thread::spawn(move || {
-            start_clash(options).expect("Failed to start clash");
-        });
+        let (handle, token) = clash_lib::start_scaffold_instance(options)?;
 
-        // Wait for the main port (usually API port) to be ready
+        // Wait for the main port (API) to be ready
         if let Some(&main_port) = ports.first() {
             wait_port_ready(main_port)?;
         }
@@ -67,16 +112,17 @@ impl ClashInstance {
         Ok(Self {
             ports,
             handle: Some(handle),
+            token,
         })
     }
 }
 
 impl Drop for ClashInstance {
     fn drop(&mut self) {
-        // Trigger shutdown
-        clash_lib::shutdown();
+        // Cancel only this instance — does not affect sibling instances.
+        self.token.cancel();
 
-        // Wait for all ports to be released
+        // Wait for all ports to be released.
         for &port in &self.ports {
             if let Err(e) = wait_port_closed(port) {
                 eprintln!(
@@ -86,8 +132,7 @@ impl Drop for ClashInstance {
             }
         }
 
-        // Join the thread to ensure it has fully exited, preventing ports from
-        // being held by the spawned runtime across test runs.
+        // Join the thread to ensure it has fully exited.
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
@@ -97,7 +142,6 @@ impl Drop for ClashInstance {
 /// Sends an HTTP request to the specified URL using a TCP connection.
 /// Don't use any domain name in the URL, which will trigger DNS resolution.
 /// And libnss_files will likely cause a coredump(in static crt build).
-/// TODO: Use a DNS resolver to resolve the domain name in the URL.
 #[allow(dead_code)]
 pub async fn send_http_request<T>(
     url: hyper::Uri,
@@ -218,9 +262,7 @@ impl Socks5UdpSession {
         self.socket.send_to(&dgram, self.relay_addr).await.unwrap();
     }
 
-    /// Receive one SOCKS5 UDP datagram.  Returns `(payload, src_addr_str)`
-    /// where `src_addr_str` is the SOCKS5-encoded source address as
-    /// `"ip:port"` or `"domain:port"`.
+    /// Receive one SOCKS5 UDP datagram. Returns `(payload, src_addr_str)`
     pub async fn recv(&self) -> (Vec<u8>, String) {
         let mut buf = vec![0u8; 65535];
         let (n, sender) = self.socket.recv_from(&mut buf).await.unwrap();
@@ -238,7 +280,6 @@ impl Socks5UdpSession {
 
         let src = match atyp {
             0x01 => {
-                // IPv4
                 let ip = std::net::Ipv4Addr::from([
                     pkt[pos],
                     pkt[pos + 1],
@@ -251,7 +292,6 @@ impl Socks5UdpSession {
                 format!("{ip}:{port}")
             }
             0x03 => {
-                // Domain
                 let len = pkt[pos] as usize;
                 pos += 1;
                 let domain = std::str::from_utf8(&pkt[pos..pos + len])
@@ -263,7 +303,6 @@ impl Socks5UdpSession {
                 format!("{domain}:{port}")
             }
             0x04 => {
-                // IPv6
                 let mut ip6 = [0u8; 16];
                 ip6.copy_from_slice(&pkt[pos..pos + 16]);
                 let ip = std::net::Ipv6Addr::from(ip6);
