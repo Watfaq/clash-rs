@@ -2,7 +2,7 @@ use crate::session::SocksAddr;
 use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use quinn_proto::{VarInt, coding::Codec};
-use rand::distr::Alphanumeric;
+use rand::distr::Distribution;
 use std::{io::ErrorKind, str::FromStr};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -62,10 +62,11 @@ impl Decoder for Hy2TcpCodec {
 
 #[inline]
 pub fn padding(range: std::ops::RangeInclusive<u32>) -> Vec<u8> {
-    use rand::Rng;
-    let mut rng = rand::rng();
-    let len = rng.random_range(range) as usize;
-    rng.sample_iter(Alphanumeric).take(len).collect()
+    let len = rand::random_range(range) as usize;
+    rand::distr::Alphanumeric
+        .sample_iter(rand::rng())
+        .take(len)
+        .collect()
 }
 
 impl Encoder<&'_ SocksAddr> for Hy2TcpCodec {

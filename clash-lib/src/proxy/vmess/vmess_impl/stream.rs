@@ -216,6 +216,7 @@ where
         let mut mbuf = BytesMut::new();
 
         if !is_aead {
+            use hmac::KeyInit;
             let mut mac = HmacMd5::new_from_slice(id.uuid.as_bytes())
                 .expect("key len expected to be 16");
             mac.update(now.to_be_bytes().as_slice());

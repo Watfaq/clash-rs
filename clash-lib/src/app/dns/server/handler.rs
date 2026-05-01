@@ -46,11 +46,8 @@ pub async fn exchange_with_resolver<'a>(
             Some(ip) => {
                 let rdata = RData::A(A(ip));
 
-                let records = vec![Record::from_rdata(
-                    name,
-                    DEFAULT_DNS_SERVER_TTL,
-                    rdata,
-                )];
+                let records =
+                    vec![Record::from_rdata(name, DEFAULT_DNS_SERVER_TTL, rdata)];
 
                 res.metadata.response_code = ResponseCode::NoError;
                 res.add_answers(records);

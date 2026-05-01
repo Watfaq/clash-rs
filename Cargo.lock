@@ -1367,6 +1367,7 @@ dependencies = [
  "protox",
  "public-suffix",
  "quinn 0.11.9",
+ "quinn 0.12.0",
  "quinn-proto 0.11.14",
  "rand 0.10.0",
  "rand_chacha 0.10.0",
@@ -3541,20 +3542,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
 dependencies = [
  "async-trait",
+ "bytes",
  "cfg-if",
  "data-encoding",
  "enum-as-inner",
  "futures-channel",
  "futures-io",
  "futures-util",
+ "h2",
+ "http",
  "idna",
  "ipnet",
  "once_cell",
  "rand 0.9.4",
  "ring",
+ "rustls",
  "thiserror 2.0.18",
  "tinyvec",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
 ]
@@ -6615,6 +6621,7 @@ dependencies = [
  "quinn-proto 0.12.0",
  "quinn-udp 0.6.1",
  "rustc-hash 2.1.2",
+ "rustls",
  "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
@@ -6669,6 +6676,7 @@ name = "quinn-proto"
 version = "0.12.0"
 source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#ce60e5b5c115db2a6053f4e0ca7fc52103cb76b9"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "getrandom 0.3.4",
  "lru-slab",
@@ -6676,6 +6684,7 @@ dependencies = [
  "rand_pcg",
  "ring",
  "rustc-hash 2.1.2",
+ "rustls",
  "rustls-pki-types",
  "slab",
  "thiserror 2.0.18",

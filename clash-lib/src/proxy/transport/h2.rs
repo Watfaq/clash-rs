@@ -3,7 +3,6 @@ use bytes::{Bytes, BytesMut};
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::Request;
-use rand::Rng;
 use std::{collections::HashMap, fmt::Debug};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::error;
@@ -34,7 +33,7 @@ impl Client {
     }
 
     fn req(&self) -> std::io::Result<Request<()>> {
-        let uri_idx = rand::rng().random_range(0..self.hosts.len());
+        let uri_idx = rand::random_range(0..self.hosts.len());
         let uri = {
             http::Uri::builder()
                 .scheme("https")

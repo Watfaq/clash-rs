@@ -7,7 +7,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use hickory_proto::{
-    op::{Header, HeaderCounts, Message, MessageType, Metadata, OpCode, ResponseCode},
+    op::{
+        Header, HeaderCounts, Message, MessageType, Metadata, OpCode, ResponseCode,
+    },
     rr::RecordType,
 };
 use hickory_server::{
@@ -118,21 +120,27 @@ where
                 metadata.response_code = m.metadata.response_code;
                 metadata.authoritative = m.metadata.authoritative;
 
-                let resp_edns =
-                    if request.edns.as_ref().map_or(false, |e| e.flags().dnssec_ok) {
-                        m.edns.clone()
-                    } else {
-                        None
-                    };
+                let resp_edns = if request
+                    .edns
+                    .as_ref()
+                    .map_or(false, |e| e.flags().dnssec_ok)
+                {
+                    m.edns.clone()
+                } else {
+                    None
+                };
 
-                let rv = MessageResponseBuilder::new(&request.queries, resp_edns.as_ref())
-                    .build(
-                        metadata,
-                        m.answers.iter(),
-                        m.authorities.iter(),
-                        std::iter::empty(),
-                        m.additionals.iter(),
-                    );
+                let rv = MessageResponseBuilder::new(
+                    &request.queries,
+                    resp_edns.as_ref(),
+                )
+                .build(
+                    metadata,
+                    m.answers.iter(),
+                    m.authorities.iter(),
+                    std::iter::empty(),
+                    m.additionals.iter(),
+                );
 
                 debug!(
                     "answering dns query {} with answer {:?}",
@@ -175,7 +183,8 @@ where
             .await
             .unwrap_or_else(|e| {
                 debug!("dns request error: {}", e);
-                let mut metadata = Metadata::response_from_request(&request.metadata);
+                let mut metadata =
+                    Metadata::response_from_request(&request.metadata);
                 metadata.response_code = ResponseCode::ServFail;
                 Header {
                     metadata,

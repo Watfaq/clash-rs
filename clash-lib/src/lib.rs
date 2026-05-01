@@ -1,6 +1,5 @@
 #![feature(cfg_version)]
 #![feature(ip)]
-#![feature(sync_unsafe_cell)]
 #![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 #![cfg_attr(not(version("1.88.0")), feature(let_chains))]

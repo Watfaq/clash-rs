@@ -9,21 +9,24 @@ use std::{
 
 use async_trait::async_trait;
 
-use hickory_client::client;
-use hickory_client::proto::{
-    ProtoError,
-    DnsHandle,
-    h2::HttpsClientStreamBuilder,
+use hickory_client::{
+    client,
+    proto::{
+        DnsHandle, ProtoError,
+        h2::HttpsClientStreamBuilder,
+        rustls::tls_client_connect,
+        tcp::TcpClientStream,
+        udp::UdpClientStream,
+        xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
+    },
+};
+use hickory_proto::{
+    op::Message,
     rr::{
         RecordType,
         rdata::opt::{ClientSubnet, EdnsCode, EdnsOption},
     },
-    rustls::tls_client_connect,
-    tcp::TcpClientStream,
-    udp::UdpClientStream,
-    xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
 };
-use hickory_proto::op::Message;
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, instrument, trace, warn};
@@ -90,7 +93,11 @@ mod tests {
     }
 
     fn build_message(record_type: RecordType) -> Message {
-        let mut msg = Message::new(0, hickory_proto::op::MessageType::Query, hickory_proto::op::OpCode::Query);
+        let mut msg = Message::new(
+            0,
+            hickory_proto::op::MessageType::Query,
+            hickory_proto::op::OpCode::Query,
+        );
         let mut query = op::Query::new();
         query.set_name(Name::from_ascii("example.org").expect("valid name"));
         query.set_query_type(record_type);

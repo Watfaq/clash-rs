@@ -10,11 +10,13 @@ use crate::{
 use anyhow::Result;
 use async_trait::async_trait;
 
-use quinn::{
-    EndpointConfig, TokioRuntime,
-    congestion::{BbrConfig, NewRenoConfig},
-};
 use tracing::debug;
+use tuic_quinn::{
+    ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint, EndpointConfig,
+    TokioRuntime, TransportConfig as QuinnTransportConfig, VarInt,
+    congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
+    crypto::rustls::QuicClientConfig,
+};
 
 use erased_serde::Serialize as ErasedSerialize;
 use std::{
@@ -46,11 +48,6 @@ use crate::{
 
 use crate::session::SocksAddr as ClashSocksAddr;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
-use tuic_core::quinn::quinn::{
-    ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
-    TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
-    crypto::rustls::QuicClientConfig,
-};
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
@@ -234,7 +231,7 @@ impl Handler {
             CongestionControl::NewReno => transport_config
                 .congestion_controller_factory(Arc::new(NewRenoConfig::default())),
             CongestionControl::Bbr => transport_config
-                .congestion_controller_factory(Arc::new(BbrConfig::default())),
+                .congestion_controller_factory(Arc::new(Bbr3Config::default())),
         };
 
         quinn_config.transport_config(Arc::new(transport_config));
@@ -264,7 +261,7 @@ impl Handler {
 
         debug!("binding socket to: {:?}", socket.local_addr()?);
 
-        let mut endpoint = QuinnEndpoint::new(
+        let endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
             None,
             socket.into_std()?,

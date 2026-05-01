@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use quinn::VarInt;
+use tuic_quinn::VarInt;
 
 use crate::{
     config::internal::proxy::OutboundTuic,

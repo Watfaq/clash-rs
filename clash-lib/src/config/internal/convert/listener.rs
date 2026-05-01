@@ -128,7 +128,7 @@ impl TryFrom<HashMap<String, Value>> for InboundOpts {
         let name = mapping
             .get("name")
             .and_then(|x| x.as_str())
-            .and_then(|v| if v.is_empty() { None } else { Some(v) })
+            .filter(|v| !v.is_empty())
             .ok_or(Error::InvalidConfig(
                 "missing field `name` in inbound listener".to_owned(),
             ))?
