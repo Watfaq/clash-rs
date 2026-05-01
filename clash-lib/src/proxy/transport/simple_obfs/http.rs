@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use base64::Engine;
 use bytes::{BufMut, BytesMut};
-use rand;
 use std::{
     io,
     pin::Pin,
