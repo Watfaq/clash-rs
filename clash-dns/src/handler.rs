@@ -107,6 +107,7 @@ where
             request.metadata.op_code,
         );
         m.metadata.recursion_desired = request.metadata.recursion_desired;
+        m.metadata.checking_disabled = request.metadata.checking_disabled;
         m.add_query(query.original().clone());
         m.add_additionals(request.additionals.iter().cloned());
         m.add_authorities(request.authorities.iter().cloned());
@@ -119,12 +120,11 @@ where
                 metadata.recursion_available = m.metadata.recursion_available;
                 metadata.response_code = m.metadata.response_code;
                 metadata.authoritative = m.metadata.authoritative;
+                metadata.truncation = m.metadata.truncation;
+                metadata.authentic_data = m.metadata.authentic_data;
+                metadata.checking_disabled = m.metadata.checking_disabled;
 
-                let resp_edns = if request
-                    .edns
-                    .as_ref()
-                    .map_or(false, |e| e.flags().dnssec_ok)
-                {
+                let resp_edns = if request.edns.is_some() {
                     m.edns.clone()
                 } else {
                     None
