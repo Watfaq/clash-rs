@@ -139,7 +139,7 @@ mod tests {
 
         client.apply_edns_client_subnet(&mut msg);
 
-        let edns = msg.edns.as_ref().expect("edns should exist");
+        let _edns = msg.edns.as_ref().expect("edns should exist");
         let ecs = EdnsClientSubnet {
             ipv4: Some("1.2.3.4/24".parse().unwrap()),
             ipv6: None,

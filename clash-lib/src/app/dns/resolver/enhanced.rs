@@ -816,19 +816,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
+        // Use hickory_client::proto (0.25) types throughout so DnsRequest::new
+        // gets a compatible Message. TODO: remove shadowing once hickory-client
+        // 0.26.0 stable ships and aligns with hickory-proto 0.26.
+        use hickory_client::proto::{op, rr};
+
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
             .append_domain(&rr::Name::root())
             .unwrap();
         assert_eq!(name.to_string(), "some_domain.understore.");
 
-        let mut m = op::Message::query();
+        let mut m = op::Message::new();
         let mut q = op::Query::new();
 
         q.set_name(name);
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
-        m.metadata.recursion_desired = true;
+        m.set_recursion_desired(true);
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
