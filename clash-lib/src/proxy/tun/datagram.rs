@@ -149,7 +149,11 @@ pub(crate) async fn handle_inbound_datagram(
                             };
 
                         // TODO: figure out where the message id got lost
-                        resp.metadata.id = msg.metadata.id;
+                        {
+                            let mut header = resp.header().clone();
+                            header.set_id(msg.id());
+                            resp.set_header(header);
+                        }
                         trace!("hijack dns response: {:?}", resp);
 
                         send_response(resp, &pkt).await;

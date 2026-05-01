@@ -38,9 +38,9 @@ rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2"
 webpki-roots = "1.0"
 
-hickory-client = { version = "0.25", default-features = false }
-hickory-server = { version = "0.26", default-features = false }
-hickory-proto = { version = "0.26", default-features = false }
+hickory-client = { version = "0.26.0-alpha.1", default-features = false }
+hickory-server = { version = "=0.26.0-alpha.1", default-features = false }
+hickory-proto = { version = "=0.26.0-alpha.1", default-features = false }
 
 
 
