@@ -114,7 +114,7 @@ mod tests {
 
         client.apply_edns_client_subnet(&mut msg);
 
-        let edns = msg.extensions().as_ref().expect("edns should exist");
+        let edns = msg.edns.as_ref().expect("edns should exist");
         let option = edns
             .option(EdnsCode::Subnet)
             .expect("subnet option missing");
@@ -139,7 +139,7 @@ mod tests {
 
         client.apply_edns_client_subnet(&mut msg);
 
-        let _edns = msg.extensions().as_ref().expect("edns should exist");
+        let edns = msg.edns.as_ref().expect("edns should exist");
         let ecs = EdnsClientSubnet {
             ipv4: Some("1.2.3.4/24".parse().unwrap()),
             ipv6: None,
@@ -160,7 +160,7 @@ mod tests {
 
         client.apply_edns_client_subnet(&mut msg);
 
-        let edns = msg.extensions().as_ref().expect("edns should remain");
+        let edns = msg.edns.as_ref().expect("edns should remain");
         let option = edns
             .option(EdnsCode::Subnet)
             .expect("subnet option missing");
@@ -447,7 +447,7 @@ impl DnsClient {
         }
 
         if message
-            .extensions()
+            .edns
             .as_ref()
             .is_some_and(|edns| edns.option(EdnsCode::Subnet).is_some())
         {
@@ -455,7 +455,7 @@ impl DnsClient {
         }
 
         let prefer_ipv6 = matches!(
-            message.queries().first().map(|q| q.query_type()),
+            message.queries.first().map(|q| q.query_type()),
             Some(RecordType::AAAA)
         );
 
@@ -482,7 +482,7 @@ impl DnsClient {
         };
 
         let edns = message
-            .extensions_mut()
+            .edns
             .get_or_insert_with(hickory_proto::op::Edns::new);
 
         let options = edns.options_mut();
@@ -552,14 +552,12 @@ impl Client for DnsClient {
         let bytes = outbound
             .to_vec()
             .map_err(|e| Error::DNSError(e.to_string()))?;
-        let mut msg_parsed = hickory_client::proto::op::Message::from_vec(&bytes)
+        let msg_025 = hickory_client::proto::op::Message::from_vec(&bytes)
             .map_err(|e| Error::DNSError(e.to_string()))?;
-        if msg_parsed.id() == 0 {
-            let mut header = msg_parsed.header().clone();
-            header.set_id(rand::random::<u16>());
-            msg_parsed.set_header(header);
+        let mut req = DnsRequest::new(msg_025, DnsRequestOptions::default());
+        if req.id() == 0 {
+            req.set_id(rand::random::<u16>());
         }
-        let req = DnsRequest::new(msg_parsed, DnsRequestOptions::default());
         self.inner
             .read()
             .await
@@ -628,20 +626,9 @@ async fn dns_stream_builder(
             let addr = *addr;
             let host = host.clone();
             let iface = iface.clone();
-            let server_name: rustls::pki_types::ServerName<'static> = match &host {
-                url::Host::Domain(s) => rustls::pki_types::ServerName::try_from(s.as_str())
-                    .map_err(|_| Error::DNSError("invalid TLS host name".to_string()))?
-                    .to_owned(),
-                url::Host::Ipv4(ip) => {
-                    rustls::pki_types::ServerName::IpAddress((*ip).into())
-                }
-                url::Host::Ipv6(ip) => {
-                    rustls::pki_types::ServerName::IpAddress((*ip).into())
-                }
-            };
             let (stream, sender) = tls_client_connect(
                 addr,
-                server_name,
+                host.to_string(),
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(
                     proxy.clone(),
@@ -686,7 +673,7 @@ async fn dns_stream_builder(
                     *fw_mark,
                 ),
             )
-            .build(*addr, host.to_string().into(), "/dns-query".into());
+            .build(*addr, host.to_string(), "/dns-query".to_string());
 
             client::Client::connect(stream)
                 .await

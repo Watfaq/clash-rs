@@ -7,13 +7,16 @@ use crate::{
 };
 use async_trait::async_trait;
 use hickory_proto::{
-    op::{Header, Message, MessageType, OpCode, ResponseCode},
+    op::{
+        Header, HeaderCounts, Message, MessageType, Metadata, OpCode, ResponseCode,
+    },
     rr::RecordType,
 };
 use hickory_server::{
-    ServerFuture,
-    authority::MessageResponseBuilder,
+    Server,
+    net::runtime::Time,
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
+    zone_handler::MessageResponseBuilder,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::crypto::aws_lc_rs::sign::any_supported_type;
@@ -39,7 +42,7 @@ impl From<CertificateKeyPair> for Arc<dyn rustls::server::ResolvesServerCert> {
 }
 
 struct DnsListener<H: RequestHandler> {
-    server: ServerFuture<H>,
+    server: Server<H>,
 }
 
 struct DnsHandler<X> {
@@ -65,32 +68,33 @@ where
         request: &Request,
         mut response_handle: H,
     ) -> Result<ResponseInfo, DNSError> {
-        if request.op_code() != OpCode::Query {
+        if request.metadata.op_code != OpCode::Query {
             return Err(DNSError::InvalidOpQuery(format!(
                 "invalid OP code: {}",
-                request.op_code()
+                request.metadata.op_code
             )));
         }
 
-        if request.message_type() != MessageType::Query {
+        if request.metadata.message_type != MessageType::Query {
             return Err(DNSError::InvalidOpQuery(format!(
                 "invalid message type: {}",
-                request.message_type()
+                request.metadata.message_type
             )));
         }
 
-        let mut header = Header::response_from_request(request.header());
+        let mut metadata = Metadata::response_from_request(&request.metadata);
 
         let query = request
+            .queries
             .queries()
             .first()
             .ok_or(DNSError::QueryFailed("no query".to_string()))?;
 
         if query.query_type() == RecordType::AAAA && !self.exchanger.ipv6() {
-            header.set_authoritative(true);
+            metadata.authoritative = true;
 
             let resp = MessageResponseBuilder::from_message_request(request)
-                .build_no_records(header);
+                .build_no_records(metadata);
             return Ok(response_handle
                 .send_response(resp)
                 .await
@@ -98,51 +102,50 @@ where
         }
 
         let mut m = Message::new(
-            request.id(),
-            request.message_type(),
-            request.op_code(),
+            request.metadata.id,
+            request.metadata.message_type,
+            request.metadata.op_code,
         );
-        m.set_recursion_desired(request.recursion_desired());
-        m.set_checking_disabled(request.checking_disabled());
+        m.metadata.recursion_desired = request.metadata.recursion_desired;
+        m.metadata.checking_disabled = request.metadata.checking_disabled;
         m.add_query(query.original().clone());
-        m.add_additionals(request.additionals().iter().cloned());
-        m.add_name_servers(request.name_servers().iter().cloned());
-        if let Some(edns) = request.edns() {
+        m.add_additionals(request.additionals.iter().cloned());
+        m.add_authorities(request.authorities.iter().cloned());
+        if let Some(edns) = &request.edns {
             m.set_edns(edns.clone());
         }
 
         match self.exchanger.exchange(&m).await {
             Ok(m) => {
-                header.set_recursion_available(m.recursion_available());
-                header.set_response_code(m.response_code());
-                header.set_authoritative(m.authoritative());
-                header.set_truncated(m.truncated());
-                header.set_authentic_data(m.authentic_data());
-                header.set_checking_disabled(m.checking_disabled());
+                metadata.recursion_available = m.metadata.recursion_available;
+                metadata.response_code = m.metadata.response_code;
+                metadata.authoritative = m.metadata.authoritative;
+                metadata.truncation = m.metadata.truncation;
+                metadata.authentic_data = m.metadata.authentic_data;
+                metadata.checking_disabled = m.metadata.checking_disabled;
 
-                let resp_edns = if request.edns().is_some() {
-                    m.extensions().clone()
+                let resp_edns = if request.edns.is_some() {
+                    m.edns.clone()
                 } else {
                     None
                 };
 
-                let mut builder =
-                    MessageResponseBuilder::from_message_request(request);
-                if let Some(edns) = resp_edns {
-                    builder.edns(edns);
-                }
-                let rv = builder.build(
-                    header,
-                    m.answers().iter(),
-                    m.name_servers().iter(),
+                let rv = MessageResponseBuilder::new(
+                    &request.queries,
+                    resp_edns.as_ref(),
+                )
+                .build(
+                    metadata,
+                    m.answers.iter(),
+                    m.authorities.iter(),
                     std::iter::empty(),
-                    m.additionals().iter(),
+                    m.additionals.iter(),
                 );
 
                 debug!(
                     "answering dns query {} with answer {:?}",
                     query.name(),
-                    m.answers(),
+                    &m.answers,
                 );
 
                 Ok(response_handle
@@ -163,7 +166,7 @@ impl<X> RequestHandler for DnsHandler<X>
 where
     X: DnsMessageExchanger + Unpin + Send + Sync + 'static,
 {
-    async fn handle_request<R: ResponseHandler>(
+    async fn handle_request<R: ResponseHandler, T: Time>(
         &self,
         request: &Request,
         response_handle: R,
@@ -171,8 +174,8 @@ where
         debug!(
             "got dns request [{}][{:?}][{:?}] from {}",
             request.protocol(),
-            request.queries().first().map(|x| x.query_type()),
-            request.queries().first().map(|x| x.name()),
+            request.queries.queries().first().map(|x| x.query_type()),
+            request.queries.queries().first().map(|x| x.name()),
             request.src()
         );
 
@@ -180,9 +183,14 @@ where
             .await
             .unwrap_or_else(|e| {
                 debug!("dns request error: {}", e);
-                let mut header = Header::response_from_request(request.header());
-                header.set_response_code(ResponseCode::ServFail);
-                ResponseInfo::from(header)
+                let mut metadata =
+                    Metadata::response_from_request(&request.metadata);
+                metadata.response_code = ResponseCode::ServFail;
+                Header {
+                    metadata,
+                    counts: HeaderCounts::default(),
+                }
+                .into()
             })
     }
 }
@@ -198,7 +206,7 @@ where
     X: DnsMessageExchanger + Sync + Send + Unpin + 'static,
 {
     let handler = DnsHandler { exchanger };
-    let mut s = ServerFuture::new(handler);
+    let mut s = Server::new(handler);
 
     let mut has_server = false;
 
@@ -219,7 +227,7 @@ where
             .await
             .map(|x| {
                 info!("TCP dns server listening on: {}", addr);
-                s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
+                s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT, 4096);
             })
             .inspect_err(|x| {
                 error!("failed to listen TCP DNS server on {}: {}", addr, x);
@@ -538,9 +546,7 @@ mod tests {
 
         let (stream, sender) = tls_client_connect(
             dot_addr,
-            rustls::pki_types::ServerName::try_from("dns.example.com")
-                .unwrap()
-                .to_owned(),
+            "dns.example.com".to_owned(),
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         );
@@ -570,8 +576,8 @@ mod tests {
         )
         .build(
             doh_addr,
-            "dns.example.com".into(),
-            "/dns-query".into(),
+            "dns.example.com".to_owned(),
+            "/dns-query".to_owned(),
         );
 
         let (mut client, handle) = Client::connect(stream).await?;
@@ -593,8 +599,8 @@ mod tests {
             .clone()
             .build(
                 doh3_addr,
-                "dns.example.com".into(),
-                "/dns-query".into(),
+                "dns.example.com".to_owned(),
+                "/dns-query".to_owned(),
             );
 
         let (mut client, handle) = Client::connect(stream).await?;

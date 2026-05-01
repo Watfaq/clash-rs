@@ -65,18 +65,22 @@ pub fn build_dns_response_message(
     authoritative: bool,
 ) -> hickory_proto::op::Message {
     let mut res =
-        hickory_proto::op::Message::response(req.id(), req.op_code());
+        hickory_proto::op::Message::response(req.metadata.id, req.metadata.op_code);
 
-    res.set_recursion_available(recursive_available);
-    res.set_authoritative(authoritative);
-    res.set_recursion_desired(req.recursion_desired());
-    res.set_checking_disabled(req.checking_disabled());
+    res.metadata.recursion_available = recursive_available;
+    res.metadata.authoritative = authoritative;
+    res.metadata.recursion_desired = req.metadata.recursion_desired;
+    res.metadata.checking_disabled = req.metadata.checking_disabled;
 
-    res.add_queries(req.queries().iter().cloned());
+    res.add_queries(req.queries.iter().cloned());
 
-    if let Some(mut edns) = req.extensions().clone() {
-        edns.options_mut().remove(EdnsCode::Padding);
+    if let Some(edns) = req.edns.clone() {
         res.set_edns(edns);
+    }
+
+    if let Some(edns) = res.edns.as_mut() {
+        // Remove only padding options, keep everything else
+        edns.options_mut().remove(EdnsCode::Padding);
     }
 
     res

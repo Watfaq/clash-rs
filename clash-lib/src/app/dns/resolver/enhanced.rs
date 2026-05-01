@@ -39,7 +39,7 @@ pub struct EnhancedResolver {
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
-    lru_cache: Option<hickory_resolver::dns_lru::DnsLru>,
+    lru_cache: Option<hickory_resolver::ResponseCache>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     proxy_resolver: Option<Vec<ThreadSafeDNSClient>>,
@@ -230,9 +230,9 @@ impl EnhancedResolver {
             } else {
                 None
             },
-            lru_cache: Some(hickory_resolver::dns_lru::DnsLru::new(
+            lru_cache: Some(hickory_resolver::ResponseCache::new(
                 4096,
-                hickory_resolver::dns_lru::TtlConfig::default(),
+                hickory_resolver::TtlConfig::default(),
             )),
             policy: if !cfg.nameserver_policy.is_empty() {
                 let mut p = trie::StringTrie::new();
@@ -354,7 +354,7 @@ impl EnhancedResolver {
         q.set_name(name);
         q.set_query_type(record_type);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
         let result = self.exchange(&m).await?;
         let ip_list = EnhancedResolver::ip_list_of_message(&result);
@@ -367,7 +367,7 @@ impl EnhancedResolver {
     #[instrument(skip_all, level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let q = message
-            .queries()
+            .queries
             .first()
             .ok_or_else(|| anyhow!("invalid query"))?;
 
@@ -378,20 +378,20 @@ impl EnhancedResolver {
             && let Some(Ok(cached)) = lru.get(q, Instant::now()).map(|c| {
                 c.inspect_err(|x| warn!("failed to get cached message: {}", x))
             })
-            && !message.recursion_desired()
+            && !message.metadata.recursion_desired
         {
             trace!(
                 q = q.to_string(),
                 "cache hit for DNS query, returning cached response",
             );
             let mut reply = build_dns_response_message(message, true, false);
-            reply.add_answers(cached.records().iter().cloned());
+            reply.add_answers(cached.answers.iter().cloned());
             return Ok(reply);
         }
 
         trace!(q = q.to_string(), "querying resolver");
         let res = self.exchange_no_cache(message).await.map(|mut r| {
-            if let Some(edns) = r.extensions_mut().as_mut() {
+            if let Some(edns) = r.edns.as_mut() {
                 // Remove only padding options, keep everything else
                 edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
             }
@@ -405,7 +405,7 @@ impl EnhancedResolver {
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
-        let q = message.queries().first().unwrap();
+        let q = message.queries.first().unwrap();
 
         let query = async move {
             if EnhancedResolver::is_ip_request(q) {
@@ -426,7 +426,7 @@ impl EnhancedResolver {
             && !(q.query_type() == rr::RecordType::TXT
                 && q.name().to_ascii().starts_with("_acme-challenge."))
         {
-            lru.insert_records(q.clone(), msg.answers().iter().cloned(), Instant::now());
+            lru.insert(q.clone(), Ok(msg.clone()), Instant::now());
         }
 
         rv
@@ -527,19 +527,19 @@ impl EnhancedResolver {
     }
 
     fn domain_name_of_message(m: &op::Message) -> Option<String> {
-        m.queries()
+        m.queries
             .first()
             .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
     }
 
     pub(crate) fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
-        m.answers()
+        m.answers
             .iter()
             .filter(|r| {
                 r.record_type() == rr::RecordType::A
                     || r.record_type() == rr::RecordType::AAAA
             })
-            .map(|r| match r.data() {
+            .map(|r| match &r.data {
                 rr::RData::A(v4) => net::IpAddr::V4(**v4),
                 rr::RData::AAAA(v6) => net::IpAddr::V6(**v6),
                 _ => unreachable!("should be only A/AAAA"),
@@ -682,7 +682,7 @@ impl ClashResolver for EnhancedResolver {
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message
-            .queries()
+            .queries
             .first()
             .unwrap()
             .name()
@@ -828,7 +828,7 @@ mod tests {
         q.set_name(name);
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
@@ -840,11 +840,7 @@ mod tests {
         tokio::spawn(bg);
 
         let mut req = DnsRequest::new(m, DnsRequestOptions::default());
-        {
-            let mut header = req.header().clone();
-            header.set_id(rand::random::<u16>());
-            req.set_header(header);
-        }
+        req.set_id(rand::random::<u16>());
         let res = client.send(req).first_answer().await;
         assert!(res.is_ok());
     }

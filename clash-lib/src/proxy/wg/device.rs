@@ -165,7 +165,7 @@ impl DeviceManager {
                 q
             });
 
-            msg.set_recursion_desired(true);
+            msg.metadata.recursion_desired = true;
 
             let pkt = UdpPacket::new(
                 msg.to_vec().unwrap(),
@@ -190,9 +190,9 @@ impl DeviceManager {
 
             let msg = hickory_proto::op::Message::from_vec(&pkt.data).ok()?;
             trace!("got dns response: {:?}", msg);
-            for ans in msg.answers().iter() {
+            for ans in msg.answers.iter() {
                 if ans.record_type() == rtype {
-                    match (rtype, ans.data()) {
+                    match (rtype, &ans.data) {
                         (_, hickory_proto::rr::RData::CNAME(cname)) => {
                             debug!(
                                 "{} resolved to CNAME {}, asking recursively",

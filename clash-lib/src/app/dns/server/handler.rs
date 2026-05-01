@@ -11,7 +11,7 @@ pub async fn exchange_with_resolver<'a>(
     req: &'a Message,
     enhanced: bool,
 ) -> Result<Message, watfaq_dns::DNSError> {
-    if req.queries().first().map(|q| q.query_type())
+    if req.queries.first().map(|q| q.query_type())
         == Some(hickory_proto::rr::RecordType::AAAA)
         || !resolver.fake_ip_enabled()
     {
@@ -25,7 +25,7 @@ pub async fn exchange_with_resolver<'a>(
     }
 
     let name = req
-        .queries()
+        .queries
         .first()
         .ok_or(watfaq_dns::DNSError::InvalidOpQuery(
             "malformed query message".to_string(),
@@ -34,7 +34,7 @@ pub async fn exchange_with_resolver<'a>(
         .clone();
 
     let host = req
-        .queries()
+        .queries
         .first()
         .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
         .unwrap();
@@ -49,13 +49,13 @@ pub async fn exchange_with_resolver<'a>(
                 let records =
                     vec![Record::from_rdata(name, DEFAULT_DNS_SERVER_TTL, rdata)];
 
-                res.set_response_code(ResponseCode::NoError);
+                res.metadata.response_code = ResponseCode::NoError;
                 res.add_answers(records);
 
                 Ok(res)
             }
             None => {
-                res.set_response_code(ResponseCode::NXDomain);
+                res.metadata.response_code = ResponseCode::NXDomain;
                 Ok(res)
             }
         },

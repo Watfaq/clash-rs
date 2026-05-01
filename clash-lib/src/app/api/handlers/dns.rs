@@ -59,12 +59,12 @@ async fn query_dns(
             let mut resp = Map::new();
             resp.insert(
                 "Status".to_owned(),
-                response.response_code().low().into(),
+                response.metadata.response_code.low().into(),
             );
             resp.insert(
                 "Question".to_owned(),
                 response
-                    .queries()
+                    .queries
                     .iter()
                     .map(|x| {
                         let mut data = Map::new();
@@ -83,42 +83,42 @@ async fn query_dns(
                     .into(),
             );
 
-            resp.insert("TC".to_owned(), response.truncated().into());
-            resp.insert("RD".to_owned(), response.recursion_desired().into());
+            resp.insert("TC".to_owned(), response.metadata.truncation.into());
+            resp.insert("RD".to_owned(), response.metadata.recursion_desired.into());
             resp.insert(
                 "RA".to_owned(),
-                response.recursion_available().into(),
+                response.metadata.recursion_available.into(),
             );
-            resp.insert("AD".to_owned(), response.authentic_data().into());
-            resp.insert("CD".to_owned(), response.checking_disabled().into());
+            resp.insert("AD".to_owned(), response.metadata.authentic_data.into());
+            resp.insert("CD".to_owned(), response.metadata.checking_disabled.into());
 
             let rr2json = |rr: &hickory_proto::rr::Record| -> Value {
                 let mut data = Map::new();
-                data.insert("name".to_owned(), rr.name().to_string().into());
+                data.insert("name".to_owned(), rr.name.to_string().into());
                 data.insert("type".to_owned(), u16::from(rr.record_type()).into());
-                data.insert("ttl".to_owned(), rr.ttl().into());
-                data.insert("data".to_owned(), rr.data().to_string().into());
+                data.insert("ttl".to_owned(), rr.ttl.into());
+                data.insert("data".to_owned(), rr.data.to_string().into());
                 data.into()
             };
 
-            if !response.answers().is_empty() {
+            if !response.answers.is_empty() {
                 resp.insert(
                     "Answer".to_owned(),
-                    response.answers().iter().map(rr2json).collect(),
+                    response.answers.iter().map(rr2json).collect(),
                 );
             }
 
-            if !response.name_servers().is_empty() {
+            if !response.authorities.is_empty() {
                 resp.insert(
                     "Authority".to_owned(),
-                    response.name_servers().iter().map(rr2json).collect(),
+                    response.authorities.iter().map(rr2json).collect(),
                 );
             }
 
-            if !response.additionals().is_empty() {
+            if !response.additionals.is_empty() {
                 resp.insert(
                     "Additional".to_owned(),
-                    response.additionals().iter().map(rr2json).collect(),
+                    response.additionals.iter().map(rr2json).collect(),
                 );
             }
 
