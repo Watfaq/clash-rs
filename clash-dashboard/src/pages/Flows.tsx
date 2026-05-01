@@ -302,7 +302,7 @@ export function Flows() {
             data={sankeyData}
             margin={{ top: 20, right: 140, bottom: 20, left: 140 }}
             align="justify"
-            colors={(node: SankeyNodeDatum<FlowNode, FlowLink>) =>
+            colors={(node) =>
               node.id.startsWith('src:') ? '#5ac8fa' : '#0071e3'
             }
             nodeOpacity={0.85}
