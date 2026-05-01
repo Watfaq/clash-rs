@@ -549,6 +549,12 @@ impl Client for DnsClient {
         let mut outbound = msg.clone();
         self.apply_edns_client_subnet(&mut outbound);
 
+        // TODO: remove this encode/decode roundtrip once hickory-client 0.26.0
+        // stable is published. Currently hickory-client is pinned to 0.25.x
+        // which internally uses hickory-proto 0.25.x, while the rest of the
+        // stack uses hickory-proto 0.26.x. The two Message types are
+        // incompatible at the Rust type level, so we serialize to wire bytes
+        // and reparse to cross the version boundary.
         let bytes = outbound
             .to_vec()
             .map_err(|e| Error::DNSError(e.to_string()))?;
@@ -569,6 +575,8 @@ impl Client for DnsClient {
             .await
             .map_err(|x| Error::DNSError(x.to_string()).into())
             .and_then(|x: hickory_client::proto::xfer::DnsResponse| {
+                // TODO: same version-boundary workaround as above — remove
+                // once hickory-client 0.26.0 stable ships.
                 let bytes = x.into_buffer();
                 hickory_proto::op::Message::from_vec(&bytes)
                     .map_err(|e| Error::DNSError(e.to_string()).into())
