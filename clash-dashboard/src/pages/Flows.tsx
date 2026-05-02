@@ -247,16 +247,25 @@ export function Flows() {
     }
   }
 
-  // ASN breakdown — top 10 by total bytes
-  const asnRows = useMemo(() => {
-    const map = new Map<string, number>();
+  // Geo breakdown — top 10 countries by total bytes, with ASN org as subtitle
+  const geoRows = useMemo(() => {
+    const map = new Map<string, { bytes: number; asns: Set<string> }>();
     for (const f of flows) {
-      if (!f.asn) continue;
-      map.set(f.asn, (map.get(f.asn) ?? 0) + f.bytesTotal);
+      const key = f.country ?? f.asn ?? 'Unknown';
+      const entry = map.get(key) ?? { bytes: 0, asns: new Set() };
+      entry.bytes += f.bytesTotal;
+      if (f.asn) entry.asns.add(f.asn);
+      map.set(key, entry);
     }
-    const entries = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
-    const max = entries[0]?.[1] ?? 1;
-    return entries.map(([asn, bytes]) => ({ asn, bytes, pct: bytes / max }));
+    const entries = [...map.entries()].sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 10);
+    const max = entries[0]?.[1].bytes || 1;
+    return entries.map(([key, { bytes, asns }]) => ({
+      key,
+      bytes,
+      pct: bytes / max,
+      isCountry: /^[A-Z]{2}$/.test(key),
+      asn: [...asns].join(', '),
+    }));
   }, [flows]);
 
   return (
@@ -535,25 +544,27 @@ export function Flows() {
       </div>
 
       {/* ASN / Country breakdown */}
-      {asnRows.length > 0 && (
+      {geoRows.length > 0 && (
         <>
           <div
             className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
             style={{ color: '#6e6e73' }}
           >
-            Traffic by ASN / Country
+            Traffic by Country / ASN
           </div>
           <div
             className="liquid-glass-card rounded-xl p-4 space-y-2"
             style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
           >
-            {asnRows.map(({ asn, bytes, pct }) => {
-              const isCountry = /^[A-Z]{2}$/.test(asn);
-              const label = isCountry ? `${countryFlag(asn)} ${asn}` : asn;
+            {geoRows.map(({ key, bytes, pct, isCountry, asn }) => {
+              const label = isCountry ? `${countryFlag(key)} ${key}` : key;
               return (
-                <div key={asn} className="flex items-center gap-3">
-                  <div className="w-32 text-[13px] truncate flex-shrink-0" style={{ color: '#1d1d1f' }}>
-                    {label}
+                <div key={key} className="flex items-center gap-3">
+                  <div className="w-40 flex-shrink-0">
+                    <div className="text-[13px] truncate" style={{ color: '#1d1d1f' }}>{label}</div>
+                    {isCountry && asn && (
+                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{asn}</div>
+                    )}
                   </div>
                   <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
                     <div

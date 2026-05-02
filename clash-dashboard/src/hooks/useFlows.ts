@@ -17,6 +17,7 @@ export interface FlowRecord {
   rulePayload: string;
   chains: string[];
   asn: string | null;
+  country: string | null;
   lastSeen: string;
 }
 
@@ -26,7 +27,7 @@ interface UseFlowsReturn {
 }
 
 export function useFlows(includeClosed = true): UseFlowsReturn {
-  const url = getWsUrl(`/ws/flows?interval=5&include_closed=${includeClosed}`);
+  const url = getWsUrl(`/ws/flows?interval=5&top=50&include_closed=${includeClosed}`);
   const { lastMessage, readyState } = useWebSocket<FlowRecord[]>(url);
 
   const [flows, setFlows] = useState<FlowRecord[]>([]);
