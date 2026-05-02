@@ -131,11 +131,12 @@ impl Router {
         (MATCH, None)
     }
 
-    /// Look up country code and ASN org name for an IP address independently.
-    /// Uses `country_mmdb` for the ISO 3166-1 alpha-2 country code (falling
-    /// back to `asn_mmdb.lookup_country()` if no dedicated country DB is
-    /// configured) and `asn_mmdb.lookup_asn()` for the org name. Skips
-    /// lookups for fields already populated.
+    /// Look up country code and ASN for an IP address.
+    /// Uses `country_mmdb` for the ISO 3166-1 alpha-2 country code.
+    /// For ASN, preserves the original strategy: try
+    /// `asn_mmdb.lookup_country()` first (simplified/fast path, e.g.
+    /// Country.mmdb), fall back to `asn_mmdb.lookup_asn()` for the org
+    /// name.
     fn populate_geo_for_ip(
         ip: std::net::IpAddr,
         country_mmdb: &Option<MmdbLookup>,
@@ -147,39 +148,30 @@ impl Router {
             return;
         }
 
-        if sess.country.is_none() {
-            // try dedicated country mmdb first
-            let country = country_mmdb.as_ref().and_then(|db| {
-                db.lookup_country(ip)
-                    .map_err(|e| {
-                        trace!("failed to lookup country for {}: {}", ip, e)
-                    })
-                    .ok()
-                    .map(|c| c.country_code)
-            });
-            // fall back to simplified lookup on asn_mmdb (e.g. Country.mmdb)
-            let country = country.or_else(|| {
-                asn_mmdb.as_ref().and_then(|db| {
-                    db.lookup_country(ip)
-                        .map_err(|e| {
-                            trace!(
-                                "failed to lookup country from asn_mmdb for {}: {}",
-                                ip, e
-                            )
-                        })
-                        .ok()
-                        .map(|c| c.country_code)
-                })
-            });
-            if let Some(code) = country {
-                trace!("country for {} is {:?}", ip, code);
-                sess.country = Some(code);
+        if sess.country.is_none()
+            && let Some(country_mmdb) = country_mmdb
+        {
+            match country_mmdb.lookup_country(ip) {
+                Ok(country) => {
+                    trace!("country for {} is {:?}", ip, country.country_code);
+                    sess.country = Some(country.country_code);
+                }
+                Err(e) => {
+                    trace!("failed to lookup country for {}: {}", ip, e);
+                }
             }
         }
 
         if sess.asn.is_none()
             && let Some(asn_mmdb) = asn_mmdb
         {
+            // try simplified mmdb first (e.g. Country.mmdb doubles as a fast
+            // country-code lookup on the asn_mmdb slot)
+            if let Ok(country) = asn_mmdb.lookup_country(ip) {
+                sess.asn = Some(country.country_code);
+                return;
+            }
+            // fall back to full ASN lookup
             match asn_mmdb.lookup_asn(ip) {
                 Ok(asn) => {
                     trace!("asn for {} is {:?}", ip, asn);
