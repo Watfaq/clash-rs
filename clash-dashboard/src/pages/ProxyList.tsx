@@ -79,6 +79,7 @@ function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
         onClick={onTest}
         disabled={testing}
         title="Test latency"
+        aria-label={`Test latency for ${proxy.name}`}
         className="flex-shrink-0 p-1.5 rounded-full disabled:opacity-40 transition-colors"
         style={{ background: 'rgba(52,199,89,0.1)', color: '#34c759' }}
       >
@@ -231,9 +232,13 @@ export function ProxyList() {
   async function testAllInProvider(provider: ProxyProvider) {
     setTestingProviders((s) => new Set(s).add(provider.name));
     try {
-      await Promise.allSettled(
-        (provider.proxies ?? []).map((proxy) => testProviderProxy(provider.name, proxy))
-      );
+      const proxies = provider.proxies ?? [];
+      const BATCH = 5;
+      for (let i = 0; i < proxies.length; i += BATCH) {
+        await Promise.allSettled(
+          proxies.slice(i, i + BATCH).map((proxy) => testProviderProxy(provider.name, proxy))
+        );
+      }
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
@@ -294,6 +299,7 @@ export function ProxyList() {
                     key={proxy.name}
                     proxy={proxy}
                     latency={latencyMap[`static::${proxy.name}`]}
+                    testing={testingProxies.has(`static::${proxy.name}`)}
                     onTest={() => testStaticProxy(proxy)}
                   />
                 ))}

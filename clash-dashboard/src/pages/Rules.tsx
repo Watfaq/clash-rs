@@ -306,6 +306,7 @@ export function Rules() {
                       style={{ minHeight: 56 }}
                       role="button"
                       tabIndex={0}
+                      aria-expanded={isExpanded}
                       onClick={() => toggleRuleProviderExpanded(provider.name)}
                       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleRuleProviderExpanded(provider.name)}
                     >
