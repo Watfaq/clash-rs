@@ -414,7 +414,9 @@ pub struct Session {
     pub so_mark: Option<u32>,
     /// The bind interface
     pub iface: Option<OutboundInterface>,
-    /// The ASN of the destination IP address. Only for display.
+    /// ISO 3166-1 alpha-2 country code from country mmdb. Only for display.
+    pub country: Option<String>,
+    /// ASN org name from ASN mmdb. Only for display.
     pub asn: Option<String>,
     /// Traffic statistics for intelligent proxy selection
     pub traffic_stats: Option<crate::app::remote_content_manager::TrafficStats>,
@@ -448,6 +450,7 @@ impl Session {
         );
         rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
         rv.insert("asn".to_string(), Box::new(self.asn.clone()) as _);
+        rv.insert("country".to_string(), Box::new(self.country.clone()) as _);
         rv.insert(
             "traffic_stats".to_string(),
             Box::new(self.traffic_stats.clone()) as _,
@@ -469,6 +472,7 @@ impl Default for Session {
             resolved_ip: None,
             so_mark: None,
             iface: None,
+            country: None,
             asn: None,
             traffic_stats: None,
             inbound_user: None,
@@ -501,6 +505,7 @@ impl Debug for Session {
             .field("destination", &self.destination)
             .field("packet_mark", &self.so_mark)
             .field("iface", &self.iface)
+            .field("country", &self.country)
             .field("asn", &self.asn)
             .finish()
     }
@@ -516,6 +521,7 @@ impl Clone for Session {
             resolved_ip: self.resolved_ip,
             so_mark: self.so_mark,
             iface: self.iface.as_ref().cloned(),
+            country: self.country.clone(),
             asn: self.asn.clone(),
             traffic_stats: self.traffic_stats.clone(),
             inbound_user: self.inbound_user.clone(),
