@@ -43,7 +43,6 @@ interface ProxyGroupsProps {
 export function ProxyGroups({ mode }: ProxyGroupsProps) {
   const queryClient = useQueryClient();
   const [testingGroups, setTestingGroups] = useState<Set<string>>(new Set());
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
@@ -111,8 +110,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
     setTestingGroups((s) => new Set(s).add(group.name));
     setExpanded((prev) => new Set(prev).add(group.name));
     try {
-      const results = await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, ...results }));
+      await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
       await queryClient.invalidateQueries({ queryKey: ['proxies'] });
     } catch {
       // leave existing latency values unchanged on error
@@ -203,7 +201,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                       {group.all?.map((proxyName) => {
                         const proxy = proxies[proxyName];
                         const history = proxy?.history ?? [];
-                        const latency = latencyMap[proxyName] ?? getLastDelay(history);
+                        const latency = getLastDelay(history);
                         const isSelected = group.now === proxyName;
                         const latencyColor = getLatencyColor(latency);
                         const inner = (
