@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProxies, selectProxy, getProxyDelay } from '../lib/api';
+import { getProxies, selectProxy, getGroupDelay } from '../lib/api';
 import { RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import type { Proxy } from '../lib/api';
 
@@ -111,17 +111,11 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
     setTestingGroups((s) => new Set(s).add(group.name));
     setExpanded((prev) => new Set(prev).add(group.name));
     try {
-      await Promise.allSettled(
-        group.all.map(async (name) => {
-          try {
-            const res = await getProxyDelay(name, TEST_URL, TEST_TIMEOUT);
-            setLatencyMap((prev) => ({ ...prev, [name]: res.delay }));
-          } catch {
-            setLatencyMap((prev) => ({ ...prev, [name]: 0 }));
-          }
-        })
-      );
+      const results = await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
+      setLatencyMap((prev) => ({ ...prev, ...results }));
       await queryClient.invalidateQueries({ queryKey: ['proxies'] });
+    } catch {
+      // leave existing latency values unchanged on error
     } finally {
       setTestingGroups((s) => { const next = new Set(s); next.delete(group.name); return next; });
     }
