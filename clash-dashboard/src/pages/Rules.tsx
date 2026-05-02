@@ -138,7 +138,7 @@ export function Rules() {
   const [expandedRuleProviders, setExpandedRuleProviders] = useState<Set<string>>(new Set());
 
   const { data, isLoading, isError } = useQuery({ queryKey: ['rules'], queryFn: getRules });
-  const { data: ruleData, isLoading: ruleIsLoading } = useQuery({
+  const { data: ruleData, isLoading: ruleIsLoading, isError: ruleIsError } = useQuery({
     queryKey: ['rule-providers'],
     queryFn: getRuleProviders,
     refetchInterval: 60000,
@@ -277,6 +277,8 @@ export function Rules() {
 
       {ruleIsLoading ? (
         <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading rule providers…</div>
+      ) : ruleIsError ? (
+        <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load rule providers. Check your API connection.</div>
       ) : ruleProviders.length === 0 ? (
         <div className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center">
           <div className="text-3xl">📋</div>
@@ -302,7 +304,10 @@ export function Rules() {
                     <div
                       className="px-4 py-3 flex items-center justify-between cursor-pointer"
                       style={{ minHeight: 56 }}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => toggleRuleProviderExpanded(provider.name)}
+                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleRuleProviderExpanded(provider.name)}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
                         <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>

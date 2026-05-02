@@ -175,13 +175,13 @@ export function ProxyList() {
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
 
-  const { data: proxiesData, isLoading: proxiesLoading } = useQuery({
+  const { data: proxiesData, isLoading: proxiesLoading, isError: proxiesError } = useQuery({
     queryKey: ['proxies'],
     queryFn: getProxies,
     refetchInterval: 30000,
   });
 
-  const { data: providersData, isLoading: providersLoading } = useQuery({
+  const { data: providersData, isLoading: providersLoading, isError: providersError } = useQuery({
     queryKey: ['providers'],
     queryFn: getProxyProviders,
     refetchInterval: 60000,
@@ -220,9 +220,9 @@ export function ProxyList() {
     setTestingProxies((s) => new Set(s).add(key));
     try {
       const res = await getProviderProxyDelay(providerName, proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [proxy.name]: res.delay }));
+      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [proxy.name]: 0 }));
+      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -251,6 +251,7 @@ export function ProxyList() {
   }
 
   const isLoading = proxiesLoading || providersLoading;
+  const isError = proxiesError || providersError;
 
   return (
     <div className="p-6 space-y-8">
@@ -263,6 +264,8 @@ export function ProxyList() {
 
       {isLoading ? (
         <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading proxies…</div>
+      ) : isError ? (
+        <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load proxies. Check your API connection.</div>
       ) : (
         <>
           {/* Config Proxies */}
