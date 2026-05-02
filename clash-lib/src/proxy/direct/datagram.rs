@@ -142,7 +142,15 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                             }
                         })
                     });
-                    let addr = match ready!(Pin::new(handle).poll(cx)) {
+                    let join_result = ready!(Pin::new(handle).poll(cx));
+                    // Always clear the handle once it has completed (regardless of
+                    // success or failure). If we skip this on the error path the
+                    // handle stays in `pending_dns` and the next call to
+                    // `poll_flush` will try to poll an already-completed
+                    // `JoinHandle`, which panics with "JoinHandle polled after
+                    // completion".
+                    *pending_dns = None;
+                    let addr = match join_result {
                         Ok(result) => result?,
                         Err(e) => {
                             return Poll::Ready(Err(io::Error::other(format!(
@@ -150,7 +158,6 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                             ))));
                         }
                     };
-                    *pending_dns = None;
                     *resolved_dst = Some(addr);
                     addr
                 }
@@ -325,7 +332,49 @@ mod tests {
         assert!(got.contains(&dst_b), "missing echo2.test src_addr");
     }
 
-    /// Full-cone NAT: once a mapping exists, **any** remote host can send
+    /// When DNS resolution fails, `poll_flush` must return an error and clear
+    /// `pending_dns` so that a subsequent `send` can start a fresh DNS query
+    /// without panicking with "JoinHandle polled after completion".
+    #[tokio::test]
+    async fn test_dns_failure_does_not_panic_on_retry() {
+        let mut resolver = MockClashResolver::new();
+        // First call: resolution fails.
+        // Second call (after retry): resolution succeeds.
+        let mut call_count = 0u8;
+        resolver.expect_resolve_v4().returning(move |_, _| {
+            call_count += 1;
+            if call_count == 1 {
+                Err(anyhow::anyhow!("simulated DNS failure"))
+            } else {
+                Ok(Some(Ipv4Addr::LOCALHOST))
+            }
+        });
+        let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let mut datagram = OutboundDatagramImpl::new(udp, Arc::new(resolver));
+
+        let echo_port = spawn_echo_server().await;
+        let dst = SocksAddr::Domain("fail.test".to_owned(), echo_port);
+
+        // First send: DNS fails — must return Err, not panic.
+        let result = datagram
+            .send(UdpPacket {
+                data: b"hello".to_vec(),
+                dst_addr: dst.clone(),
+                ..Default::default()
+            })
+            .await;
+        assert!(result.is_err(), "expected error on DNS failure");
+
+        // Second send (same destination): DNS succeeds — must NOT panic.
+        datagram
+            .send(UdpPacket {
+                data: b"hello again".to_vec(),
+                dst_addr: dst.clone(),
+                ..Default::default()
+            })
+            .await
+            .expect("second send must succeed after DNS recovers");
+    }
     /// inbound packets to the outbound socket and they are forwarded.
     /// The src_addr of an unsolicited packet falls back to the raw IP.
     #[tokio::test]
