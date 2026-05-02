@@ -219,7 +219,7 @@ export const healthcheckProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}/healthcheck`);
 export const getProviderProxyDelay = (providerName: string, proxyName: string, url: string, timeout: number) =>
   request<{ delay: number }>(
-    `/providers/proxies/${encodeURIComponent(providerName)}/proxies/${encodeURIComponent(proxyName)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`
+    `/providers/proxies/${encodeURIComponent(providerName)}/${encodeURIComponent(proxyName)}/healthcheck?url=${encodeURIComponent(url)}&timeout=${timeout}`
   );
 
 // Rule Providers
