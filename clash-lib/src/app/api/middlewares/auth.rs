@@ -69,7 +69,8 @@ where
         }
 
         // /ui is a public endpoint — no auth required regardless of transport
-        if req.uri().path().starts_with("/ui") {
+        let path = req.uri().path();
+        if path == "/ui" || path.starts_with("/ui/") {
             return Box::pin(self.inner.call(req));
         }
 
