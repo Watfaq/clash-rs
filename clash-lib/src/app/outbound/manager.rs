@@ -162,6 +162,21 @@ impl OutboundManager {
         self.proxy_providers.get(name).cloned()
     }
 
+    /// Search all proxy providers for a handler with the given name.
+    /// Used as a fallback when `get_outbound` returns None (e.g. for proxies
+    /// loaded from subscription/file providers that are not in the registry).
+    pub async fn get_proxy_from_providers(&self, name: &str) -> Option<AnyOutboundHandler> {
+        for provider in self.proxy_providers.values() {
+            let provider = provider.read().await;
+            for proxy in provider.proxies().await {
+                if proxy.name() == name {
+                    return Some(proxy);
+                }
+            }
+        }
+        None
+    }
+
     // API handles start
     pub fn get_selector_control(
         &self,
