@@ -1059,7 +1059,29 @@ pub async fn run_test_suites_and_cleanup(
     docker_test_runner: impl RunAndCleanup,
     suites: &[Suite],
 ) -> anyhow::Result<()> {
-    let suites = suites.to_owned();
+    // On macOS with colima --network-address (CLASH_DOCKER_HOST_IP set), the
+    // VM has a routable IP for outbound proxy tests. However PingPong tests
+    // require the container to connect BACK to an echo server on the macOS
+    // host — the Docker bridge gateway (172.17.0.1) is VM-local and cannot
+    // reach macOS directly in this topology. Skip PingPong and DnsUdp suites
+    // when using any host-IP mode.
+    let use_host_ip = std::env::var("CLASH_DOCKER_HOST_IP")
+        .ok()
+        .map_or(false, |v| !v.is_empty())
+        || std::env::var("CLASH_DOCKER_USE_HOST_IP")
+            .ok()
+            .map_or(false, |v| !v.is_empty());
+    let suites: Vec<Suite> = suites
+        .iter()
+        .filter(|s| {
+            if use_host_ip {
+                !matches!(s, Suite::PingPongTcp | Suite::PingPongUdp | Suite::DnsUdp)
+            } else {
+                true
+            }
+        })
+        .cloned()
+        .collect();
     let gateway_ip = docker_test_runner.docker_gateway_ip();
     docker_test_runner
         .run_and_cleanup(async move {

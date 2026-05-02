@@ -391,13 +391,12 @@ mod tests {
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
         initialize();
         let host_port = alloc_docker_port();
-        let port = 10002_u16;
         let runner = get_socks5_runner(false, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
             server: server_addr(&runner),
-            port,
+            port: runner.server_port(10002),
             user: None,
             password: None,
             udp: true,
@@ -412,13 +411,12 @@ mod tests {
         use crate::proxy::DialWithConnector;
         initialize();
         let host_port = alloc_docker_port();
-        let port = 10002_u16;
         let runner = get_socks5_runner(true, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-auth".to_owned(),
             common_opts: Default::default(),
             server: server_addr(&runner),
-            port,
+            port: runner.server_port(10002),
             user: Some(USER.to_owned()),
             password: Some(PASSWORD.to_owned()),
             udp: true,

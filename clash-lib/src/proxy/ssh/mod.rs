@@ -466,7 +466,7 @@ mod tests {
             name: "test-ssh".to_owned(),
             common_opts: Default::default(),
             server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
-            port: 2222,
+            port: container.server_port(2222),
             password,
             private_key,
             private_key_passphrase: None,

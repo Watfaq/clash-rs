@@ -76,12 +76,16 @@ pub struct DockerTestRunner {
     instance: Docker,
     id: String,
     inspect: ContainerInspectResponse,
+    /// The host-side published port (equals the container port for most tests;
+    /// differs for WireGuard which uses `host_port(alloc, 10002)`).
+    host_port: u16,
 }
 
 impl DockerTestRunner {
     pub async fn try_new(
         image_conf: Option<CreateImageOptions>,
         mut container_conf: ContainerCreateBody,
+        host_port: u16,
     ) -> anyhow::Result<Self> {
         let docker: Docker = if let Some(url) = std::env::var("DOCKER_HOST").ok() {
             if url.starts_with("http://")
@@ -108,16 +112,22 @@ impl DockerTestRunner {
             .host_config
             .as_mut()
             .and_then(|hc| hc.mounts.take());
-        let files_to_copy = if std::env::var("DOCKER_HOST")
-            .ok()
-            .map(|url| {
-                url.starts_with("http://")
-                    || url.starts_with("https://")
-                    || url.starts_with("tcp://")
-            })
-            .unwrap_or(false)
-        {
-            // Remote Docker - collect files to copy via API
+        // Use the API-based file-copy path when:
+        //   a) DOCKER_HOST points to a remote HTTP/TCP endpoint, OR
+        //   b) CLASH_DOCKER_HOST_IP is set (macOS + colima): bind-mount
+        //      source paths are macOS /var/folders/… paths that don't exist
+        //      inside the colima VM, so we must upload files via Docker API.
+        let use_api_copy = Self::colima_host_ip().is_some()
+            || std::env::var("DOCKER_HOST")
+                .ok()
+                .map(|url| {
+                    url.starts_with("http://")
+                        || url.starts_with("https://")
+                        || url.starts_with("tcp://")
+                })
+                .unwrap_or(false);
+        let files_to_copy = if use_api_copy {
+            // Remote/colima Docker - collect files to copy via API
             mounts
         } else {
             // Local Docker - keep mounts in config
@@ -186,10 +196,21 @@ impl DockerTestRunner {
             instance: docker,
             id,
             inspect,
+            host_port,
         })
     }
 
     pub fn container_ip(&self) -> Option<String> {
+        // On macOS with colima --network-address, the VM has a routable IP
+        // (CLASH_DOCKER_HOST_IP) reachable from macOS for both TCP and UDP.
+        // Docker publishes ports on that IP, so callers should connect there.
+        if let Some(host_ip) = Self::colima_host_ip() {
+            return Some(host_ip);
+        }
+        // Legacy fallback: 127.0.0.1 via Lima TCP-only SSH port-forwarding.
+        if Self::use_host_ip_127() {
+            return Some("127.0.0.1".to_string());
+        }
         self.inspect
             .network_settings
             .as_ref()
@@ -234,6 +255,46 @@ impl DockerTestRunner {
             .inspect(|e| {
                 tracing::trace!("gateway_ip: {:?}", e);
             })
+    }
+
+    /// When `CLASH_DOCKER_HOST_IP` is set, returns the colima VM's routable IP.
+    /// This IP is reachable from macOS for both TCP and UDP (unlike the default
+    /// QEMU SLIRP forwarding which only handles TCP via SSH tunnels).
+    fn colima_host_ip() -> Option<String> {
+        std::env::var("CLASH_DOCKER_HOST_IP")
+            .ok()
+            .filter(|v| !v.is_empty())
+    }
+
+    /// Returns true when `CLASH_DOCKER_USE_HOST_IP` is set (non-empty).
+    /// In this mode tests connect to `127.0.0.1:host_port` via Lima's TCP-only
+    /// SSH port-forwarding. UDP-transport protocols must be skipped.
+    fn use_host_ip_127() -> bool {
+        std::env::var("CLASH_DOCKER_USE_HOST_IP")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Returns the host-side published port for this container.
+    ///
+    /// For most tests `host_port == container_port` (set via `.port(p)`).
+    /// Returns the correct port to use in the proxy handler configuration.
+    ///
+    /// - When `CLASH_DOCKER_HOST_IP` is set (macOS + colima): Docker binds
+    ///   `host_port` on the VM's routable IP — use `host_port`.
+    /// - When `container_ip()` returns a real container IP (Linux): use the
+    ///   container's internal port directly.
+    /// - Otherwise: fall back to `host_port`.
+    pub fn server_port(&self, container_port: u16) -> u16 {
+        if Self::colima_host_ip().is_some() || Self::use_host_ip_127() {
+            // Docker publishes host_port on the VM's routable IP or on 127.0.0.1
+            // (via Lima SSH forwarding). Either way, use the published host port.
+            self.host_port
+        } else if self.container_ip().is_some() {
+            container_port
+        } else {
+            self.host_port
+        }
     }
 
     /// For debugging use
@@ -694,6 +755,7 @@ impl DockerTestRunnerBuilder {
                 host_config: Some(self.host_config),
                 ..Default::default()
             },
+            self._server_port,
         )
         .await
         .map_err(Into::into)
