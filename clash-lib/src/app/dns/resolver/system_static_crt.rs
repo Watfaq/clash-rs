@@ -15,7 +15,7 @@ pub struct SystemResolver {
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: TokioResolver::builder_tokio()?.build(),
+            inner: TokioResolver::builder_tokio()?.build()?,
             ipv6: AtomicBool::new(ipv6),
         })
     }
@@ -46,7 +46,7 @@ impl ClashResolver for SystemResolver {
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let response = self.inner.ipv4_lookup(host).await?;
         Ok(response
-            .records()
+            .answers()
             .iter()
             .filter_map(|r| match &r.data {
                 hickory_proto::rr::RData::A(a) => Some(a.0),
@@ -62,7 +62,7 @@ impl ClashResolver for SystemResolver {
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
         let response = self.inner.ipv6_lookup(host).await?;
         Ok(response
-            .records()
+            .answers()
             .iter()
             .filter_map(|r| match &r.data {
                 hickory_proto::rr::RData::AAAA(aaaa) => Some(aaaa.0),
