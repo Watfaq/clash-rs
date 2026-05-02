@@ -234,6 +234,15 @@ export function ProxyList() {
     try {
       await healthcheckProvider(provider.name);
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
+      // Clear stale per-proxy overrides so cards fall back to freshly fetched history
+      setLatencyMap((prev) => {
+        const next = { ...prev };
+        const prefix = `${provider.name}::`;
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(prefix)) delete next[key];
+        }
+        return next;
+      });
     } catch {
       // leave existing latency values unchanged on error
     } finally {
