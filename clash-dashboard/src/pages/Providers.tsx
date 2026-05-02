@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getProxyProviders, getProxyDelay, updateProxyProvider, healthcheckProvider, getRuleProviders, updateRuleProvider, getRuleProviderRules, matchRuleProvider } from '../lib/api';
+import { getProxyProviders, updateProxyProvider, healthcheckProvider, getRuleProviders, updateRuleProvider, getRuleProviderRules, matchRuleProvider } from '../lib/api';
 import { RefreshCw, Activity, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import type { ProxyProvider, Proxy, RuleProvider } from '../lib/api';
 
@@ -16,9 +16,6 @@ function getLatencyColor(delay: number | undefined): string {
   return '#ff3b30';
 }
 
-const TEST_URL = 'http://www.gstatic.com/generate_204';
-const TEST_TIMEOUT = 5000;
-
 export function Providers() {
   const queryClient = useQueryClient();
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
@@ -26,7 +23,7 @@ export function Providers() {
   const [updatingRuleProviders, setUpdatingRuleProviders] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedRuleProviders, setExpandedRuleProviders] = useState<Set<string>>(new Set());
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
+
 
   const { data, isLoading } = useQuery({
     queryKey: ['providers'],
@@ -68,18 +65,6 @@ export function Providers() {
     setTestingProviders((s) => new Set(s).add(provider.name));
     setExpanded((prev) => new Set(prev).add(provider.name));
     try {
-      if (provider.proxies) {
-        await Promise.allSettled(
-          provider.proxies.map(async (proxy) => {
-            try {
-              const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-              setLatencyMap((prev) => ({ ...prev, [proxy.name]: res.delay }));
-            } catch {
-              setLatencyMap((prev) => ({ ...prev, [proxy.name]: 0 }));
-            }
-          })
-        );
-      }
       await healthcheckProvider(provider.name);
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } finally {
@@ -323,7 +308,7 @@ export function Providers() {
                       <div className="p-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
                           {provider.proxies.map((proxy) => {
-                            const latency = latencyMap[proxy.name] ?? getLastDelay(proxy.history);
+                            const latency = getLastDelay(proxy.history);
                             const latencyColor = getLatencyColor(latency);
                             return (
                               <div
