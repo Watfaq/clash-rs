@@ -165,7 +165,7 @@ educe = "0.6"
 # DNS
 watfaq-dns = { path = "../clash-dns", default-features = false }
 hickory-client = { version = "0.25", default-features = false }
-hickory-resolver = { version = "0.26", default-features = false, features = ["tokio"] }
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 hickory-proto = { version = "0.26", default-features = false }
 
 dhcproto = "0.14"
