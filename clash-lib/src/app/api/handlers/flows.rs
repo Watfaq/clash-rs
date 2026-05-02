@@ -211,7 +211,7 @@ async fn build_flow_records(
         })
         .collect();
 
-    records.sort_by(|a, b| b.bytes_total.cmp(&a.bytes_total));
+    records.sort_by_key(|r| std::cmp::Reverse(r.bytes_total));
     records.truncate(top);
     records
 }
@@ -224,7 +224,7 @@ pub async fn handle(
     State(state): State<FlowState>,
     Query(q): Query<FlowQuery>,
 ) -> impl IntoResponse {
-    let top = q.top.unwrap_or(20).max(1);
+    let top = q.top.unwrap_or(20).clamp(1, 500);
     let include_closed = q.include_closed.unwrap_or(true);
 
     let records =
@@ -248,7 +248,7 @@ pub async fn ws_handle(
     State(state): State<Arc<AppState>>,
     Query(q): Query<WsFlowQuery>,
 ) -> impl IntoResponse {
-    let top = q.top.unwrap_or(20).max(1);
+    let top = q.top.unwrap_or(20).clamp(1, 500);
     let include_closed = q.include_closed.unwrap_or(true);
     let interval_secs = q.interval.unwrap_or(5).max(1);
 

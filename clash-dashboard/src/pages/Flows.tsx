@@ -76,18 +76,19 @@ function buildSankeyData(flows: FlowRecord[]): SankeyData {
       const srcId = groupSrcs ? 'src:Local Network' : `src:${ip}`;
       if (!linkAgg.has(srcId)) linkAgg.set(srcId, new Map());
       const dstMap = linkAgg.get(srcId)!;
-      const existing = dstMap.get(dstId);
+      const linkKey = `${dstId}|${flow.protocol.toUpperCase()}|${flow.dstPort}`;
+      const existing = dstMap.get(linkKey);
       if (existing) {
         existing.bytes += flow.bytesTotal * perIp;
         existing.upload += flow.uploadTotal * perIp;
         existing.download += flow.downloadTotal * perIp;
-        existing.connCount += flow.connCount;
+        existing.connCount += flow.connCount * perIp;
       } else {
-        dstMap.set(dstId, {
+        dstMap.set(linkKey, {
           bytes: flow.bytesTotal * perIp,
           upload: flow.uploadTotal * perIp,
           download: flow.downloadTotal * perIp,
-          connCount: flow.connCount,
+          connCount: flow.connCount * perIp,
           protocol: flow.protocol,
           rule: flow.rule,
         });
@@ -100,7 +101,8 @@ function buildSankeyData(flows: FlowRecord[]): SankeyData {
 
   for (const [srcId, dstMap] of linkAgg) {
     nodeIds.add(srcId);
-    for (const [dstId, agg] of dstMap) {
+    for (const [linkKey, agg] of dstMap) {
+      const dstId = linkKey.split('|')[0];
       nodeIds.add(dstId);
       const color = protocolColor(agg.protocol);
       links.push({
@@ -186,7 +188,7 @@ export function Flows() {
   const totalBytes = useMemo(() => flows.reduce((s, f) => s + f.bytesTotal, 0), [flows]);
   const topDst = useMemo(
     () => flows.length > 0
-      ? [...flows].sort((a, b) => b.bytesTotal - a.bytesTotal)[0].dstHost
+      ? [...flows].sort((a, b) => b.bytesTotal - a.bytesTotal)[0].dstHost || '—'
       : '—',
     [flows],
   );
@@ -434,14 +436,18 @@ function SortHeader({
 }) {
   return (
     <th
-      className={`text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] cursor-pointer select-none ${width}`}
+      aria-sort={field === current ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={`text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] select-none ${width}`}
       style={{ color: field === current ? '#0071e3' : '#6e6e73' }}
-      onClick={() => onClick(field)}
     >
-      <div className="flex items-center justify-end gap-1">
+      <button
+        type="button"
+        className="w-full flex items-center justify-end gap-1 cursor-pointer"
+        onClick={() => onClick(field)}
+      >
         {label}
         <SortIcon field={field} active={current} dir={dir} />
-      </div>
+      </button>
     </th>
   );
 }
