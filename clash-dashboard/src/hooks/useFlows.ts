@@ -8,11 +8,15 @@ export interface FlowRecord {
   protocol: string;
   srcIps: string[];
   connCount: number;
+  activeCount: number;
+  closedCount: number;
   uploadTotal: number;
   downloadTotal: number;
   bytesTotal: number;
   rule: string;
+  rulePayload: string;
   chains: string[];
+  asn: string | null;
   lastSeen: string;
 }
 
@@ -21,8 +25,8 @@ interface UseFlowsReturn {
   readyState: import('./useWebSocket').ReadyState;
 }
 
-export function useFlows(): UseFlowsReturn {
-  const url = getWsUrl('/ws/flows?interval=5');
+export function useFlows(includeClosed = true): UseFlowsReturn {
+  const url = getWsUrl(`/ws/flows?interval=5&include_closed=${includeClosed}`);
   const { lastMessage, readyState } = useWebSocket<FlowRecord[]>(url);
 
   const [flows, setFlows] = useState<FlowRecord[]>([]);

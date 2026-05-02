@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ResponsiveSankey } from '@nivo/sankey';
-import { Activity, ArrowUp, ArrowDown, GitBranch, ChevronUp, ChevronDown } from 'lucide-react';
+import { Activity, ArrowUp, ArrowDown, GitBranch, ChevronUp, ChevronDown, Search } from 'lucide-react';
 import { useFlows } from '../hooks/useFlows';
 import type { FlowRecord } from '../hooks/useFlows';
 import type { DefaultLink, DefaultNode, SankeyLinkDatum, SankeyNodeDatum } from '@nivo/sankey';
@@ -12,6 +12,24 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)}MB`;
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)}GB`;
+}
+
+function formatRelative(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diffMs / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}
+
+function countryFlag(code: string): string {
+  if (!/^[A-Z]{2}$/.test(code)) return '';
+  const offset = 0x1F1E6 - 65;
+  return String.fromCodePoint(code.charCodeAt(0) + offset) +
+         String.fromCodePoint(code.charCodeAt(1) + offset);
 }
 
 // ─── Protocol colours ───────────────────────────────────────────────────────────
@@ -181,7 +199,10 @@ function SortIcon({ field, active, dir }: { field: SortField; active: SortField;
 // ─── Main page ──────────────────────────────────────────────────────────────────
 
 export function Flows() {
-  const { flows } = useFlows();
+  const [includeClosed, setIncludeClosed] = useState(true);
+  const [search, setSearch] = useState('');
+  const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
+  const { flows } = useFlows(includeClosed);
   const [sortField, setSortField] = useState<SortField>('bytesTotal');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -196,13 +217,26 @@ export function Flows() {
   const sankeyData = useMemo(() => buildSankeyData(flows), [flows]);
   const hasSankeyData = sankeyData.nodes.length >= 2 && sankeyData.links.length >= 1;
 
+  const usedProtocols = useMemo(
+    () => [...new Set(flows.map(f => f.protocol.toUpperCase()))],
+    [flows],
+  );
+
   const sortedFlows = useMemo(() => {
-    const sorted = [...flows].sort((a, b) => {
+    let filtered = flows;
+    if (search) {
+      const lower = search.toLowerCase();
+      filtered = filtered.filter(f => f.dstHost.toLowerCase().includes(lower));
+    }
+    if (protocolFilter) {
+      filtered = filtered.filter(f => f.protocol.toUpperCase() === protocolFilter);
+    }
+    const sorted = [...filtered].sort((a, b) => {
       const diff = a[sortField] - b[sortField];
       return sortDir === 'asc' ? diff : -diff;
     });
     return sorted.slice(0, 50);
-  }, [flows, sortField, sortDir]);
+  }, [flows, sortField, sortDir, search, protocolFilter]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -213,10 +247,17 @@ export function Flows() {
     }
   }
 
-  const usedProtocols = useMemo(
-    () => [...new Set(flows.map(f => f.protocol.toUpperCase()))],
-    [flows],
-  );
+  // ASN breakdown — top 10 by total bytes
+  const asnRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const f of flows) {
+      if (!f.asn) continue;
+      map.set(f.asn, (map.get(f.asn) ?? 0) + f.bytesTotal);
+    }
+    const entries = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const max = entries[0]?.[1] ?? 1;
+    return entries.map(([asn, bytes]) => ({ asn, bytes, pct: bytes / max }));
+  }, [flows]);
 
   return (
     <div className="p-6 space-y-4">
@@ -224,6 +265,60 @@ export function Flows() {
       <div className="flex items-center gap-2">
         <GitBranch size={20} style={{ color: '#0071e3' }} />
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Flows</h1>
+      </div>
+
+      {/* Controls bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Search */}
+        <div className="flex items-center gap-2 flex-1 min-w-48 max-w-72 px-3 py-1.5 rounded-xl liquid-glass-card" style={{ border: '1px solid rgba(0,0,0,0.08)' }}>
+          <Search size={14} style={{ color: '#8e8e93', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Filter destination…"
+            className="flex-1 bg-transparent outline-none text-[14px]"
+            style={{ color: '#1d1d1f' }}
+          />
+        </div>
+
+        {/* Protocol pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {usedProtocols.map(proto => (
+            <button
+              key={proto}
+              type="button"
+              onClick={() => setProtocolFilter(p => p === proto ? null : proto)}
+              className="text-[12px] font-medium px-3 py-0.5 rounded-full transition-colors"
+              style={{
+                background: protocolFilter === proto ? '#0071e3' : `${protocolColor(proto)}18`,
+                color: protocolFilter === proto ? '#fff' : protocolColor(proto),
+              }}
+            >
+              {proto}
+            </button>
+          ))}
+        </div>
+
+        {/* Include closed toggle */}
+        <label className="flex items-center gap-2 ml-auto cursor-pointer select-none" style={{ color: '#6e6e73', fontSize: 13 }}>
+          <span>Include closed</span>
+          <div
+            className="relative w-9 h-5 rounded-full transition-colors"
+            style={{ background: includeClosed ? '#0071e3' : '#d1d1d6' }}
+          >
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={includeClosed}
+              onChange={e => setIncludeClosed(e.target.checked)}
+            />
+            <div
+              className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+              style={{ transform: includeClosed ? 'translateX(16px)' : 'none' }}
+            />
+          </div>
+        </label>
       </div>
 
       {/* Summary cards */}
@@ -353,18 +448,19 @@ export function Flows() {
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-48" style={{ color: '#6e6e73' }}>Destination</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-16" style={{ color: '#6e6e73' }}>Port</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Protocol</th>
-              <SortHeader field="connCount" label="Conns" current={sortField} dir={sortDir} onClick={toggleSort} width="w-20" />
+              <SortHeader field="connCount" label="Conns" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="uploadTotal" label="↑ Upload" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="downloadTotal" label="↓ Download" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="bytesTotal" label="Total" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-28" style={{ color: '#6e6e73' }}>Rule</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Last Seen</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: '#6e6e73' }}>Rule</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-40" style={{ color: '#6e6e73' }}>Proxy Chain</th>
             </tr>
           </thead>
           <tbody>
             {sortedFlows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
+                <td colSpan={10} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
                   No flow data yet
                 </td>
               </tr>
@@ -375,10 +471,15 @@ export function Flows() {
                   className="group transition-colors"
                   style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" title={flow.srcIps.length > 0 ? `Sources: ${flow.srcIps.join(', ')}` : undefined}>
                     <div className="text-[14px] font-medium truncate" style={{ color: '#1d1d1f' }}>
                       {flow.dstHost || '—'}
                     </div>
+                    {flow.srcIps.length > 0 && (
+                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>
+                        {flow.srcIps[0]}{flow.srcIps.length > 1 ? ` +${flow.srcIps.length - 1}` : ''}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-[13px]" style={{ color: '#8e8e93' }}>
                     {flow.dstPort}
@@ -394,8 +495,16 @@ export function Flows() {
                       {flow.protocol}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-[13px] font-mono" style={{ color: '#6e6e73' }}>
-                    {flow.connCount}
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <div
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ background: flow.activeCount > 0 ? '#34c759' : '#8e8e93' }}
+                      />
+                      <span className="text-[13px] font-mono" style={{ color: '#6e6e73' }}>
+                        {flow.connCount}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right text-[13px] font-mono" style={{ color: '#0071e3' }}>
                     {formatBytes(flow.uploadTotal)}
@@ -406,8 +515,14 @@ export function Flows() {
                   <td className="px-4 py-3 text-right text-[13px] font-mono font-semibold" style={{ color: '#ff9500' }}>
                     {formatBytes(flow.bytesTotal)}
                   </td>
-                  <td className="px-4 py-3 text-[12px] truncate" style={{ color: '#6e6e73' }}>
-                    {flow.rule}
+                  <td className="px-4 py-3 text-[12px]" style={{ color: '#8e8e93' }}>
+                    {formatRelative(flow.lastSeen)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{flow.rule}</div>
+                    {flow.rulePayload && (
+                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{flow.rulePayload}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-[12px] truncate" style={{ color: '#8e8e93' }}>
                     {flow.chains?.join(' → ')}
@@ -418,6 +533,43 @@ export function Flows() {
           </tbody>
         </table>
       </div>
+
+      {/* ASN / Country breakdown */}
+      {asnRows.length > 0 && (
+        <>
+          <div
+            className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
+            style={{ color: '#6e6e73' }}
+          >
+            Traffic by ASN / Country
+          </div>
+          <div
+            className="liquid-glass-card rounded-xl p-4 space-y-2"
+            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+          >
+            {asnRows.map(({ asn, bytes, pct }) => {
+              const isCountry = /^[A-Z]{2}$/.test(asn);
+              const label = isCountry ? `${countryFlag(asn)} ${asn}` : asn;
+              return (
+                <div key={asn} className="flex items-center gap-3">
+                  <div className="w-32 text-[13px] truncate flex-shrink-0" style={{ color: '#1d1d1f' }}>
+                    {label}
+                  </div>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct * 100}%`, background: '#0071e3' }}
+                    />
+                  </div>
+                  <div className="w-20 text-right text-[12px] font-mono flex-shrink-0" style={{ color: '#6e6e73' }}>
+                    {formatBytes(bytes)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
