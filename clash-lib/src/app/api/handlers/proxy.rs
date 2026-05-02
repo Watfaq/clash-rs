@@ -69,18 +69,12 @@ async fn find_proxy_by_name(
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    let proxy = outbound_manager.get_outbound(&name).await;
-    let proxy = if proxy.is_none() {
-        outbound_manager.get_proxy_from_providers(&name).await
-    } else {
-        proxy
-    };
-    match proxy {
+    match outbound_manager.get_outbound(&name).await {
         Some(proxy) => {
             req.extensions_mut().insert(proxy);
             next.run(req).await
         }
-        None => (StatusCode::NOT_FOUND, format!("proxy {name} not found"))
+        _ => (StatusCode::NOT_FOUND, format!("proxy {name} not found"))
             .into_response(),
     }
 }
