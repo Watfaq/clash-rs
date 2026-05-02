@@ -27,6 +27,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Overview />} />
             <Route path="proxies" element={<ProxyList />} />
+            <Route path="providers" element={<ProxyList />} />
             <Route path="connections" element={<Connections />} />
             <Route path="flows" element={<Flows />} />
             <Route path="rules" element={<Rules />} />

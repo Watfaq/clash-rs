@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getProxies, getProxyProviders, getProxyDelay, getProviderProxyDelay,
-  healthcheckProvider, updateProxyProvider,
+  updateProxyProvider,
 } from '../lib/api';
 import { Activity, RefreshCw } from 'lucide-react';
 import type { Proxy, ProxyProvider } from '../lib/api';
@@ -157,7 +157,7 @@ function ProviderSection({
             <ProxyCard
               key={proxy.name}
               proxy={proxy}
-              latency={latencyMap[proxy.name]}
+              latency={latencyMap[`${provider.name}::${proxy.name}`]}
               testing={testingProxies.has(`${provider.name}::${proxy.name}`)}
               onTest={() => onTestProxy(provider.name, proxy)}
             />
@@ -207,9 +207,9 @@ export function ProxyList() {
     setTestingProxies((s) => new Set(s).add(key));
     try {
       const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [proxy.name]: res.delay }));
+      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [proxy.name]: 0 }));
+      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -234,7 +234,6 @@ export function ProxyList() {
       await Promise.allSettled(
         (provider.proxies ?? []).map((proxy) => testProviderProxy(provider.name, proxy))
       );
-      await healthcheckProvider(provider.name);
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
@@ -291,8 +290,7 @@ export function ProxyList() {
                   <ProxyCard
                     key={proxy.name}
                     proxy={proxy}
-                    latency={latencyMap[proxy.name]}
-                    testing={testingProxies.has(`static::${proxy.name}`)}
+                    latency={latencyMap[`static::${proxy.name}`]}
                     onTest={() => testStaticProxy(proxy)}
                   />
                 ))}
