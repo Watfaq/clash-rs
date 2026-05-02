@@ -88,8 +88,8 @@ export function Proxies() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(['proxies'], ctx.previous);
+      queryClient.invalidateQueries({ queryKey: ['proxies'] });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['proxies'] }),
   });
 
   const proxies = data?.proxies ?? {};

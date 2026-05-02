@@ -217,6 +217,10 @@ export const updateProxyProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}`, { method: 'PUT' });
 export const healthcheckProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}/healthcheck`);
+export const getProviderProxyDelay = (providerName: string, proxyName: string, url: string, timeout: number) =>
+  request<{ delay: number }>(
+    `/providers/proxies/${encodeURIComponent(providerName)}/proxies/${encodeURIComponent(proxyName)}/delay?url=${encodeURIComponent(url)}&timeout=${timeout}`
+  );
 
 // Rule Providers
 export interface RuleProvider {
