@@ -35,7 +35,7 @@ impl std::fmt::Display for RuleSet {
 
 impl RuleMatcher for RuleSet {
     fn apply(&self, sess: &Session) -> bool {
-        self.rule_provider.search(sess).is_some()
+        self.rule_provider.search(sess)
     }
 
     fn target(&self) -> &str {

@@ -359,10 +359,14 @@ async fn match_rule_provider(
         inbound_user: None,
     };
 
-    let rule = p.search(&sess);
+    let matched = p.search(&sess);
     axum::response::Json(MatchResponse {
-        matched: rule.is_some(),
-        rule,
+        matched,
+        rule: if matched {
+            p.match_rule(&sess).filter(|s| !s.is_empty())
+        } else {
+            None
+        },
     })
     .into_response()
 }

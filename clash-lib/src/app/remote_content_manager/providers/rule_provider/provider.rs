@@ -88,13 +88,16 @@ struct Inner {
 
 #[async_trait]
 pub trait RuleProvider: Provider {
-    /// Returns `Some(description)` if the session matched a rule, where
-    /// `description` is a human-readable string identifying the matched rule
-    /// (e.g. `"DOMAIN,google.com"` for Classical, or the matched host/IP for
-    /// Domain/IPCIDR providers). Returns `None` if nothing matched.
-    fn search(&self, sess: &Session) -> Option<String>;
+    fn search(&self, sess: &Session) -> bool;
     fn behavior(&self) -> RuleSetBehavior;
     fn format(&self) -> RuleSetFormat;
+    /// Returns a human-readable description of which rule matched the session,
+    /// e.g. `"DOMAIN-SUFFIX,google.com"` for Classical or `"8.8.8.0/24"` for
+    /// IPCIDR. Returns `None` if nothing matched or the provider type cannot
+    /// identify the specific rule (Domain behavior).
+    fn match_rule(&self, _sess: &Session) -> Option<String> {
+        None
+    }
     /// Returns up to `limit` rules as strings. Only Classical providers return
     /// non-empty results; Domain/IPCIDR data structures don't support
     /// enumeration.
@@ -273,38 +276,19 @@ impl RuleProviderImpl {
 
 #[async_trait]
 impl RuleProvider for RuleProviderImpl {
-    fn search(&self, sess: &Session) -> Option<String> {
+    fn search(&self, sess: &Session) -> bool {
         let inner = self.inner.try_read();
-
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(set) => {
-                    let host = sess.destination.host();
-                    if set.has(&host) { Some(host) } else { None }
-                }
+                RuleContent::Domain(set) => set.has(&sess.destination.host()),
                 RuleContent::Ipcidr(trie) => {
                     let ip = sess
                         .destination
                         .ip()
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-                    if trie.contains(ip) {
-                        Some(ip.to_string())
-                    } else {
-                        None
-                    }
+                    trie.longest_match_str(ip).is_some()
                 }
-                RuleContent::Classical(rules) => {
-                    for rule in rules.iter() {
-                        if rule.apply(sess) {
-                            return Some(format!(
-                                "{},{}",
-                                rule.type_name(),
-                                rule.payload()
-                            ));
-                        }
-                    }
-                    None
-                }
+                RuleContent::Classical(rules) => rules.iter().any(|r| r.apply(sess)),
             },
             Err(_) => {
                 warn!(
@@ -312,8 +296,32 @@ impl RuleProvider for RuleProviderImpl {
                      match",
                     self.name()
                 );
-                None
+                false
             }
+        }
+    }
+
+    fn match_rule(&self, sess: &Session) -> Option<String> {
+        let inner = self.inner.try_read().ok()?;
+        match &inner.content {
+            RuleContent::Domain(set) => {
+                if set.has(&sess.destination.host()) {
+                    Some(String::new())
+                } else {
+                    None
+                }
+            }
+            RuleContent::Ipcidr(trie) => {
+                let ip = sess
+                    .destination
+                    .ip()
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+                trie.longest_match_str(ip)
+            }
+            RuleContent::Classical(rules) => rules
+                .iter()
+                .find(|r| r.apply(sess))
+                .map(|r| format!("{},{}", r.type_name(), r.payload())),
         }
     }
 
@@ -527,12 +535,14 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
-        let result = provider.search(&Session {
+        let sess = Session {
             destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
             ..Default::default()
-        });
-        assert!(result.is_some());
-        let desc = result.unwrap();
+        };
+        assert!(provider.search(&sess));
+        let rule = provider.match_rule(&sess);
+        assert!(rule.is_some());
+        let desc = rule.unwrap();
         assert!(
             desc.contains("DOMAIN-SUFFIX"),
             "Expected DOMAIN-SUFFIX in '{desc}'"
@@ -582,16 +592,9 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
-        assert!(
-            provider
-                .search(&Session {
-                    destination: SocksAddr::Domain(
-                        "test.google.com".to_owned(),
-                        443
-                    ),
-                    ..Default::default()
-                })
-                .is_some()
-        );
+        assert!(provider.search(&Session {
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        }));
     }
 }
