@@ -24,12 +24,10 @@ fn main() -> anyhow::Result<()> {
 
     let git_ref = std::env::var_os("CLASH_GIT_REF")
         .or_else(|| std::env::var_os("GITHUB_REF"))
-        .and_then(|v| v.into_string().ok())
-        .or_else(git_current_branch);
+        .and_then(|v| v.into_string().ok());
     let git_sha = std::env::var_os("CLASH_GIT_SHA")
         .or_else(|| std::env::var_os("GITHUB_SHA"))
-        .and_then(|v| v.into_string().ok())
-        .or_else(git_current_sha);
+        .and_then(|v| v.into_string().ok());
 
     let version = if let Some(ref git_ref_val) = git_ref
         && git_ref_val == "refs/heads/master"
@@ -44,33 +42,6 @@ fn main() -> anyhow::Result<()> {
     println!("cargo:rustc-env=CLASH_VERSION_OVERRIDE={version}");
 
     Ok(())
-}
-
-/// Returns the full ref name of the current branch via `git` (e.g.
-/// `refs/heads/master`), or `None` if git is unavailable or not in a repo.
-fn git_current_branch() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["symbolic-ref", "HEAD"])
-        .output()
-        .ok()?;
-    if out.status.success() {
-        Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
-    } else {
-        None
-    }
-}
-
-/// Returns the full SHA of HEAD via `git`, or `None` if unavailable.
-fn git_current_sha() -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
-    if out.status.success() {
-        Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
-    } else {
-        None
-    }
 }
 
 fn build_dashboard() -> anyhow::Result<()> {
