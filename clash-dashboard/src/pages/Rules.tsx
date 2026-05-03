@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRules, getRuleProviders, updateRuleProvider, getRuleProviderRules, matchRuleProvider } from '../lib/api';
-import { RefreshCw, Search, Zap } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
 import type { RuleProvider } from '../lib/api';
 
 function getRuleTypeBadgeStyle(type: string): { background: string; color: string } {
@@ -27,128 +27,6 @@ function getRuleTypeBadgeStyle(type: string): { background: string; color: strin
     case 'Final':            return { background: 'rgba(142,142,147,0.12)', color: '#636366' };
     default:                 return { background: 'var(--color-fill-medium)',   color: 'var(--color-text-tertiary)' };
   }
-}
-
-function GlobalRuleMatchBar({ providers }: { providers: RuleProvider[] }) {
-  const [input, setInput] = useState('');
-  const [target, setTarget] = useState<string | null>(null);
-
-  const { data: results, isLoading } = useQuery({
-    queryKey: ['global-rule-match', target],
-    queryFn: async () => {
-      const settled = await Promise.allSettled(
-        providers.map((p) => matchRuleProvider(p.name, target!).then((r) => ({ name: p.name, match: r.match, rule: r.rule })))
-      );
-      return settled
-        .filter((r) => r.status === 'fulfilled' && r.value.match)
-        .map((r) => (r as PromiseFulfilledResult<{ name: string; match: boolean; rule?: string }>).value);
-    },
-    enabled: target !== null && target.trim().length > 0 && providers.length > 0,
-    staleTime: 0,
-  });
-
-  const matches = results ?? [];
-  const tested = target !== null && !isLoading && results !== undefined;
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (input.trim()) setTarget(input.trim());
-  }
-
-  return (
-    <div className="liquid-glass-card rounded-xl p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Zap size={13} style={{ color: '#0071e3' }} />
-        <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: 'var(--color-text-secondary)' }}>
-          Rule Match Test
-        </span>
-        {providers.length > 0 && (
-          <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            — tests against all {providers.length} rule provider{providers.length !== 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
-      <form onSubmit={handleSubmit} className="flex gap-2 items-center">
-        <div
-          className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border"
-          style={{ background: 'var(--color-fill-subtle)', borderColor: 'var(--color-border)' }}
-        >
-          <Search size={13} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
-          <input
-            type="text"
-            aria-label="Rule match target"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Enter domain or IP to test (e.g. google.com, 8.8.8.8)"
-            className="flex-1 bg-transparent outline-none text-[13px]"
-            style={{ color: 'var(--color-text-primary)' }}
-          />
-          {target !== null && (
-            <button
-              type="button"
-              onClick={() => { setInput(''); setTarget(null); }}
-              className="text-[11px] flex-shrink-0"
-              style={{ color: 'var(--color-text-tertiary)' }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        <button
-          type="submit"
-          disabled={!input.trim() || providers.length === 0}
-          className="px-4 py-2 rounded-xl text-[12px] font-medium disabled:opacity-40 transition-colors flex-shrink-0"
-          style={{ background: '#0071e3', color: 'white' }}
-        >
-          Test
-        </button>
-      </form>
-
-      {providers.length === 0 && (
-        <div className="text-[12px] italic" style={{ color: 'var(--color-text-tertiary)' }}>
-          No rule providers loaded — add rule providers to your config to use this tester.
-        </div>
-      )}
-
-      {target !== null && providers.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 items-center">
-          {isLoading ? (
-            <span className="text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
-              Testing "{target}" against {providers.length} provider{providers.length !== 1 ? 's' : ''}…
-            </span>
-          ) : tested && matches.length > 0 ? (
-            <>
-              <span className="text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>"{target}" matched by:</span>
-              {matches.map((m) => (
-                <span
-                  key={m.name}
-                  className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: 'rgba(52,199,89,0.12)', color: '#34c759' }}
-                >
-                  <span>✓ {m.name}</span>
-                  {m.rule && (
-                    <span
-                      className="font-mono font-normal px-1.5 py-0.5 rounded-md text-[10px]"
-                      style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
-                    >
-                      {m.rule}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </>
-          ) : tested ? (
-            <span
-              className="text-[12px] font-medium px-2.5 py-1 rounded-lg"
-              style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
-            >
-              ✗ No rule provider matched "{target}"
-            </span>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: string }) {
@@ -321,7 +199,6 @@ export function Rules() {
         <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>{filtered.length} / {rules.length}</span>
       </div>
 
-      <GlobalRuleMatchBar providers={ruleProviders} />
       <div className="relative">
         <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-tertiary)' }} />
         <input
