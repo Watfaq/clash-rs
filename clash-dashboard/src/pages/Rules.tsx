@@ -37,25 +37,17 @@ function GlobalRuleMatchBar({ providers }: { providers: RuleProvider[] }) {
     queryKey: ['global-rule-match', target],
     queryFn: async () => {
       const settled = await Promise.allSettled(
-        providers.map((p) => matchRuleProvider(p.name, target!).then((r) => ({ name: p.name, match: r.match })))
+        providers.map((p) => matchRuleProvider(p.name, target!).then((r) => ({ name: p.name, match: r.match, rule: r.rule })))
       );
-      const matched: string[] = [];
-      const failed: string[] = [];
-      settled.forEach((r, i) => {
-        if (r.status === 'fulfilled') {
-          if (r.value.match) matched.push(providers[i].name);
-        } else {
-          failed.push(providers[i].name);
-        }
-      });
-      return { matched, failed };
+      return settled
+        .filter((r) => r.status === 'fulfilled' && r.value.match)
+        .map((r) => (r as PromiseFulfilledResult<{ name: string; match: boolean; rule?: string }>).value);
     },
     enabled: target !== null && target.trim().length > 0 && providers.length > 0,
     staleTime: 0,
   });
 
-  const matchingProviders = results?.matched ?? [];
-  const failedProviders = results?.failed ?? [];
+  const matches = results ?? [];
   const tested = target !== null && !isLoading && results !== undefined;
 
   function handleSubmit(e: React.FormEvent) {
@@ -123,31 +115,27 @@ function GlobalRuleMatchBar({ providers }: { providers: RuleProvider[] }) {
             <span className="text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
               Testing "{target}" against {providers.length} provider{providers.length !== 1 ? 's' : ''}…
             </span>
-          ) : tested && matchingProviders.length > 0 ? (
+          ) : tested && matches.length > 0 ? (
             <>
               <span className="text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>"{target}" matched by:</span>
-              {matchingProviders.map((name) => (
+              {matches.map((m) => (
                 <span
-                  key={name}
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  key={m.name}
+                  className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
                   style={{ background: 'rgba(52,199,89,0.12)', color: '#34c759' }}
                 >
-                  ✓ {name}
+                  <span>✓ {m.name}</span>
+                  {m.rule && (
+                    <span
+                      className="font-mono font-normal px-1.5 py-0.5 rounded-md text-[10px]"
+                      style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+                    >
+                      {m.rule}
+                    </span>
+                  )}
                 </span>
               ))}
-              {failedProviders.length > 0 && (
-                <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,149,0,0.1)', color: '#ff9500' }}>
-                  {failedProviders.length} provider{failedProviders.length !== 1 ? 's' : ''} failed to respond
-                </span>
-              )}
             </>
-          ) : tested && failedProviders.length > 0 ? (
-            <span
-              className="text-[12px] font-medium px-2.5 py-1 rounded-lg"
-              style={{ background: 'rgba(255,149,0,0.1)', color: '#ff9500' }}
-            >
-              ⚠ {failedProviders.length} provider{failedProviders.length !== 1 ? 's' : ''} failed — no match confirmed
-            </span>
           ) : tested ? (
             <span
               className="text-[12px] font-medium px-2.5 py-1 rounded-lg"
@@ -219,6 +207,12 @@ function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: s
             }
           >
             {matchLoading ? '…' : matchError ? '⚠ Error' : matchData?.match ? '✓ Match' : '✗ No match'}
+            {matchData?.rule && (
+              <span className="font-mono font-normal text-[10px] px-1.5 py-0.5 rounded-md ml-1"
+                style={{ background: 'rgba(52,199,89,0.15)' }}>
+                {matchData.rule}
+              </span>
+            )}
           </div>
         )}
       </form>

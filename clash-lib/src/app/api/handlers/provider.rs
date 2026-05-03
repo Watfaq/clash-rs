@@ -321,6 +321,8 @@ struct MatchQuery {
 struct MatchResponse {
     #[serde(rename = "match")]
     matched: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rule: Option<String>,
 }
 
 async fn match_rule_provider(
@@ -357,8 +359,10 @@ async fn match_rule_provider(
         inbound_user: None,
     };
 
+    let rule = p.search(&sess);
     axum::response::Json(MatchResponse {
-        matched: p.search(&sess),
+        matched: rule.is_some(),
+        rule,
     })
     .into_response()
 }

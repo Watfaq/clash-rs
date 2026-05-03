@@ -158,10 +158,13 @@ export function Providers() {
                 : { background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }
               }
             >
-              {matchLoading ? '…'
-                : matchError ? '⚠ Error'
-                : matchData?.match ? '✓ Match'
-                : '✗ No match'}
+              {matchLoading ? '…' : matchError ? '⚠ Error' : matchData?.match ? `✓ Match` : '✗ No match'}
+              {matchData?.rule && (
+                <span className="font-mono font-normal text-[10px] px-1.5 py-0.5 rounded-md ml-1"
+                  style={{ background: 'rgba(52,199,89,0.15)' }}>
+                  {matchData.rule}
+                </span>
+              )}
             </div>
           )}
         </form>

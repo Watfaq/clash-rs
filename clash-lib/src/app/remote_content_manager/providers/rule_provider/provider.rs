@@ -88,7 +88,11 @@ struct Inner {
 
 #[async_trait]
 pub trait RuleProvider: Provider {
-    fn search(&self, sess: &Session) -> bool;
+    /// Returns `Some(description)` if the session matched a rule, where
+    /// `description` is a human-readable string identifying the matched rule
+    /// (e.g. `"DOMAIN,google.com"` for Classical, or the matched host/IP for
+    /// Domain/IPCIDR providers). Returns `None` if nothing matched.
+    fn search(&self, sess: &Session) -> Option<String>;
     fn behavior(&self) -> RuleSetBehavior;
     fn format(&self) -> RuleSetFormat;
     /// Returns up to `limit` rules as strings. Only Classical providers return
@@ -269,29 +273,42 @@ impl RuleProviderImpl {
 
 #[async_trait]
 impl RuleProvider for RuleProviderImpl {
-    fn search(&self, sess: &Session) -> bool {
+    fn search(&self, sess: &Session) -> Option<String> {
         let inner = self.inner.try_read();
 
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(set) => set.has(&sess.destination.host()),
-                RuleContent::Ipcidr(trie) => trie.contains(
-                    sess.destination
+                RuleContent::Domain(set) => {
+                    let host = sess.destination.host();
+                    if set.has(&host) { Some(host) } else { None }
+                }
+                RuleContent::Ipcidr(trie) => {
+                    let ip = sess
+                        .destination
                         .ip()
-                        .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
-                ),
+                        .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+                    if trie.contains(ip) {
+                        Some(ip.to_string())
+                    } else {
+                        None
+                    }
+                }
                 RuleContent::Classical(rules) => {
                     for rule in rules.iter() {
                         if rule.apply(sess) {
-                            return true;
+                            return Some(format!(
+                                "{},{}",
+                                rule.type_name(),
+                                rule.payload()
+                            ));
                         }
                     }
-                    false
+                    None
                 }
             },
             Err(_) => {
                 debug!("rule provider {} is busy", self.name());
-                false
+                None
             }
         }
     }
@@ -506,10 +523,17 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
-        assert!(provider.search(&Session {
-            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
-            ..Default::default()
-        }));
+        assert!(
+            provider
+                .search(&Session {
+                    destination: SocksAddr::Domain(
+                        "test.google.com".to_owned(),
+                        443
+                    ),
+                    ..Default::default()
+                })
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -551,9 +575,16 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
-        assert!(provider.search(&Session {
-            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
-            ..Default::default()
-        }));
+        assert!(
+            provider
+                .search(&Session {
+                    destination: SocksAddr::Domain(
+                        "test.google.com".to_owned(),
+                        443
+                    ),
+                    ..Default::default()
+                })
+                .is_some()
+        );
     }
 }
