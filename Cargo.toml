@@ -19,11 +19,11 @@ authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
 homepage = "https://github.com/watfaq/clash-rs"
 
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 codegen-units = 1
-lto = "thin"
-strip = false
-debug = 2
+lto = "fat"
+strip = "symbols"
+debug = 0
 panic = "abort"
 
 [profile.detailed-release]
