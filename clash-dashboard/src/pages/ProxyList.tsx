@@ -43,13 +43,12 @@ function getProxyTypeBadgeStyle(type: string): { background: string; color: stri
 
 interface ProxyCardProps {
   proxy: Proxy;
-  latency?: number;
   onTest: () => void;
   testing?: boolean;
 }
 
-function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
-  const delay = latency ?? getLastDelay(proxy.history);
+function ProxyCard({ proxy, onTest, testing }: ProxyCardProps) {
+  const delay = getLastDelay(proxy.history);
   const latencyColor = getLatencyColor(delay);
   const typeStyle = getProxyTypeBadgeStyle(proxy.type);
 
@@ -91,7 +90,6 @@ function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
 
 interface ProviderSectionProps {
   provider: ProxyProvider;
-  latencyMap: Record<string, number>;
   testingProxies: Set<string>;
   testingProviders: Set<string>;
   updatingProviders: Set<string>;
@@ -101,7 +99,7 @@ interface ProviderSectionProps {
 }
 
 function ProviderSection({
-  provider, latencyMap, testingProxies, testingProviders, updatingProviders,
+  provider, testingProxies, testingProviders, updatingProviders,
   onTestProxy, onTestAll, onUpdate,
 }: ProviderSectionProps) {
   const isTesting = testingProviders.has(provider.name);
@@ -158,7 +156,6 @@ function ProviderSection({
             <ProxyCard
               key={proxy.name}
               proxy={proxy}
-              latency={latencyMap[`${provider.name}::${proxy.name}`]}
               testing={testingProxies.has(`${provider.name}::${proxy.name}`)}
               onTest={() => onTestProxy(provider.name, proxy)}
             />
@@ -171,7 +168,6 @@ function ProviderSection({
 
 export function ProxyList() {
   const queryClient = useQueryClient();
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [testingProxies, setTestingProxies] = useState<Set<string>>(new Set());
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
@@ -208,10 +204,10 @@ export function ProxyList() {
     const key = `static::${proxy.name}`;
     setTestingProxies((s) => new Set(s).add(key));
     try {
-      const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+      await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
+      await queryClient.refetchQueries({ queryKey: ['proxies'] });
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+      // ignore, server will have recorded the timeout
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -221,10 +217,10 @@ export function ProxyList() {
     const key = `${providerName}::${proxy.name}`;
     setTestingProxies((s) => new Set(s).add(key));
     try {
-      const res = await getProviderProxyDelay(providerName, proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+      await getProviderProxyDelay(providerName, proxy.name, TEST_URL, TEST_TIMEOUT);
+      await queryClient.refetchQueries({ queryKey: ['providers'] });
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+      // ignore
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -235,17 +231,8 @@ export function ProxyList() {
     try {
       await healthcheckProvider(provider.name);
       await queryClient.refetchQueries({ queryKey: ['providers'] });
-      // Clear stale per-proxy overrides so cards fall back to freshly fetched history
-      setLatencyMap((prev) => {
-        const next = { ...prev };
-        const prefix = `${provider.name}::`;
-        for (const key of Object.keys(next)) {
-          if (key.startsWith(prefix)) delete next[key];
-        }
-        return next;
-      });
     } catch {
-      // leave existing latency values unchanged on error
+      // ignore
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
     }
@@ -254,37 +241,15 @@ export function ProxyList() {
   async function testAllProxies() {
     setTestingAll(true);
     try {
-      // Run all provider healthchecks and static proxy tests in parallel
-      const [providerResults] = await Promise.all([
+      const proxyKeys = configProxies.map((p) => `static::${p.name}`);
+      proxyKeys.forEach((k) => setTestingProxies((s) => new Set(s).add(k)));
+      await Promise.all([
         Promise.allSettled(providers.map((p) => healthcheckProvider(p.name))),
-        Promise.allSettled(
-          configProxies.map(async (proxy) => {
-            const key = `static::${proxy.name}`;
-            setTestingProxies((s) => new Set(s).add(key));
-            try {
-              const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-              setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
-            } catch {
-              setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
-            } finally {
-              setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
-            }
-          })
-        ),
+        Promise.allSettled(configProxies.map((proxy) =>
+          getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT).catch(() => {})
+        )),
       ]);
-      // Only clear overrides for providers whose healthcheck succeeded
-      setLatencyMap((prev) => {
-        const next = { ...prev };
-        providers.forEach((p, i) => {
-          if (providerResults[i].status === 'fulfilled') {
-            const prefix = `${p.name}::`;
-            for (const key of Object.keys(next)) {
-              if (key.startsWith(prefix)) delete next[key];
-            }
-          }
-        });
-        return next;
-      });
+      proxyKeys.forEach((k) => setTestingProxies((s) => { const next = new Set(s); next.delete(k); return next; }));
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ['proxies'] }),
         queryClient.refetchQueries({ queryKey: ['providers'] }),
@@ -358,7 +323,6 @@ export function ProxyList() {
                   <ProxyCard
                     key={proxy.name}
                     proxy={proxy}
-                    latency={latencyMap[`static::${proxy.name}`]}
                     testing={testingProxies.has(`static::${proxy.name}`)}
                     onTest={() => testStaticProxy(proxy)}
                   />
@@ -392,7 +356,6 @@ export function ProxyList() {
                   <ProviderSection
                     key={provider.name}
                     provider={provider}
-                    latencyMap={latencyMap}
                     testingProxies={testingProxies}
                     testingProviders={testingProviders}
                     updatingProviders={updatingProviders}
