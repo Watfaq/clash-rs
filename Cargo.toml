@@ -22,8 +22,8 @@ homepage = "https://github.com/watfaq/clash-rs"
 opt-level = "s"
 codegen-units = 1
 lto = "thin"
-strip = "debuginfo"
-debug = 1
+strip = "symbols"
+debug = 0
 panic = "abort"
 
 [profile.detailed-release]
