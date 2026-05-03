@@ -12,6 +12,8 @@ export function ThemeToggle() {
 
   return (
     <div
+      role="group"
+      aria-label="Theme"
       className="flex items-center rounded-full p-0.5 flex-shrink-0"
       style={{ background: 'var(--color-fill-medium)' }}
       title="Toggle theme"
@@ -24,6 +26,7 @@ export function ThemeToggle() {
             onClick={() => setTheme(value)}
             title={label}
             aria-label={label}
+            aria-pressed={active}
             className="w-7 h-6 rounded-full flex items-center justify-center transition-all"
             style={{
               background: active ? 'var(--color-input-focus-bg)' : 'transparent',

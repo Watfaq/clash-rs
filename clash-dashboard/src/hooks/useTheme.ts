@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -19,20 +19,14 @@ export function useTheme() {
     return stored ?? 'system';
   });
 
-  useEffect(() => {
+  // useLayoutEffect applies data-theme before paint, preventing flash on load
+  useLayoutEffect(() => {
     applyTheme(theme);
   }, [theme]);
-
-  // Apply on mount (before first render flicker)
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    if (stored) applyTheme(stored);
-  }, []);
 
   function setTheme(t: Theme) {
     localStorage.setItem(STORAGE_KEY, t);
     setThemeState(t);
-    applyTheme(t);
   }
 
   return { theme, setTheme };

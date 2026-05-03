@@ -172,16 +172,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
+  const contentType = response.headers.get('content-type') ?? '';
   const raw = await response.text();
-  if (!raw.trim()) {
+  if (!raw.trim() || !contentType.includes('application/json')) {
     return undefined as T;
   }
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    // Plain-text 2xx response (e.g. "provider healthcheck") — treat as void
-    return undefined as T;
-  }
+  return JSON.parse(raw) as T;
 }
 
 // Version

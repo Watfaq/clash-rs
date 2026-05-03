@@ -255,33 +255,34 @@ export function ProxyList() {
     setTestingAll(true);
     try {
       // Run all provider healthchecks and static proxy tests in parallel
-      const providerResults = Promise.allSettled(
-        providers.map((p) => healthcheckProvider(p.name))
-      );
-      const staticResults = Promise.allSettled(
-        configProxies.map(async (proxy) => {
-          const key = `static::${proxy.name}`;
-          setTestingProxies((s) => new Set(s).add(key));
-          try {
-            const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-            setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
-          } catch {
-            setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
-          } finally {
-            setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
-          }
-        })
-      );
-      await Promise.all([providerResults, staticResults]);
-      // Clear provider overrides and refetch fresh data
+      const [providerResults] = await Promise.all([
+        Promise.allSettled(providers.map((p) => healthcheckProvider(p.name))),
+        Promise.allSettled(
+          configProxies.map(async (proxy) => {
+            const key = `static::${proxy.name}`;
+            setTestingProxies((s) => new Set(s).add(key));
+            try {
+              const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
+              setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+            } catch {
+              setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+            } finally {
+              setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
+            }
+          })
+        ),
+      ]);
+      // Only clear overrides for providers whose healthcheck succeeded
       setLatencyMap((prev) => {
         const next = { ...prev };
-        for (const p of providers) {
-          const prefix = `${p.name}::`;
-          for (const key of Object.keys(next)) {
-            if (key.startsWith(prefix)) delete next[key];
+        providers.forEach((p, i) => {
+          if (providerResults[i].status === 'fulfilled') {
+            const prefix = `${p.name}::`;
+            for (const key of Object.keys(next)) {
+              if (key.startsWith(prefix)) delete next[key];
+            }
           }
-        }
+        });
         return next;
       });
       await Promise.all([
