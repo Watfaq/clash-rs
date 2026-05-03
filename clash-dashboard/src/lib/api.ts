@@ -176,7 +176,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!raw.trim()) {
     return undefined as T;
   }
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    // Plain-text 2xx response (e.g. "provider healthcheck") — treat as void
+    return undefined as T;
+  }
 }
 
 // Version

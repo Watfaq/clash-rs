@@ -4,7 +4,7 @@ import {
   getProxies, getProxyProviders, getProxyDelay, getProviderProxyDelay,
   updateProxyProvider, healthcheckProvider,
 } from '../lib/api';
-import { Activity, RefreshCw } from 'lucide-react';
+import { Activity, RefreshCw, Zap } from 'lucide-react';
 import type { Proxy, ProxyProvider } from '../lib/api';
 
 const TEST_URL = 'http://www.gstatic.com/generate_204';
@@ -175,6 +175,7 @@ export function ProxyList() {
   const [testingProxies, setTestingProxies] = useState<Set<string>>(new Set());
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
+  const [testingAll, setTestingAll] = useState(false);
 
   const { data: proxiesData, isLoading: proxiesLoading, isError: proxiesError } = useQuery({
     queryKey: ['proxies'],
@@ -233,7 +234,7 @@ export function ProxyList() {
     setTestingProviders((s) => new Set(s).add(provider.name));
     try {
       await healthcheckProvider(provider.name);
-      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+      await queryClient.refetchQueries({ queryKey: ['providers'] });
       // Clear stale per-proxy overrides so cards fall back to freshly fetched history
       setLatencyMap((prev) => {
         const next = { ...prev };
@@ -247,6 +248,48 @@ export function ProxyList() {
       // leave existing latency values unchanged on error
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
+    }
+  }
+
+  async function testAllProxies() {
+    setTestingAll(true);
+    try {
+      // Run all provider healthchecks and static proxy tests in parallel
+      const providerResults = Promise.allSettled(
+        providers.map((p) => healthcheckProvider(p.name))
+      );
+      const staticResults = Promise.allSettled(
+        configProxies.map(async (proxy) => {
+          const key = `static::${proxy.name}`;
+          setTestingProxies((s) => new Set(s).add(key));
+          try {
+            const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
+            setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+          } catch {
+            setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+          } finally {
+            setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
+          }
+        })
+      );
+      await Promise.all([providerResults, staticResults]);
+      // Clear provider overrides and refetch fresh data
+      setLatencyMap((prev) => {
+        const next = { ...prev };
+        for (const p of providers) {
+          const prefix = `${p.name}::`;
+          for (const key of Object.keys(next)) {
+            if (key.startsWith(prefix)) delete next[key];
+          }
+        }
+        return next;
+      });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['proxies'] }),
+        queryClient.refetchQueries({ queryKey: ['providers'] }),
+      ]);
+    } finally {
+      setTestingAll(false);
     }
   }
 
@@ -267,9 +310,20 @@ export function ProxyList() {
     <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Proxies</h1>
-        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
-          {configProxies.length} static · {providers.length} provider{providers.length !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
+            {configProxies.length} static · {providers.length} provider{providers.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={testAllProxies}
+            disabled={testingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
+          >
+            <Zap size={12} className={testingAll ? 'animate-pulse' : ''} />
+            {testingAll ? 'Testing all…' : 'Test All'}
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
