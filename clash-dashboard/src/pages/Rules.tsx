@@ -25,7 +25,7 @@ function getRuleTypeBadgeStyle(type: string): { background: string; color: strin
     case 'NOT':              return { background: 'rgba(88,86,214,0.12)',   color: '#5856d6' };
     case 'Match':
     case 'Final':            return { background: 'rgba(142,142,147,0.12)', color: '#636366' };
-    default:                 return { background: 'rgba(0,0,0,0.06)',        color: '#8e8e93' };
+    default:                 return { background: 'var(--color-fill-medium)',   color: 'var(--color-text-tertiary)' };
   }
 }
 
@@ -57,15 +57,16 @@ function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: s
     <div className="space-y-3">
       <form onSubmit={handleMatchSubmit} className="flex gap-2 items-center">
         <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border"
-          style={{ background: 'rgba(0,0,0,0.03)', borderColor: 'rgba(0,0,0,0.08)' }}>
-          <Search size={13} style={{ color: '#8e8e93', flexShrink: 0 }} />
+          style={{ background: 'var(--color-fill-subtle)', borderColor: 'var(--color-border)' }}>
+          <Search size={13} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
           <input
             type="text"
+            aria-label={`Rule match target for ${name}`}
             value={matchInput}
             onChange={(e) => setMatchInput(e.target.value)}
             placeholder={behaviorLower === 'ipcidr' ? 'Test IP (e.g. 8.8.8.8)' : 'Test domain or IP'}
             className="flex-1 bg-transparent outline-none text-[13px]"
-            style={{ color: '#1d1d1f' }}
+            style={{ color: 'var(--color-text-primary)' }}
           />
         </div>
         <button
@@ -79,24 +80,30 @@ function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: s
         {matchTarget !== null && (
           <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold flex-shrink-0"
             style={
-              matchLoading ? { background: 'rgba(0,0,0,0.05)', color: '#8e8e93' }
+              matchLoading ? { background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }
               : matchError  ? { background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }
               : matchData?.match ? { background: 'rgba(52,199,89,0.12)', color: '#34c759' }
               : { background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }
             }
           >
             {matchLoading ? '…' : matchError ? '⚠ Error' : matchData?.match ? '✓ Match' : '✗ No match'}
+            {matchData?.match && matchData?.rule && (
+              <span className="font-mono font-normal text-[10px] px-1.5 py-0.5 rounded-md ml-1"
+                style={{ background: 'rgba(52,199,89,0.15)' }}>
+                {matchData.rule}
+              </span>
+            )}
           </div>
         )}
       </form>
 
       {canShowRules && (
         rulesLoading ? (
-          <div className="text-[13px] py-1" style={{ color: '#8e8e93' }}>Loading rules…</div>
+          <div className="text-[13px] py-1" style={{ color: 'var(--color-text-tertiary)' }}>Loading rules…</div>
         ) : rulesError ? (
           <div className="text-[13px] py-1" style={{ color: '#ff3b30' }}>Failed to load rules.</div>
         ) : providerRules.length === 0 ? (
-          <div className="text-[13px] py-1 italic" style={{ color: '#8e8e93' }}>No rules loaded</div>
+          <div className="text-[13px] py-1 italic" style={{ color: 'var(--color-text-tertiary)' }}>No rules loaded</div>
         ) : (
           <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
             {providerRules.map((rule, i) => {
@@ -104,17 +111,17 @@ function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: s
               const payload = rest.join(',');
               return (
                 <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg text-[12px]"
-                  style={{ background: 'rgba(0,0,0,0.03)' }}>
+                  style={{ background: 'var(--color-fill-subtle)' }}>
                   <span className="font-mono font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
                     style={{ background: 'rgba(255,149,0,0.12)', color: '#ff9500', fontSize: 10 }}>
                     {type}
                   </span>
-                  <span className="font-mono truncate" style={{ color: '#1d1d1f' }}>{payload}</span>
+                  <span className="font-mono truncate" style={{ color: 'var(--color-text-primary)' }}>{payload}</span>
                 </div>
               );
             })}
             {providerRules.length >= 500 && (
-              <div className="text-[11px] text-center pt-1" style={{ color: '#8e8e93' }}>
+              <div className="text-[11px] text-center pt-1" style={{ color: 'var(--color-text-tertiary)' }}>
                 Showing first 500 rules
               </div>
             )}
@@ -123,7 +130,7 @@ function RuleProviderRulesPanel({ name, behavior }: { name: string; behavior?: s
       )}
 
       {!canShowRules && (
-        <div className="text-[12px] italic" style={{ color: '#8e8e93' }}>
+        <div className="text-[12px] italic" style={{ color: 'var(--color-text-tertiary)' }}>
           Rule entries are not enumerable for {behavior} providers — use the tester above.
         </div>
       )}
@@ -181,20 +188,19 @@ export function Rules() {
       case 'domain':    return { background: 'rgba(52,199,89,0.12)',  color: '#34c759' };
       case 'ipcidr':    return { background: 'rgba(0,113,227,0.12)',  color: '#0071e3' };
       case 'classical': return { background: 'rgba(255,149,0,0.12)', color: '#ff9500' };
-      default:          return { background: 'rgba(0,0,0,0.06)',      color: '#6e6e73' };
+      default:          return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
     }
   }
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Rules</h1>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>{filtered.length} / {rules.length}</span>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Rules</h1>
+        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>{filtered.length} / {rules.length}</span>
       </div>
 
-      {/* Search */}
       <div className="relative">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#8e8e93' }} />
+        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-tertiary)' }} />
         <input
           type="text"
           placeholder="Filter rules…"
@@ -202,15 +208,15 @@ export function Rules() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[15px] focus:outline-none transition-shadow"
           style={{
-            background: 'rgba(255,255,255,0.8)',
-            border: '1px solid rgba(0,0,0,0.08)',
-            color: '#1d1d1f',
+            background: 'var(--color-input-bg)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-primary)',
           }}
         />
       </div>
 
       {isLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading rules…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading rules…</div>
       ) : isError ? (
         <div className="liquid-glass-card rounded-xl p-6 text-center text-[15px]" style={{ color: '#ff3b30' }}>
           Failed to load rules. Check your connection and API secret.
@@ -221,7 +227,7 @@ export function Rules() {
           style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
         >
           {filtered.length === 0 ? (
-            <div className="py-12 text-center text-[15px]" style={{ color: '#8e8e93' }}>
+            <div className="py-12 text-center text-[15px]" style={{ color: 'var(--color-text-tertiary)' }}>
               No rules match your search
             </div>
           ) : (
@@ -233,12 +239,12 @@ export function Rules() {
                 className="flex items-center gap-3 px-4"
                 style={{
                   minHeight: 48,
-                  borderBottom: i < filtered.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
+                  borderBottom: i < filtered.length - 1 ? '1px solid var(--color-separator-subtle)' : 'none',
                 }}
               >
                 <span
                   className="font-mono text-[11px] flex-shrink-0 w-8 text-right"
-                  style={{ color: '#c7c7cc' }}
+                  style={{ color: 'var(--color-text-tertiary)' }}
                 >
                   {i + 1}
                 </span>
@@ -250,13 +256,13 @@ export function Rules() {
                 </span>
                 <span
                   className="flex-1 font-mono text-[13px] truncate"
-                  style={{ color: '#1d1d1f' }}
+                  style={{ color: 'var(--color-text-primary)' }}
                 >
                   {rule.payload || '—'}
                 </span>
                 <span
                   className="text-[13px] font-medium flex-shrink-0"
-                  style={{ color: '#1d1d1f' }}
+                  style={{ color: 'var(--color-text-primary)' }}
                 >
                   {rule.proxy}
                 </span>
@@ -269,21 +275,21 @@ export function Rules() {
 
       {/* Rule Providers Section */}
       <div className="flex items-center justify-between pt-4">
-        <h2 className="text-xl font-semibold tracking-tight" style={{ color: '#1d1d1f' }}>Rule Providers</h2>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>
+        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Rule Providers</h2>
+        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
           {ruleProviders.length} provider{ruleProviders.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {ruleIsLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading rule providers…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading rule providers…</div>
       ) : ruleIsError ? (
         <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load rule providers. Check your API connection.</div>
       ) : ruleProviders.length === 0 ? (
         <div className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center">
           <div className="text-3xl">📋</div>
-          <div className="text-[15px] font-semibold" style={{ color: '#1d1d1f' }}>No Rule Providers</div>
-          <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+          <div className="text-[15px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Rule Providers</div>
+          <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
             Add rule providers to your config to see them here.
           </div>
         </div>
@@ -311,11 +317,11 @@ export function Rules() {
                       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleRuleProviderExpanded(provider.name)}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                        <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                        <span className="font-semibold text-[15px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                           {provider.name}
                         </span>
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}>
+                          style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}>
                           {provider.vehicleType}
                         </span>
                         {provider.behavior && (
@@ -326,12 +332,12 @@ export function Rules() {
                         )}
                         {provider.ruleCount !== undefined && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
-                            style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}>
+                            style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }}>
                             {provider.ruleCount} rule{provider.ruleCount !== 1 ? 's' : ''}
                           </span>
                         )}
                         {provider.updatedAt && (
-                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: '#8e8e93' }}>
+                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: 'var(--color-text-tertiary)' }}>
                             Updated {new Date(provider.updatedAt).toLocaleTimeString()}
                           </span>
                         )}
@@ -346,11 +352,11 @@ export function Rules() {
                           <RefreshCw size={12} className={isUpdating ? 'animate-spin' : ''} />
                           {isUpdating ? 'Updating…' : 'Update'}
                         </button>
-                        <span style={{ color: '#6e6e73', fontSize: 16 }}>{isExpanded ? '▲' : '▼'}</span>
+                        <span style={{ color: 'var(--color-text-secondary)', fontSize: 16 }}>{isExpanded ? '▲' : '▼'}</span>
                       </div>
                     </div>
                     {isExpanded && (
-                      <div className="px-4 pb-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                      <div className="px-4 pb-4 border-t" style={{ borderColor: 'var(--color-separator)' }}>
                         <div className="pt-3">
                           <RuleProviderRulesPanel name={provider.name} behavior={provider.behavior} />
                         </div>

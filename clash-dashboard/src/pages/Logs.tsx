@@ -32,7 +32,7 @@ function WsStatus({ state }: { state: string }) {
   const isOpen = state === 'OPEN';
   const isConnecting = state === 'CONNECTING';
   return (
-    <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#6e6e73' }}>
+    <span className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
       <span
         className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isConnecting ? 'animate-pulse' : ''}`}
         style={{ background: isOpen ? '#34c759' : isConnecting ? '#ff9500' : '#ff3b30' }}
@@ -74,7 +74,7 @@ export function Logs() {
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Logs</h1>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Logs</h1>
           <WsStatus state={readyState} />
         </div>
         <div className="flex items-center gap-2">
@@ -86,8 +86,8 @@ export function Logs() {
                 <button
                   key={l}
                   onClick={() => setLevel(l)}
-                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium capitalize transition-all ${active ? '' : 'text-[#6e6e73] dark:text-white/60'}`}
-                  style={active ? LEVEL_ACTIVE_STYLE[l] : undefined}
+                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium capitalize transition-all ${active ? '' : ''}`}
+                  style={active ? LEVEL_ACTIVE_STYLE[l] : { color: 'var(--color-text-secondary)' }}
                 >
                   {l}
                 </button>
@@ -102,14 +102,14 @@ export function Logs() {
             className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
             style={userPaused
               ? { background: 'rgba(255,149,0,0.1)', color: '#ff9500' }
-              : { background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+              : { background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
           >
             {userPaused ? 'Resume' : 'Pause'}
           </button>
           <button
             onClick={() => setLogs([])}
             className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
-            style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+            style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
           >
             Clear
           </button>
@@ -124,14 +124,14 @@ export function Logs() {
         onMouseLeave={() => setHoverPaused(false)}
       >
         {filtered.length === 0 ? (
-          <div className="text-[13px] text-center py-10" style={{ color: '#6e6e73' }}>
+          <div className="text-[13px] text-center py-10" style={{ color: 'var(--color-text-secondary)' }}>
             {readyState === 'OPEN' ? 'Waiting for logs…' : readyState === 'CONNECTING' ? 'Connecting…' : 'Disconnected — check API settings'}
           </div>
         ) : (
           <div className="space-y-0.5">
             {filtered.map((log) => (
               <div key={log.id} className="flex items-baseline gap-3 py-0.5">
-                <span className="font-mono text-[11px] flex-shrink-0 w-20" style={{ color: '#6e6e73' }}>
+                <span className="font-mono text-[11px] flex-shrink-0 w-20" style={{ color: 'var(--color-text-secondary)' }}>
                   {log.ts}
                 </span>
                 <div

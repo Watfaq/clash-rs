@@ -4,7 +4,7 @@ import {
   getProxies, getProxyProviders, getProxyDelay, getProviderProxyDelay,
   updateProxyProvider, healthcheckProvider,
 } from '../lib/api';
-import { Activity, RefreshCw } from 'lucide-react';
+import { Activity, RefreshCw, Zap } from 'lucide-react';
 import type { Proxy, ProxyProvider } from '../lib/api';
 
 const TEST_URL = 'http://www.gstatic.com/generate_204';
@@ -38,28 +38,27 @@ function getProxyTypeBadgeStyle(type: string): { background: string; color: stri
   if (t === 'wireguard') return { background: 'rgba(88,86,214,0.1)', color: '#5856d6' };
   if (t === 'hysteria' || t === 'hysteria2') return { background: 'rgba(255,149,0,0.12)', color: '#ff9500' };
   if (t === 'tuic') return { background: 'rgba(0,149,255,0.1)', color: '#0095ff' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+  return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 interface ProxyCardProps {
   proxy: Proxy;
-  latency?: number;
   onTest: () => void;
   testing?: boolean;
 }
 
-function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
-  const delay = latency ?? getLastDelay(proxy.history);
+function ProxyCard({ proxy, onTest, testing }: ProxyCardProps) {
+  const delay = getLastDelay(proxy.history);
   const latencyColor = getLatencyColor(delay);
   const typeStyle = getProxyTypeBadgeStyle(proxy.type);
 
   return (
     <div
       className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-      style={{ background: 'rgba(255,255,255,0.6)', borderColor: 'rgba(0,0,0,0.06)' }}
+      style={{ background: 'var(--color-proxy-card-bg)', borderColor: 'var(--color-separator)' }}
     >
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium truncate" style={{ color: '#1d1d1f' }}>
+        <div className="text-[13px] font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
           {proxy.name}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -91,7 +90,6 @@ function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
 
 interface ProviderSectionProps {
   provider: ProxyProvider;
-  latencyMap: Record<string, number>;
   testingProxies: Set<string>;
   testingProviders: Set<string>;
   updatingProviders: Set<string>;
@@ -101,7 +99,7 @@ interface ProviderSectionProps {
 }
 
 function ProviderSection({
-  provider, latencyMap, testingProxies, testingProviders, updatingProviders,
+  provider, testingProxies, testingProviders, updatingProviders,
   onTestProxy, onTestAll, onUpdate,
 }: ProviderSectionProps) {
   const isTesting = testingProviders.has(provider.name);
@@ -112,18 +110,18 @@ function ProviderSection({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>{provider.name}</h2>
+          <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>{provider.name}</h2>
           <span
             className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+            style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}
           >
             {provider.vehicleType}
           </span>
-          <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+          <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
             {proxies.length} {proxies.length === 1 ? 'proxy' : 'proxies'}
           </span>
           {provider.updatedAt && (
-            <span className="text-[11px] hidden sm:inline" style={{ color: '#8e8e93' }}>
+            <span className="text-[11px] hidden sm:inline" style={{ color: 'var(--color-text-tertiary)' }}>
               · Updated {new Date(provider.updatedAt).toLocaleTimeString()}
             </span>
           )}
@@ -151,14 +149,13 @@ function ProviderSection({
       </div>
 
       {proxies.length === 0 ? (
-        <div className="text-[13px] italic" style={{ color: '#8e8e93' }}>No proxies in this provider.</div>
+        <div className="text-[13px] italic" style={{ color: 'var(--color-text-tertiary)' }}>No proxies in this provider.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {proxies.map((proxy) => (
             <ProxyCard
               key={proxy.name}
               proxy={proxy}
-              latency={latencyMap[`${provider.name}::${proxy.name}`]}
               testing={testingProxies.has(`${provider.name}::${proxy.name}`)}
               onTest={() => onTestProxy(provider.name, proxy)}
             />
@@ -171,10 +168,11 @@ function ProviderSection({
 
 export function ProxyList() {
   const queryClient = useQueryClient();
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [testingProxies, setTestingProxies] = useState<Set<string>>(new Set());
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
+  const [testingAll, setTestingAll] = useState(false);
+  const [batchFailedProviders, setBatchFailedProviders] = useState<string[]>([]);
 
   const { data: proxiesData, isLoading: proxiesLoading, isError: proxiesError } = useQuery({
     queryKey: ['proxies'],
@@ -207,10 +205,10 @@ export function ProxyList() {
     const key = `static::${proxy.name}`;
     setTestingProxies((s) => new Set(s).add(key));
     try {
-      const res = await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+      await getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT);
+      await queryClient.refetchQueries({ queryKey: ['proxies'] });
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+      // ignore, server will have recorded the timeout
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -220,10 +218,10 @@ export function ProxyList() {
     const key = `${providerName}::${proxy.name}`;
     setTestingProxies((s) => new Set(s).add(key));
     try {
-      const res = await getProviderProxyDelay(providerName, proxy.name, TEST_URL, TEST_TIMEOUT);
-      setLatencyMap((prev) => ({ ...prev, [key]: res.delay }));
+      await getProviderProxyDelay(providerName, proxy.name, TEST_URL, TEST_TIMEOUT);
+      await queryClient.refetchQueries({ queryKey: ['providers'] });
     } catch {
-      setLatencyMap((prev) => ({ ...prev, [key]: 0 }));
+      // ignore
     } finally {
       setTestingProxies((s) => { const next = new Set(s); next.delete(key); return next; });
     }
@@ -233,20 +231,35 @@ export function ProxyList() {
     setTestingProviders((s) => new Set(s).add(provider.name));
     try {
       await healthcheckProvider(provider.name);
-      await queryClient.invalidateQueries({ queryKey: ['providers'] });
-      // Clear stale per-proxy overrides so cards fall back to freshly fetched history
-      setLatencyMap((prev) => {
-        const next = { ...prev };
-        const prefix = `${provider.name}::`;
-        for (const key of Object.keys(next)) {
-          if (key.startsWith(prefix)) delete next[key];
-        }
-        return next;
-      });
+      await queryClient.refetchQueries({ queryKey: ['providers'] });
     } catch {
-      // leave existing latency values unchanged on error
+      // ignore
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
+    }
+  }
+
+  async function testAllProxies() {
+    setTestingAll(true);
+    setBatchFailedProviders([]);
+    try {
+      const proxyKeys = configProxies.map((p) => `static::${p.name}`);
+      proxyKeys.forEach((k) => setTestingProxies((s) => new Set(s).add(k)));
+      const [providerResults] = await Promise.all([
+        Promise.allSettled(providers.map((p) => healthcheckProvider(p.name))),
+        Promise.allSettled(configProxies.map((proxy) =>
+          getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT).catch(() => {})
+        )),
+      ]);
+      proxyKeys.forEach((k) => setTestingProxies((s) => { const next = new Set(s); next.delete(k); return next; }));
+      const failed = providers.filter((_, i) => providerResults[i].status === 'rejected').map((p) => p.name);
+      if (failed.length > 0) setBatchFailedProviders(failed);
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['proxies'] }),
+        queryClient.refetchQueries({ queryKey: ['providers'] }),
+      ]);
+    } finally {
+      setTestingAll(false);
     }
   }
 
@@ -266,14 +279,34 @@ export function ProxyList() {
   return (
     <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>
-          {configProxies.length} static · {providers.length} provider{providers.length !== 1 ? 's' : ''}
-        </span>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Proxies</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
+            {configProxies.length} static · {providers.length} provider{providers.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={testAllProxies}
+            disabled={testingAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
+          >
+            <Zap size={12} className={testingAll ? 'animate-pulse' : ''} />
+            {testingAll ? 'Testing all…' : 'Test All'}
+          </button>
+          {batchFailedProviders.length > 0 && !testingAll && (
+            <span
+              className="text-[11px] px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,149,0,0.1)', color: '#ff9500' }}
+              title={`Failed: ${batchFailedProviders.join(', ')}`}
+            >
+              ⚠ {batchFailedProviders.length} provider{batchFailedProviders.length !== 1 ? 's' : ''} failed
+            </span>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading proxies…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading proxies…</div>
       ) : isError ? (
         <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load proxies. Check your API connection.</div>
       ) : (
@@ -281,8 +314,8 @@ export function ProxyList() {
           {/* Proxies */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxies</h2>
-              <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+              <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Proxies</h2>
+              <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
                 {configProxies.length} {configProxies.length === 1 ? 'proxy' : 'proxies'}
               </span>
             </div>
@@ -292,8 +325,8 @@ export function ProxyList() {
                 className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center"
               >
                 <div className="text-3xl">🔌</div>
-                <div className="text-[15px] font-semibold" style={{ color: '#1d1d1f' }}>No Static Proxies</div>
-                <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+                <div className="text-[15px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Static Proxies</div>
+                <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
                   Define proxies directly in your config file.
                 </div>
               </div>
@@ -303,7 +336,6 @@ export function ProxyList() {
                   <ProxyCard
                     key={proxy.name}
                     proxy={proxy}
-                    latency={latencyMap[`static::${proxy.name}`]}
                     testing={testingProxies.has(`static::${proxy.name}`)}
                     onTest={() => testStaticProxy(proxy)}
                   />
@@ -318,17 +350,17 @@ export function ProxyList() {
               className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center"
             >
               <div className="text-3xl">📦</div>
-              <div className="text-[15px] font-semibold" style={{ color: '#1d1d1f' }}>No Proxy Providers</div>
-              <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+              <div className="text-[15px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Proxy Providers</div>
+              <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
                 Add proxy providers to your config to see them here.
               </div>
             </div>
           ) : (
             <>
-              <div className="w-full h-px" style={{ background: 'rgba(0,0,0,0.06)' }} />
+              <div className="w-full h-px" style={{ background: 'var(--color-separator)' }} />
               <div className="flex items-center gap-2">
-                <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxy Providers</h2>
-                <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+                <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Proxy Providers</h2>
+                <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
                   {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
                 </span>
               </div>
@@ -337,7 +369,6 @@ export function ProxyList() {
                   <ProviderSection
                     key={provider.name}
                     provider={provider}
-                    latencyMap={latencyMap}
                     testingProxies={testingProxies}
                     testingProviders={testingProviders}
                     updatingProviders={updatingProviders}

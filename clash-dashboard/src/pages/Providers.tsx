@@ -97,7 +97,7 @@ export function Providers() {
       case 'domain':    return { background: 'rgba(52,199,89,0.12)',  color: '#34c759' };
       case 'ipcidr':    return { background: 'rgba(0,113,227,0.12)',  color: '#0071e3' };
       case 'classical': return { background: 'rgba(255,149,0,0.12)', color: '#ff9500' };
-      default:          return { background: 'rgba(0,0,0,0.06)',      color: '#6e6e73' };
+      default:          return { background: 'var(--color-fill-medium)',  color: 'var(--color-text-secondary)' };
     }
   }
 
@@ -130,15 +130,16 @@ export function Providers() {
         {/* Match tester — shown for all behaviors */}
         <form onSubmit={handleMatchSubmit} className="flex gap-2 items-center">
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border"
-            style={{ background: 'rgba(0,0,0,0.03)', borderColor: 'rgba(0,0,0,0.08)' }}>
-            <Search size={13} style={{ color: '#8e8e93', flexShrink: 0 }} />
+            style={{ background: 'var(--color-fill-subtle)', borderColor: 'var(--color-border)' }}>
+            <Search size={13} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
             <input
               type="text"
+              aria-label={`Rule match target for ${name}`}
               value={matchInput}
               onChange={(e) => setMatchInput(e.target.value)}
               placeholder={behaviorLower === 'ipcidr' ? 'Test IP (e.g. 8.8.8.8)' : 'Test domain or IP'}
               className="flex-1 bg-transparent outline-none text-[13px]"
-              style={{ color: '#1d1d1f' }}
+              style={{ color: 'var(--color-text-primary)' }}
             />
           </div>
           <button
@@ -152,16 +153,19 @@ export function Providers() {
           {matchTarget !== null && (
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold flex-shrink-0"
               style={
-                matchLoading ? { background: 'rgba(0,0,0,0.05)', color: '#8e8e93' }
+                matchLoading ? { background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }
                 : matchError  ? { background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }
                 : matchData?.match ? { background: 'rgba(52,199,89,0.12)', color: '#34c759' }
                 : { background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }
               }
             >
-              {matchLoading ? '…'
-                : matchError ? '⚠ Error'
-                : matchData?.match ? '✓ Match'
-                : '✗ No match'}
+              {matchLoading ? '…' : matchError ? '⚠ Error' : matchData?.match ? `✓ Match` : '✗ No match'}
+              {matchData?.match && matchData?.rule && (
+                <span className="font-mono font-normal text-[10px] px-1.5 py-0.5 rounded-md ml-1"
+                  style={{ background: 'rgba(52,199,89,0.15)' }}>
+                  {matchData.rule}
+                </span>
+              )}
             </div>
           )}
         </form>
@@ -169,11 +173,11 @@ export function Providers() {
         {/* Rule list — only for classical */}
         {canShowRules && (
           isLoading ? (
-            <div className="text-[13px] py-1" style={{ color: '#8e8e93' }}>Loading rules…</div>
+            <div className="text-[13px] py-1" style={{ color: 'var(--color-text-tertiary)' }}>Loading rules…</div>
           ) : isError ? (
             <div className="text-[13px] py-1" style={{ color: '#ff3b30' }}>Failed to load rules.</div>
           ) : rules.length === 0 ? (
-            <div className="text-[13px] py-1 italic" style={{ color: '#8e8e93' }}>No rules loaded</div>
+            <div className="text-[13px] py-1 italic" style={{ color: 'var(--color-text-tertiary)' }}>No rules loaded</div>
           ) : (
             <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
               {rules.map((rule, i) => {
@@ -183,7 +187,7 @@ export function Providers() {
                   <div
                     key={i}
                     className="flex items-center gap-2 px-2 py-1 rounded-lg text-[12px]"
-                    style={{ background: 'rgba(0,0,0,0.03)' }}
+                    style={{ background: 'var(--color-fill-subtle)' }}
                   >
                     <span
                       className="font-mono font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
@@ -191,12 +195,12 @@ export function Providers() {
                     >
                       {type}
                     </span>
-                    <span className="font-mono truncate" style={{ color: '#1d1d1f' }}>{payload}</span>
+                    <span className="font-mono truncate" style={{ color: 'var(--color-text-primary)' }}>{payload}</span>
                   </div>
                 );
               })}
               {rules.length >= 500 && (
-                <div className="text-[11px] text-center pt-1" style={{ color: '#8e8e93' }}>
+                <div className="text-[11px] text-center pt-1" style={{ color: 'var(--color-text-tertiary)' }}>
                   Showing first 500 rules
                 </div>
               )}
@@ -206,7 +210,7 @@ export function Providers() {
 
         {/* Info message for non-classical */}
         {!canShowRules && (
-          <div className="text-[12px] italic" style={{ color: '#8e8e93' }}>
+          <div className="text-[12px] italic" style={{ color: 'var(--color-text-tertiary)' }}>
             Rule entries are not enumerable for {behavior} providers — use the tester above.
           </div>
         )}
@@ -218,17 +222,17 @@ export function Providers() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Providers</h1>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>{providers.length} provider{providers.length !== 1 ? 's' : ''}</span>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Providers</h1>
+        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>{providers.length} provider{providers.length !== 1 ? 's' : ''}</span>
       </div>
 
       {isLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading providers…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading providers…</div>
       ) : providers.length === 0 ? (
         <div className="liquid-glass-card rounded-2xl p-10 flex flex-col items-center gap-3 text-center">
           <div className="text-4xl">📦</div>
-          <div className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>No External Providers</div>
-          <div className="text-[13px] max-w-xs" style={{ color: '#6e6e73' }}>
+          <div className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No External Providers</div>
+          <div className="text-[13px] max-w-xs" style={{ color: 'var(--color-text-secondary)' }}>
             Add proxy providers to your config to see them here.
           </div>
         </div>
@@ -247,7 +251,7 @@ export function Providers() {
                 style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
               >
                 <div className="flex">
-                  <div className="w-1 flex-shrink-0" style={{ background: '#8e8e93' }} />
+                  <div className="w-1 flex-shrink-0" style={{ background: 'var(--color-text-tertiary)' }} />
                   <div className="flex-1">
                     {/* Header */}
                     <div
@@ -256,23 +260,23 @@ export function Providers() {
                       onClick={() => toggleExpanded(provider.name)}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                        <span className="font-semibold text-[15px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                           {provider.name}
                         </span>
                         <span
                           className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+                          style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}
                         >
                           {provider.vehicleType}
                         </span>
                         <span
                           className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
+                          style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }}
                         >
                           {proxyCount} {proxyCount === 1 ? 'proxy' : 'proxies'}
                         </span>
                         {provider.updatedAt && (
-                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: '#8e8e93' }}>
+                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: 'var(--color-text-tertiary)' }}>
                             Updated {new Date(provider.updatedAt).toLocaleTimeString()}
                           </span>
                         )}
@@ -297,15 +301,15 @@ export function Providers() {
                           {isUpdating ? 'Updating…' : 'Update'}
                         </button>
                         {isExpanded
-                          ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
-                          : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                          ? <ChevronUp size={16} style={{ color: 'var(--color-text-secondary)' }} />
+                          : <ChevronDown size={16} style={{ color: 'var(--color-text-secondary)' }} />
                         }
                       </div>
                     </div>
 
                     {/* Proxy grid */}
                     {isExpanded && provider.proxies && provider.proxies.length > 0 && (
-                      <div className="p-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                      <div className="p-4 border-t" style={{ borderColor: 'var(--color-separator)' }}>
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
                           {provider.proxies.map((proxy) => {
                             const latency = getLastDelay(proxy.history);
@@ -314,11 +318,11 @@ export function Providers() {
                               <div
                                 key={proxy.name}
                                 className="px-3 py-2.5 rounded-xl border"
-                                style={{ background: 'white', borderColor: 'rgba(0,0,0,0.06)' }}
+                                style={{ background: 'var(--color-proxy-card-bg)', borderColor: 'var(--color-separator)' }}
                               >
                                 <div
                                   className="text-[13px] font-medium truncate mb-1"
-                                  style={{ color: '#1d1d1f' }}
+                                  style={{ color: 'var(--color-text-primary)' }}
                                 >
                                   {proxy.name}
                                 </div>
@@ -347,17 +351,17 @@ export function Providers() {
 
       {/* Rule Providers Section */}
       <div className="flex items-center justify-between pt-4">
-        <h2 className="text-xl font-semibold tracking-tight" style={{ color: '#1d1d1f' }}>Rule Providers</h2>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>{ruleProviders.length} provider{ruleProviders.length !== 1 ? 's' : ''}</span>
+        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Rule Providers</h2>
+        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>{ruleProviders.length} provider{ruleProviders.length !== 1 ? 's' : ''}</span>
       </div>
 
       {ruleIsLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading rule providers…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading rule providers…</div>
       ) : ruleProviders.length === 0 ? (
         <div className="liquid-glass-card rounded-2xl p-10 flex flex-col items-center gap-3 text-center">
           <div className="text-4xl">📋</div>
-          <div className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>No Rule Providers</div>
-          <div className="text-[13px] max-w-xs" style={{ color: '#6e6e73' }}>
+          <div className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Rule Providers</div>
+          <div className="text-[13px] max-w-xs" style={{ color: 'var(--color-text-secondary)' }}>
             Add rule providers to your config to see them here.
           </div>
         </div>
@@ -384,12 +388,12 @@ export function Providers() {
                       onClick={() => toggleRuleProviderExpanded(provider.name)}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                        <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                        <span className="font-semibold text-[15px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                           {provider.name}
                         </span>
                         <span
                           className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+                          style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}
                         >
                           {provider.vehicleType}
                         </span>
@@ -404,13 +408,13 @@ export function Providers() {
                         {provider.ruleCount !== undefined && (
                           <span
                             className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
-                            style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
+                            style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }}
                           >
                             {provider.ruleCount} rule{provider.ruleCount !== 1 ? 's' : ''}
                           </span>
                         )}
                         {provider.updatedAt && (
-                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: '#8e8e93' }}>
+                          <span className="text-[11px] truncate hidden sm:inline" style={{ color: 'var(--color-text-tertiary)' }}>
                             Updated {new Date(provider.updatedAt).toLocaleTimeString()}
                           </span>
                         )}
@@ -426,15 +430,15 @@ export function Providers() {
                           {isUpdating ? 'Updating…' : 'Update'}
                         </button>
                         {isExpanded
-                          ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
-                          : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                          ? <ChevronUp size={16} style={{ color: 'var(--color-text-secondary)' }} />
+                          : <ChevronDown size={16} style={{ color: 'var(--color-text-secondary)' }} />
                         }
                       </div>
                     </div>
 
                     {/* Rules list */}
                     {isExpanded && (
-                      <div className="px-4 pb-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                      <div className="px-4 pb-4 border-t" style={{ borderColor: 'var(--color-separator)' }}>
                         <div className="pt-3">
                           <RuleProviderRulesPanel name={provider.name} behavior={provider.behavior} />
                         </div>

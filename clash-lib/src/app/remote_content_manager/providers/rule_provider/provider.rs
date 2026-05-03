@@ -506,10 +506,11 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
-        assert!(provider.search(&Session {
+        let sess = Session {
             destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
             ..Default::default()
-        }));
+        };
+        assert!(provider.search(&sess));
     }
 
     #[tokio::test]
