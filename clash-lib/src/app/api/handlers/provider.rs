@@ -15,6 +15,7 @@ use axum::{
     routing::get,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::{
     app::{
@@ -116,7 +117,11 @@ async fn update_provider(
 ) -> impl IntoResponse {
     let provider = provider.read().await;
     match provider.update().await {
-        Ok(_) => (StatusCode::ACCEPTED, "provider update started").into_response(),
+        Ok(_) => (
+            StatusCode::ACCEPTED,
+            axum::response::Json(json!({"message": "provider update started"})),
+        )
+            .into_response(),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!(
@@ -135,7 +140,10 @@ async fn provider_healthcheck(
     let provider = provider.read().await;
     provider.healthcheck().await;
 
-    (StatusCode::ACCEPTED, "provider healthcheck")
+    (
+        StatusCode::ACCEPTED,
+        axum::response::Json(json!({"message": "provider healthcheck started"})),
+    )
 }
 
 #[derive(Deserialize)]
@@ -264,7 +272,12 @@ async fn update_rule_provider(
 ) -> impl IntoResponse {
     match state.router.get_rule_providers().get(&provider_name) {
         Some(p) => match p.update().await {
-            Ok(_) => (StatusCode::ACCEPTED, "rule provider update started")
+            Ok(_) => (
+                StatusCode::ACCEPTED,
+                axum::response::Json(
+                    json!({"message": "rule provider update started"}),
+                ),
+            )
                 .into_response(),
             Err(err) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -11,6 +11,7 @@ use axum::{
 
 use http::{HeaderMap, StatusCode, header};
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::{
     app::{
@@ -106,8 +107,11 @@ async fn update_proxy(
                 cache_store.set_selected(proxy.name(), &payload.name).await;
                 (
                     StatusCode::ACCEPTED,
-                    format!("selected proxy {} for {}", payload.name, proxy.name()),
+                    axum::response::Json(json!({
+                        "message": format!("selected proxy {} for {}", payload.name, proxy.name())
+                    })),
                 )
+                    .into_response()
             }
             Err(err) => (
                 StatusCode::BAD_REQUEST,
@@ -117,12 +121,14 @@ async fn update_proxy(
                     proxy.name(),
                     err
                 ),
-            ),
+            )
+                .into_response(),
         },
         _ => (
             StatusCode::NOT_FOUND,
             format!("proxy {} is not a Select", proxy.name()),
-        ),
+        )
+            .into_response(),
     }
 }
 
