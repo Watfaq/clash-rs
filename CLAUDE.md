@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClashRS is a custom protocol, rule-based network proxy software written in Rust. It's a high-performance proxy with support for multiple protocols (Shadowsocks, Trojan, Vmess, Wireguard, Tor, Tuic, Socks5), flexible routing rules, DNS anti-spoofing, and cross-platform support.
+ClashRS is a custom protocol, rule-based network proxy software written in Rust. It's a high-performance proxy with support for multiple protocols (Shadowsocks/SS2022, Trojan, VMess, VLESS, WireGuard, Tor, TUIC, Hysteria2, ShadowQUIC, AnyTLS, SSH, Tailscale, Socks5), flexible routing rules, DNS anti-spoofing, and cross-platform support.
 
 ## Workspace Structure
 
@@ -72,10 +72,16 @@ pre-commit install
 - `router/` - Rule-based routing logic
 
 **clash_lib/src/proxy/** - Protocol implementations:
-- `shadowsocks/`, `trojan/`, `vmess/`, `socks/` - Proxy protocols
+- `shadowsocks/`, `trojan/`, `vmess/`, `vless/`, `socks/` - Core proxy protocols
+- `hysteria2/`, `tuic/`, `shadowquic/` - QUIC-based protocols
+- `anytls/` - AnyTLS protocol (inbound + outbound)
+- `wg/` - WireGuard via boringtun
+- `ssh/` - SSH tunneling
+- `tailscale/` - Tailscale integration
+- `tor/` - Tor onion routing
 - `group/` - Proxy group types (selector, fallback, load balance)
-- `transport/` - Underlying transports (TLS, WebSocket, gRPC, H2)
-- `tun/` - TUN device support for transparent proxy
+- `transport/` - Underlying transports (TLS, WebSocket, gRPC, H2, ShadowTLS)
+- `tun/`, `tproxy/`, `redir/` - Transparent proxy / TUN device support
 
 **clash_lib/src/config/** - Configuration parsing and validation
 
@@ -93,10 +99,18 @@ pre-commit install
 
 Tests are located in `clash_lib/tests/` and include:
 - `smoke_tests.rs` - Basic functionality tests
-- `api_tests.rs` - API endpoint tests
+- `api_tests.rs` - API endpoint tests (run with `--all-features`; requires `shadowsocks` feature for SS proxies)
 - Integration tests with Docker containers for various proxy protocols
 
 Set `CLASH_RS_CI=true` environment variable when running tests to enable CI-specific behavior.
+
+## Version Building
+
+The version string is set at compile time via `CLASH_VERSION_OVERRIDE`:
+- **Master branch builds**: `{cargo_version}-alpha+sha.{short_sha}` (e.g. `0.10.2-alpha+sha.abc1234`)
+- **Tagged/release builds**: `{cargo_version}` (e.g. `0.10.2`)
+
+The commit SHA is also emitted separately as `CLASH_GIT_SHA_SHORT` and exposed via the `/version` API endpoint as a `commit` field (present only when non-empty).
 
 ## Platform-Specific Notes
 
@@ -107,11 +121,18 @@ Set `CLASH_RS_CI=true` environment variable when running tests to enable CI-spec
 ## Feature Flags
 
 Key features that can be enabled:
-- `shadowsocks` - Shadowsocks protocol support
+- `shadowsocks` - Shadowsocks/SS2022 protocol support
 - `tuic` - TUIC protocol support
 - `ssh` - SSH tunnel support
 - `onion` - Tor support
 - `shadowquic` - ShadowQUIC protocol support
+- `wireguard` - WireGuard support via boringtun
+- `tailscale` - Tailscale integration
+- `tun` - TUN device / transparent proxy
+- `tproxy` - Linux TPROXY support
+- `redir` - TCP redirect support
+- `telemetry` - OpenTelemetry tracing
+- `dashboard` - Embedded web dashboard (default on)
 - `tokio-console` - Tokio console debugging
 - `bench` - Benchmarking tools
 
