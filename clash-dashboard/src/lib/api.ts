@@ -177,7 +177,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!raw.trim() || !contentType.includes('application/json')) {
     return undefined as T;
   }
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`Invalid JSON response from ${path}`);
+  }
 }
 
 // Version

@@ -134,6 +134,7 @@ export function Providers() {
             <Search size={13} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
             <input
               type="text"
+              aria-label={`Rule match target for ${name}`}
               value={matchInput}
               onChange={(e) => setMatchInput(e.target.value)}
               placeholder={behaviorLower === 'ipcidr' ? 'Test IP (e.g. 8.8.8.8)' : 'Test domain or IP'}
@@ -159,7 +160,7 @@ export function Providers() {
               }
             >
               {matchLoading ? '…' : matchError ? '⚠ Error' : matchData?.match ? `✓ Match` : '✗ No match'}
-              {matchData?.rule && (
+              {matchData?.match && matchData?.rule && (
                 <span className="font-mono font-normal text-[10px] px-1.5 py-0.5 rounded-md ml-1"
                   style={{ background: 'rgba(52,199,89,0.15)' }}>
                   {matchData.rule}

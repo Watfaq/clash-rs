@@ -172,6 +172,7 @@ export function ProxyList() {
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
   const [testingAll, setTestingAll] = useState(false);
+  const [batchFailedProviders, setBatchFailedProviders] = useState<string[]>([]);
 
   const { data: proxiesData, isLoading: proxiesLoading, isError: proxiesError } = useQuery({
     queryKey: ['proxies'],
@@ -240,16 +241,19 @@ export function ProxyList() {
 
   async function testAllProxies() {
     setTestingAll(true);
+    setBatchFailedProviders([]);
     try {
       const proxyKeys = configProxies.map((p) => `static::${p.name}`);
       proxyKeys.forEach((k) => setTestingProxies((s) => new Set(s).add(k)));
-      await Promise.all([
+      const [providerResults] = await Promise.all([
         Promise.allSettled(providers.map((p) => healthcheckProvider(p.name))),
         Promise.allSettled(configProxies.map((proxy) =>
           getProxyDelay(proxy.name, TEST_URL, TEST_TIMEOUT).catch(() => {})
         )),
       ]);
       proxyKeys.forEach((k) => setTestingProxies((s) => { const next = new Set(s); next.delete(k); return next; }));
+      const failed = providers.filter((_, i) => providerResults[i].status === 'rejected').map((p) => p.name);
+      if (failed.length > 0) setBatchFailedProviders(failed);
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ['proxies'] }),
         queryClient.refetchQueries({ queryKey: ['providers'] }),
@@ -289,6 +293,15 @@ export function ProxyList() {
             <Zap size={12} className={testingAll ? 'animate-pulse' : ''} />
             {testingAll ? 'Testing all…' : 'Test All'}
           </button>
+          {batchFailedProviders.length > 0 && !testingAll && (
+            <span
+              className="text-[11px] px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,149,0,0.1)', color: '#ff9500' }}
+              title={`Failed: ${batchFailedProviders.join(', ')}`}
+            >
+              ⚠ {batchFailedProviders.length} provider{batchFailedProviders.length !== 1 ? 's' : ''} failed
+            </span>
+          )}
         </div>
       </div>
 

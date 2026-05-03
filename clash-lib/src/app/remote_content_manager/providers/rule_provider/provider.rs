@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
@@ -307,7 +307,11 @@ impl RuleProvider for RuleProviderImpl {
                 }
             },
             Err(_) => {
-                debug!("rule provider {} is busy", self.name());
+                warn!(
+                    "rule provider {} is busy (write lock held); treating as no \
+                     match",
+                    self.name()
+                );
                 None
             }
         }
@@ -523,16 +527,19 @@ mod tests {
 
         assert_ok!(provider.initialize().await);
 
+        let result = provider.search(&Session {
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        });
+        assert!(result.is_some());
+        let desc = result.unwrap();
         assert!(
-            provider
-                .search(&Session {
-                    destination: SocksAddr::Domain(
-                        "test.google.com".to_owned(),
-                        443
-                    ),
-                    ..Default::default()
-                })
-                .is_some()
+            desc.contains("DOMAIN-SUFFIX"),
+            "Expected DOMAIN-SUFFIX in '{desc}'"
+        );
+        assert!(
+            desc.contains("google.com"),
+            "Expected google.com in '{desc}'"
         );
     }
 
