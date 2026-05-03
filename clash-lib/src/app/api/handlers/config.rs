@@ -163,13 +163,7 @@ async fn update_configs(
             match g.reload_tx.send((cfg, done)).await {
                 Ok(_) => {
                     wait.await.unwrap();
-                    (
-                        StatusCode::OK,
-                        axum::response::Json(
-                            json!({"message": "config reloading from payload"}),
-                        ),
-                    )
-                        .into_response()
+                    StatusCode::NO_CONTENT.into_response()
                 }
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -193,16 +187,11 @@ async fn update_configs(
                     .into_response();
             }
 
-            let msg = format!("config reloading from file {path}");
             let cfg: crate::Config = crate::Config::File(path);
             match g.reload_tx.send((cfg, done)).await {
                 Ok(_) => {
                     wait.await.unwrap();
-                    (
-                        StatusCode::OK,
-                        axum::response::Json(json!({"message": msg})),
-                    )
-                        .into_response()
+                    StatusCode::NO_CONTENT.into_response()
                 }
 
                 Err(_) => (
