@@ -33,6 +33,7 @@ pub struct Router {
 
     country_mmdb: Option<MmdbLookup>,
     asn_mmdb: Option<MmdbLookup>,
+    rule_providers: HashMap<String, ThreadSafeRuleProvider>,
 }
 
 pub type ArcRouter = Arc<Router>;
@@ -83,7 +84,12 @@ impl Router {
 
             country_mmdb,
             asn_mmdb,
+            rule_providers: rule_provider_registry,
         }
+    }
+
+    pub fn get_rule_providers(&self) -> &HashMap<String, ThreadSafeRuleProvider> {
+        &self.rule_providers
     }
 
     /// this mutates the session, attaching resolved IP and ASN

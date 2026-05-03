@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getProxies, getProxyProviders, getProxyDelay, getProviderProxyDelay,
-  updateProxyProvider,
+  updateProxyProvider, healthcheckProvider,
 } from '../lib/api';
 import { Activity, RefreshCw } from 'lucide-react';
 import type { Proxy, ProxyProvider } from '../lib/api';
@@ -232,14 +232,19 @@ export function ProxyList() {
   async function testAllInProvider(provider: ProxyProvider) {
     setTestingProviders((s) => new Set(s).add(provider.name));
     try {
-      const proxies = provider.proxies ?? [];
-      const BATCH = 5;
-      for (let i = 0; i < proxies.length; i += BATCH) {
-        await Promise.allSettled(
-          proxies.slice(i, i + BATCH).map((proxy) => testProviderProxy(provider.name, proxy))
-        );
-      }
+      await healthcheckProvider(provider.name);
       await queryClient.invalidateQueries({ queryKey: ['providers'] });
+      // Clear stale per-proxy overrides so cards fall back to freshly fetched history
+      setLatencyMap((prev) => {
+        const next = { ...prev };
+        const prefix = `${provider.name}::`;
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(prefix)) delete next[key];
+        }
+        return next;
+      });
+    } catch {
+      // leave existing latency values unchanged on error
     } finally {
       setTestingProviders((s) => { const next = new Set(s); next.delete(provider.name); return next; });
     }
@@ -273,10 +278,10 @@ export function ProxyList() {
         <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load proxies. Check your API connection.</div>
       ) : (
         <>
-          {/* Config Proxies */}
+          {/* Proxies */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Config Proxies</h2>
+              <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxies</h2>
               <span className="text-[11px]" style={{ color: '#8e8e93' }}>
                 {configProxies.length} {configProxies.length === 1 ? 'proxy' : 'proxies'}
               </span>
@@ -321,6 +326,12 @@ export function ProxyList() {
           ) : (
             <>
               <div className="w-full h-px" style={{ background: 'rgba(0,0,0,0.06)' }} />
+              <div className="flex items-center gap-2">
+                <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxy Providers</h2>
+                <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+                  {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
+                </span>
+              </div>
               <div className="space-y-8">
                 {providers.map((provider) => (
                   <ProviderSection

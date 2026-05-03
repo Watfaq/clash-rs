@@ -149,6 +149,7 @@ export function Proxies() {
     try {
       await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
       await queryClient.invalidateQueries({ queryKey: ['proxies'] });
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
     } catch {
       // leave existing latency values unchanged on error
     } finally {
@@ -229,6 +230,8 @@ export function Proxies() {
               const isSelector = group.type === 'Selector';
               const accentColor = getGroupAccentColor(group.type);
               const typeBadge = getTypeBadgeStyle(group.type);
+              const groupLatency = getLastDelay(group.history ?? []);
+              const groupLatencyColor = getLatencyColor(groupLatency);
 
           return (
             <div
@@ -267,6 +270,14 @@ export function Proxies() {
                       {group.now && (
                         <span className="text-[13px] truncate" style={{ color: '#6e6e73' }}>
                           {group.now}
+                        </span>
+                      )}
+                      {groupLatency !== undefined && (
+                        <span
+                          className="text-[11px] font-mono flex-shrink-0"
+                          style={{ color: groupLatencyColor }}
+                        >
+                          {groupLatency === 0 ? 'Timeout' : `${groupLatency}ms`}
                         </span>
                       )}
                     </div>
