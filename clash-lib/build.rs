@@ -41,12 +41,6 @@ fn main() -> anyhow::Result<()> {
     };
     println!("cargo:rustc-env=CLASH_VERSION_OVERRIDE={version}");
 
-    let short_sha = git_sha
-        .as_deref()
-        .map(|s| &s[..7.min(s.len())])
-        .unwrap_or("");
-    println!("cargo:rustc-env=CLASH_GIT_SHA_SHORT={short_sha}");
-
     Ok(())
 }
 
