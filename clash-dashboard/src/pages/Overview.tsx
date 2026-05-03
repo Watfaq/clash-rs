@@ -89,7 +89,7 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
     <button
       onClick={() => onChange(!value)}
       className="w-10 h-6 rounded-full transition-colors flex-shrink-0 relative"
-      style={{ background: value ? '#34c759' : 'rgba(0,0,0,0.15)' }}
+      style={{ background: value ? '#34c759' : 'var(--color-toggle-off)' }}
     >
       <span
         className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
@@ -108,7 +108,7 @@ function PortInput({ value, onCommit }: { value: number | undefined; onCommit: (
       onChange={(e) => setLocal(e.target.value)}
       onBlur={() => { const n = parseInt(local, 10); onCommit(!local || isNaN(n) ? null : n); }}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-      className="form-input w-24 text-right text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 focus:bg-white py-1 px-2 transition-all"
+      className="form-input config-input w-24 text-right text-[13px] font-mono rounded-lg border-0 focus:ring-2 focus:ring-[#0071e3]/30 py-1 px-2 transition-all"
       placeholder="disabled"
     />
   );
@@ -123,7 +123,7 @@ function TextInput({ value, onCommit }: { value: string | undefined; onCommit: (
       onChange={(e) => setLocal(e.target.value)}
       onBlur={() => onCommit(local)}
       onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-      className="form-input w-40 text-right text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 focus:bg-white py-1 px-2 transition-all"
+      className="form-input config-input w-40 text-right text-[13px] font-mono rounded-lg border-0 focus:ring-2 focus:ring-[#0071e3]/30 py-1 px-2 transition-all"
     />
   );
 }
@@ -133,7 +133,7 @@ function SelectInput({ value, options, onChange }: { value: string | undefined; 
     <select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      className="form-select text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 py-1 px-2 capitalize transition-all"
+      className="form-select config-input text-[13px] font-mono rounded-lg border-0 focus:ring-2 focus:ring-[#0071e3]/30 py-1 px-2 capitalize transition-all"
     >
       {options.map((o) => <option key={o} value={o} className="capitalize">{o}</option>)}
     </select>
@@ -142,9 +142,9 @@ function SelectInput({ value, options, onChange }: { value: string | undefined; 
 
 function EditRow({ label, icon, iconBg, children }: { label: string; icon: React.ReactNode; iconBg: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+    <div className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid var(--color-separator)' }}>
       <IconBadge bg={iconBg}>{icon}</IconBadge>
-      <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{label}</span>
+      <span className="text-[15px] flex-1" style={{ color: 'var(--color-text-primary)' }}>{label}</span>
       {children}
     </div>
   );
@@ -153,7 +153,7 @@ function EditRow({ label, icon, iconBg, children }: { label: string; icon: React
 function EditSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1" style={{ color: '#6e6e73' }}>{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1" style={{ color: 'var(--color-text-secondary)' }}>{title}</div>
       <div className="liquid-glass-card rounded-xl overflow-hidden">
         <div className="[&>*:last-child]:[border-bottom:none]">{children}</div>
       </div>
@@ -206,10 +206,10 @@ export function Overview() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Overview</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Overview</h1>
         <div className="flex items-center gap-2">
           {patchMutation.isPending && (
-            <span className="text-[12px]" style={{ color: '#6e6e73' }}>Saving…</span>
+            <span className="text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>Saving…</span>
           )}
           <button
             onClick={() => reloadMutation.mutate()}
@@ -283,13 +283,13 @@ export function Overview() {
           {/* Header row */}
           <div className="p-5 flex items-center justify-between">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: '#6e6e73' }}>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: 'var(--color-text-secondary)' }}>
                 Proxy Mode
               </div>
-              <div className="text-[13px]" style={{ color: '#6e6e73' }}>Controls how traffic is routed</div>
+              <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>Controls how traffic is routed</div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center p-1 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
+              <div className="flex items-center p-1 rounded-full" style={{ background: 'var(--color-fill-medium)' }}>
                 {MODES.map((m) => {
                   const active = currentMode === m;
                   return (
@@ -299,9 +299,10 @@ export function Overview() {
                       disabled={modeMutation.isPending}
                       className={`px-5 py-1.5 rounded-full text-[13px] font-medium capitalize transition-all disabled:opacity-50 ${
                         active
-                          ? (MODE_COLORS[m] ?? 'bg-white text-[#1d1d1f] shadow-sm')
-                          : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+                          ? (MODE_COLORS[m] ?? 'bg-white shadow-sm')
+                          : ''
                       }`}
+                      style={{ color: active ? undefined : 'var(--color-text-secondary)' }}
                     >
                       {m.charAt(0).toUpperCase() + m.slice(1)}
                     </button>
@@ -312,7 +313,7 @@ export function Overview() {
                 <button
                   onClick={() => setProxyExpanded((v) => !v)}
                   className="p-1.5 rounded-lg transition-colors"
-                  style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                  style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
                 >
                   {proxyExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
@@ -321,7 +322,7 @@ export function Overview() {
           </div>
           {/* Expandable proxy groups */}
           {proxyExpanded && currentMode !== 'direct' && (
-            <div className="border-t px-5 pb-5 pt-4 space-y-3" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+            <div className="border-t px-5 pb-5 pt-4 space-y-3" style={{ borderColor: 'var(--color-separator)' }}>
               <ProxyGroups mode={currentMode} />
             </div>
           )}
@@ -329,7 +330,7 @@ export function Overview() {
       )}
 
       {/* Config form — editable */}
-      {configsLoading && <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading config…</div>}
+      {configsLoading && <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading config…</div>}
       {cfg && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -382,13 +383,13 @@ export function Overview() {
                   return a.name.localeCompare(b.name);
                 })
                 .map((l) => (
-                <div key={l.name} className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                <div key={l.name} className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid var(--color-separator)' }}>
                   <IconBadge bg={l.active ? '#34c759' : '#8e8e93'}>
                     <Server size={14} color="white" />
                   </IconBadge>
-                  <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{l.name}</span>
+                  <span className="text-[15px] flex-1" style={{ color: 'var(--color-text-primary)' }}>{l.name}</span>
                   <span className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}>{l.type}</span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}>{l.type}</span>
                     <span className="font-mono text-[13px]">:{l.port}</span>
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: l.active ? '#34c759' : '#8e8e93' }} />
                   </span>
@@ -401,13 +402,13 @@ export function Overview() {
           <button
             onClick={() => setShowRaw((v) => !v)}
             className="flex items-center gap-2 text-[13px] transition-colors"
-            style={{ color: '#6e6e73' }}
+            style={{ color: 'var(--color-text-secondary)' }}
           >
             {showRaw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             {showRaw ? 'Hide' : 'Show'} Raw JSON
           </button>
           {showRaw && (
-            <pre className="liquid-glass-card rounded-xl p-5 text-[11px] overflow-auto max-h-96 font-mono" style={{ color: '#6e6e73' }}>
+            <pre className="liquid-glass-card rounded-xl p-5 text-[11px] overflow-auto max-h-96 font-mono" style={{ color: 'var(--color-text-secondary)' }}>
               {JSON.stringify(cfg, null, 2)}
             </pre>
           )}

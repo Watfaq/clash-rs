@@ -38,7 +38,7 @@ function getProxyTypeBadgeStyle(type: string): { background: string; color: stri
   if (t === 'wireguard') return { background: 'rgba(88,86,214,0.1)', color: '#5856d6' };
   if (t === 'hysteria' || t === 'hysteria2') return { background: 'rgba(255,149,0,0.12)', color: '#ff9500' };
   if (t === 'tuic') return { background: 'rgba(0,149,255,0.1)', color: '#0095ff' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+  return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 interface ProxyCardProps {
@@ -56,10 +56,10 @@ function ProxyCard({ proxy, latency, onTest, testing }: ProxyCardProps) {
   return (
     <div
       className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-      style={{ background: 'rgba(255,255,255,0.6)', borderColor: 'rgba(0,0,0,0.06)' }}
+      style={{ background: 'var(--color-proxy-card-bg)', borderColor: 'var(--color-separator)' }}
     >
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium truncate" style={{ color: '#1d1d1f' }}>
+        <div className="text-[13px] font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
           {proxy.name}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -112,18 +112,18 @@ function ProviderSection({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>{provider.name}</h2>
+          <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>{provider.name}</h2>
           <span
             className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-            style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+            style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}
           >
             {provider.vehicleType}
           </span>
-          <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+          <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
             {proxies.length} {proxies.length === 1 ? 'proxy' : 'proxies'}
           </span>
           {provider.updatedAt && (
-            <span className="text-[11px] hidden sm:inline" style={{ color: '#8e8e93' }}>
+            <span className="text-[11px] hidden sm:inline" style={{ color: 'var(--color-text-tertiary)' }}>
               · Updated {new Date(provider.updatedAt).toLocaleTimeString()}
             </span>
           )}
@@ -151,7 +151,7 @@ function ProviderSection({
       </div>
 
       {proxies.length === 0 ? (
-        <div className="text-[13px] italic" style={{ color: '#8e8e93' }}>No proxies in this provider.</div>
+        <div className="text-[13px] italic" style={{ color: 'var(--color-text-tertiary)' }}>No proxies in this provider.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {proxies.map((proxy) => (
@@ -266,14 +266,14 @@ export function ProxyList() {
   return (
     <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
-        <span className="text-[13px]" style={{ color: '#8e8e93' }}>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Proxies</h1>
+        <span className="text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
           {configProxies.length} static · {providers.length} provider{providers.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {isLoading ? (
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading proxies…</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading proxies…</div>
       ) : isError ? (
         <div className="text-[15px]" style={{ color: '#ff3b30' }}>Failed to load proxies. Check your API connection.</div>
       ) : (
@@ -281,8 +281,8 @@ export function ProxyList() {
           {/* Proxies */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxies</h2>
-              <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+              <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Proxies</h2>
+              <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
                 {configProxies.length} {configProxies.length === 1 ? 'proxy' : 'proxies'}
               </span>
             </div>
@@ -292,8 +292,8 @@ export function ProxyList() {
                 className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center"
               >
                 <div className="text-3xl">🔌</div>
-                <div className="text-[15px] font-semibold" style={{ color: '#1d1d1f' }}>No Static Proxies</div>
-                <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+                <div className="text-[15px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Static Proxies</div>
+                <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
                   Define proxies directly in your config file.
                 </div>
               </div>
@@ -318,17 +318,17 @@ export function ProxyList() {
               className="liquid-glass-card rounded-2xl p-8 flex flex-col items-center gap-2 text-center"
             >
               <div className="text-3xl">📦</div>
-              <div className="text-[15px] font-semibold" style={{ color: '#1d1d1f' }}>No Proxy Providers</div>
-              <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+              <div className="text-[15px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>No Proxy Providers</div>
+              <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
                 Add proxy providers to your config to see them here.
               </div>
             </div>
           ) : (
             <>
-              <div className="w-full h-px" style={{ background: 'rgba(0,0,0,0.06)' }} />
+              <div className="w-full h-px" style={{ background: 'var(--color-separator)' }} />
               <div className="flex items-center gap-2">
-                <h2 className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Proxy Providers</h2>
-                <span className="text-[11px]" style={{ color: '#8e8e93' }}>
+                <h2 className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Proxy Providers</h2>
+                <span className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
                   {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
                 </span>
               </div>

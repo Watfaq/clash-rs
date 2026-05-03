@@ -149,24 +149,24 @@ function LinkTooltip({ link }: { link: SankeyLinkDatum<FlowNode, FlowLink> }) {
     <div
       className="rounded-xl px-3 py-2 text-[13px] space-y-1"
       style={{
-        background: 'rgba(255,255,255,0.97)',
+        background: 'var(--color-surface-float)',
         backdropFilter: 'blur(8px)',
-        border: '1px solid rgba(0,0,0,0.08)',
+        border: '1px solid var(--color-border)',
         boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
       }}
     >
-      <div className="font-semibold text-[14px]" style={{ color: '#1d1d1f' }}>
+      <div className="font-semibold text-[14px]" style={{ color: 'var(--color-text-primary)' }}>
         {link.source.id.replace(/^src:/, '')} → {link.target.id.replace(/^dst:/, '')}
       </div>
-      <div className="flex gap-3" style={{ color: '#6e6e73' }}>
+      <div className="flex gap-3" style={{ color: 'var(--color-text-secondary)' }}>
         <span>↑ {formatBytes(link.uploadTotal)}</span>
         <span>↓ {formatBytes(link.downloadTotal)}</span>
       </div>
-      <div className="flex gap-3" style={{ color: '#6e6e73' }}>
+      <div className="flex gap-3" style={{ color: 'var(--color-text-secondary)' }}>
         <span>Conns: {link.connCount}</span>
         <span style={{ color: protocolColor(link.protocol) }}>{link.protocol}</span>
       </div>
-      <div className="text-[12px]" style={{ color: '#8e8e93' }}>Rule: {link.rule}</div>
+      <div className="text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>Rule: {link.rule}</div>
     </div>
   );
 }
@@ -273,21 +273,21 @@ export function Flows() {
       {/* Header */}
       <div className="flex items-center gap-2">
         <GitBranch size={20} style={{ color: '#0071e3' }} />
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Flows</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Flows</h1>
       </div>
 
       {/* Controls bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Search */}
-        <div className="flex items-center gap-2 flex-1 min-w-48 max-w-72 px-3 py-1.5 rounded-xl liquid-glass-card" style={{ border: '1px solid rgba(0,0,0,0.08)' }}>
-          <Search size={14} style={{ color: '#8e8e93', flexShrink: 0 }} />
+        <div className="flex items-center gap-2 flex-1 min-w-48 max-w-72 px-3 py-1.5 rounded-xl liquid-glass-card" style={{ border: '1px solid var(--color-border)' }}>
+          <Search size={14} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }} />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Filter destination…"
             className="flex-1 bg-transparent outline-none text-[14px]"
-            style={{ color: '#1d1d1f' }}
+            style={{ color: 'var(--color-text-primary)' }}
           />
         </div>
 
@@ -310,7 +310,7 @@ export function Flows() {
         </div>
 
         {/* Include closed toggle */}
-        <label className="flex items-center gap-2 ml-auto cursor-pointer select-none" style={{ color: '#6e6e73', fontSize: 13 }}>
+        <label className="flex items-center gap-2 ml-auto cursor-pointer select-none" style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
           <span>Include closed</span>
           <div
             className="relative w-9 h-5 rounded-full transition-colors"
@@ -333,7 +333,7 @@ export function Flows() {
       {/* Summary cards */}
       <div
         className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
-        style={{ color: '#6e6e73' }}
+        style={{ color: 'var(--color-text-secondary)' }}
       >
         Summary
       </div>
@@ -366,12 +366,12 @@ export function Flows() {
             className="flex items-center gap-3 px-4"
             style={{
               minHeight: 52,
-              borderBottom: idx < arr.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+              borderBottom: idx < arr.length - 1 ? '1px solid var(--color-separator)' : 'none',
             }}
           >
             <IconBadge bg={row.bg}>{row.icon}</IconBadge>
-            <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{row.label}</span>
-            <span className="text-[15px] font-mono truncate max-w-48" style={{ color: '#6e6e73' }}>{row.value}</span>
+            <span className="text-[15px] flex-1" style={{ color: 'var(--color-text-primary)' }}>{row.label}</span>
+            <span className="text-[15px] font-mono truncate max-w-48" style={{ color: 'var(--color-text-secondary)' }}>{row.value}</span>
           </div>
         ))}
       </div>
@@ -379,7 +379,7 @@ export function Flows() {
       {/* Sankey diagram */}
       <div
         className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
-        style={{ color: '#6e6e73' }}
+        style={{ color: 'var(--color-text-secondary)' }}
       >
         Flow Map (top 15 destinations)
       </div>
@@ -393,7 +393,7 @@ export function Flows() {
                 className="w-2.5 h-2.5 rounded-sm"
                 style={{ background: protocolColor(proto) }}
               />
-              <span className="text-[12px]" style={{ color: '#6e6e73' }}>{proto}</span>
+              <span className="text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>{proto}</span>
             </div>
           ))}
         </div>
@@ -433,7 +433,7 @@ export function Flows() {
           />
         ) : (
           <div className="h-full flex items-center justify-center">
-            <span className="text-[15px]" style={{ color: '#8e8e93' }}>
+            <span className="text-[15px]" style={{ color: 'var(--color-text-tertiary)' }}>
               {flows.length === 0 ? 'Waiting for flow data…' : 'Not enough data to render diagram'}
             </span>
           </div>
@@ -443,7 +443,7 @@ export function Flows() {
       {/* Flow table */}
       <div
         className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
-        style={{ color: '#6e6e73' }}
+        style={{ color: 'var(--color-text-secondary)' }}
       >
         Flow Table (top 50)
       </div>
@@ -453,23 +453,23 @@ export function Flows() {
       >
         <table className="table-fixed w-full text-sm">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-48" style={{ color: '#6e6e73' }}>Destination</th>
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-16" style={{ color: '#6e6e73' }}>Port</th>
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Protocol</th>
+            <tr style={{ borderBottom: '1px solid var(--color-separator)' }}>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-48" style={{ color: 'var(--color-text-secondary)' }}>Destination</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-16" style={{ color: 'var(--color-text-secondary)' }}>Port</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: 'var(--color-text-secondary)' }}>Protocol</th>
               <SortHeader field="connCount" label="Conns" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="uploadTotal" label="↑ Upload" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="downloadTotal" label="↓ Download" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
               <SortHeader field="bytesTotal" label="Total" current={sortField} dir={sortDir} onClick={toggleSort} width="w-24" />
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Last Seen</th>
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: '#6e6e73' }}>Rule</th>
-              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-40" style={{ color: '#6e6e73' }}>Proxy Chain</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: 'var(--color-text-secondary)' }}>Last Seen</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: 'var(--color-text-secondary)' }}>Rule</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-40" style={{ color: 'var(--color-text-secondary)' }}>Proxy Chain</th>
             </tr>
           </thead>
           <tbody>
             {sortedFlows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
+                <td colSpan={10} className="text-center py-10 text-[15px]" style={{ color: 'var(--color-text-tertiary)' }}>
                   No flow data yet
                 </td>
               </tr>
@@ -478,19 +478,19 @@ export function Flows() {
                 <tr
                   key={`${flow.dstHost}-${flow.dstPort}-${flow.protocol}-${idx}`}
                   className="group transition-colors"
-                  style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
+                  style={{ borderBottom: '1px solid var(--color-separator-subtle)' }}
                 >
                   <td className="px-4 py-3" title={flow.srcIps.length > 0 ? `Sources: ${flow.srcIps.join(', ')}` : undefined}>
-                    <div className="text-[14px] font-medium truncate" style={{ color: '#1d1d1f' }}>
+                    <div className="text-[14px] font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>
                       {flow.dstHost || '—'}
                     </div>
                     {flow.srcIps.length > 0 && (
-                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>
+                      <div className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
                         {flow.srcIps[0]}{flow.srcIps.length > 1 ? ` +${flow.srcIps.length - 1}` : ''}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-mono text-[13px]" style={{ color: '#8e8e93' }}>
+                  <td className="px-4 py-3 font-mono text-[13px]" style={{ color: 'var(--color-text-tertiary)' }}>
                     {flow.dstPort}
                   </td>
                   <td className="px-4 py-3">
@@ -510,7 +510,7 @@ export function Flows() {
                         className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                         style={{ background: flow.activeCount > 0 ? '#34c759' : '#8e8e93' }}
                       />
-                      <span className="text-[13px] font-mono" style={{ color: '#6e6e73' }}>
+                      <span className="text-[13px] font-mono" style={{ color: 'var(--color-text-secondary)' }}>
                         {flow.connCount}
                       </span>
                     </div>
@@ -524,16 +524,16 @@ export function Flows() {
                   <td className="px-4 py-3 text-right text-[13px] font-mono font-semibold" style={{ color: '#ff9500' }}>
                     {formatBytes(flow.bytesTotal)}
                   </td>
-                  <td className="px-4 py-3 text-[12px]" style={{ color: '#8e8e93' }}>
+                  <td className="px-4 py-3 text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
                     {formatRelative(flow.lastSeen)}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{flow.rule}</div>
+                    <div className="text-[12px] truncate" style={{ color: 'var(--color-text-secondary)' }}>{flow.rule}</div>
                     {flow.rulePayload && (
-                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{flow.rulePayload}</div>
+                      <div className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{flow.rulePayload}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[12px] truncate" style={{ color: '#8e8e93' }}>
+                  <td className="px-4 py-3 text-[12px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
                     {flow.chains?.join(' → ')}
                   </td>
                 </tr>
@@ -548,7 +548,7 @@ export function Flows() {
         <>
           <div
             className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
-            style={{ color: '#6e6e73' }}
+            style={{ color: 'var(--color-text-secondary)' }}
           >
             Traffic by Country / ASN
           </div>
@@ -561,18 +561,18 @@ export function Flows() {
               return (
                 <div key={key} className="flex items-center gap-3">
                   <div className="w-40 flex-shrink-0">
-                    <div className="text-[13px] truncate" style={{ color: '#1d1d1f' }}>{label}</div>
+                    <div className="text-[13px] truncate" style={{ color: 'var(--color-text-primary)' }}>{label}</div>
                     {isCountry && asn && (
-                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{asn}</div>
+                      <div className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>{asn}</div>
                     )}
                   </div>
-                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--color-bar-track)' }}>
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${pct * 100}%`, background: '#0071e3' }}
                     />
                   </div>
-                  <div className="w-20 text-right text-[12px] font-mono flex-shrink-0" style={{ color: '#6e6e73' }}>
+                  <div className="w-20 text-right text-[12px] font-mono flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
                     {formatBytes(bytes)}
                   </div>
                 </div>
@@ -601,7 +601,7 @@ function SortHeader({
     <th
       aria-sort={field === current ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       className={`text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] select-none ${width}`}
-      style={{ color: field === current ? '#0071e3' : '#6e6e73' }}
+      style={{ color: field === current ? '#0071e3' : 'var(--color-text-secondary)' }}
     >
       <button
         type="button"

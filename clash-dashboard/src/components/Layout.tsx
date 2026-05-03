@@ -6,6 +6,7 @@ import {
   Server, SlidersHorizontal, GitBranch, Shield,
 } from 'lucide-react';
 import logoUrl from '../assets/logo.png';
+import { ThemeToggle } from './ThemeToggle';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -36,7 +37,7 @@ export function Layout() {
           {/* Logo — real clash-rs icon from public/favicon.svg */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <img src={logoUrl} alt="clash-rs" className="w-7 h-7 rounded-lg" />
-            <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: '#1d1d1f' }}>
+            <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: 'var(--color-text-primary)' }}>
               clash-rs
             </span>
           </div>
@@ -54,7 +55,7 @@ export function Layout() {
                   `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                     isActive
                       ? 'nav-pill-glass text-[#0071e3]'
-                      : 'text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-black/[0.05]'
+                      : 'nav-inactive'
                   }`
                 }
               >
@@ -63,6 +64,8 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
+
+          <ThemeToggle />
 
           {/* Connection status */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -75,7 +78,7 @@ export function Layout() {
                 />
               )}
             </div>
-            <span className="text-[13px] font-medium hidden sm:inline" style={{ color: '#6e6e73' }}>
+            <span className="text-[13px] font-medium hidden sm:inline" style={{ color: 'var(--color-text-secondary)' }}>
               {isConnected ? `v${version?.version}` : 'Offline'}
             </span>
           </div>

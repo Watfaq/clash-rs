@@ -28,7 +28,7 @@ function getTypeBadgeStyle(type: string): { background: string; color: string } 
   if (type === 'URLTest') return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
   if (type === 'Fallback') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
   if (type === 'LoadBalance') return { background: 'rgba(175,82,222,0.1)', color: '#af52de' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+  return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 function getLastDelay(history: Proxy['history']): number | undefined {
@@ -120,14 +120,14 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
   }
 
   if (isLoading) {
-    return <div className="text-[13px]" style={{ color: '#6e6e73' }}>Loading proxies…</div>;
+    return <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>Loading proxies…</div>;
   }
 
   if (mode === 'direct' || groups.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-4 text-center">
         <div className="text-2xl">⚡️</div>
-        <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+        <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
           {mode === 'direct' ? 'Direct mode — no proxy groups' : 'No groups for this mode'}
         </div>
       </div>
@@ -147,7 +147,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
           <div
             key={group.name}
             className="rounded-xl overflow-hidden border"
-            style={{ borderColor: 'rgba(0,0,0,0.06)', background: 'rgba(255,255,255,0.6)' }}
+            style={{ borderColor: 'var(--color-separator)', background: 'var(--color-proxy-card-bg)' }}
           >
             <div className="flex">
               <div className="w-1 flex-shrink-0" style={{ background: accentColor }} />
@@ -158,7 +158,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                   onClick={() => toggleExpanded(group.name)}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="font-semibold text-[14px] truncate" style={{ color: '#1d1d1f' }}>
+                    <span className="font-semibold text-[14px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                       {group.name}
                     </span>
                     <span
@@ -168,7 +168,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                       {group.type}
                     </span>
                     {group.now && (
-                      <span className="text-[13px] truncate" style={{ color: '#6e6e73' }}>
+                      <span className="text-[13px] truncate" style={{ color: 'var(--color-text-secondary)' }}>
                         {group.now}
                       </span>
                     )}
@@ -178,22 +178,22 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                       onClick={(e) => { e.stopPropagation(); testGroupDelay(group); }}
                       disabled={isTesting}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium disabled:opacity-50"
-                      style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                      style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
                     >
                       <RefreshCw size={11} className={isTesting ? 'animate-spin' : ''} />
                       {isTesting ? 'Testing…' : 'Test'}
                     </button>
                     {isExpanded
-                      ? <ChevronUp size={15} style={{ color: '#6e6e73' }} />
-                      : <ChevronDown size={15} style={{ color: '#6e6e73' }} />
+                      ? <ChevronUp size={15} style={{ color: 'var(--color-text-secondary)' }} />
+                      : <ChevronDown size={15} style={{ color: 'var(--color-text-secondary)' }} />
                     }
                   </div>
                 </div>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 border-t pt-3" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                  <div className="px-4 pb-4 border-t pt-3" style={{ borderColor: 'var(--color-separator)' }}>
                     {!isSelector && (
-                      <p className="text-[11px] mb-2.5" style={{ color: '#8e8e93' }}>
+                      <p className="text-[11px] mb-2.5" style={{ color: 'var(--color-text-tertiary)' }}>
                         Auto-selected — click to force override
                       </p>
                     )}
@@ -210,7 +210,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                               {isSelected && <Check size={11} className="text-white flex-shrink-0" />}
                               <div
                                 className="text-[12px] font-medium truncate"
-                                style={{ color: isSelected ? 'white' : '#1d1d1f' }}
+                                style={{ color: isSelected ? 'white' : 'var(--color-text-primary)' }}
                               >
                                 {proxyName}
                               </div>
@@ -233,7 +233,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                         const chipStyle = {
                           ...(isSelected
                             ? { background: '#0071e3', borderColor: '#0071e3' }
-                            : { background: 'white', borderColor: 'rgba(0,0,0,0.06)' }),
+                            : { background: 'var(--color-input-focus-bg)', borderColor: 'var(--color-separator)' }),
                         };
 
                         return isSelector ? (
