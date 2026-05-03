@@ -13,10 +13,12 @@ fn main() {
     // time.
     let git_ref = std::env::var_os("CLASH_GIT_REF")
         .or_else(|| std::env::var_os("GITHUB_REF"))
-        .and_then(|v| v.into_string().ok());
+        .and_then(|v| v.into_string().ok())
+        .or_else(git_current_branch);
     let git_sha = std::env::var_os("CLASH_GIT_SHA")
         .or_else(|| std::env::var_os("GITHUB_SHA"))
-        .and_then(|v| v.into_string().ok());
+        .and_then(|v| v.into_string().ok())
+        .or_else(git_current_sha);
 
     let version = if let Some(ref git_ref_val) = git_ref
         && git_ref_val == "refs/heads/master"
@@ -29,4 +31,28 @@ fn main() {
         env!("CARGO_PKG_VERSION").into()
     };
     println!("cargo:rustc-env=CLASH_VERSION_OVERRIDE={version}");
+}
+
+fn git_current_branch() -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["symbolic-ref", "HEAD"])
+        .output()
+        .ok()?;
+    if out.status.success() {
+        Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
+    } else {
+        None
+    }
+}
+
+fn git_current_sha() -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if out.status.success() {
+        Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
+    } else {
+        None
+    }
 }
