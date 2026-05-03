@@ -33,7 +33,7 @@ export function Layout() {
       {/* Top nav bar — Apple liquid glass */}
       <header className="liquid-glass flex-shrink-0 sticky top-0 z-50" style={{ height: 52 }}>
         {/* Inner content constrained to same max-width as pages */}
-        <div className="h-full max-w-5xl mx-auto px-4 flex items-center gap-3">
+        <div className="h-full max-w-7xl mx-auto px-4 flex items-center gap-3">
           {/* Logo — real clash-rs icon from public/favicon.svg */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <img src={logoUrl} alt="clash-rs" className="w-7 h-7 rounded-lg" />
@@ -87,7 +87,7 @@ export function Layout() {
 
       {/* Page content — centred, max-width capped */}
       <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>
       </main>
