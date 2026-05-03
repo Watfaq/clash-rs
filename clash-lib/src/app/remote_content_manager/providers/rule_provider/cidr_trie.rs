@@ -34,18 +34,10 @@ impl CidrTrie {
         }
     }
 
-    /// Returns the most-specific matching CIDR as a string (e.g.
-    /// `"8.8.8.0/24"`), or `None` if the IP is not in the trie.
-    pub fn longest_match_str(&self, ip: IpAddr) -> Option<String> {
+    pub fn contains(&self, ip: IpAddr) -> bool {
         match ip {
-            IpAddr::V4(v4) => self
-                .v4
-                .longest_match(v4)
-                .map(|(addr, prefix_len, _)| format!("{addr}/{prefix_len}")),
-            IpAddr::V6(v6) => self
-                .v6
-                .longest_match(v6)
-                .map(|(addr, prefix_len, _)| format!("{addr}/{prefix_len}")),
+            IpAddr::V4(v4) => self.v4.longest_match(v4).is_some(),
+            IpAddr::V6(v6) => self.v6.longest_match(v6).is_some(),
         }
     }
 }

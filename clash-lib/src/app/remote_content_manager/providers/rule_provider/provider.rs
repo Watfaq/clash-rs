@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
@@ -91,13 +91,6 @@ pub trait RuleProvider: Provider {
     fn search(&self, sess: &Session) -> bool;
     fn behavior(&self) -> RuleSetBehavior;
     fn format(&self) -> RuleSetFormat;
-    /// Returns a human-readable description of which rule matched the session,
-    /// e.g. `"DOMAIN-SUFFIX,google.com"` for Classical or `"8.8.8.0/24"` for
-    /// IPCIDR. Returns `None` if nothing matched or the provider type cannot
-    /// identify the specific rule (Domain behavior).
-    fn match_rule(&self, _sess: &Session) -> Option<String> {
-        None
-    }
     /// Returns up to `limit` rules as strings. Only Classical providers return
     /// non-empty results; Domain/IPCIDR data structures don't support
     /// enumeration.
@@ -278,50 +271,28 @@ impl RuleProviderImpl {
 impl RuleProvider for RuleProviderImpl {
     fn search(&self, sess: &Session) -> bool {
         let inner = self.inner.try_read();
+
         match inner {
             Ok(inner) => match &inner.content {
                 RuleContent::Domain(set) => set.has(&sess.destination.host()),
-                RuleContent::Ipcidr(trie) => {
-                    let ip = sess
-                        .destination
+                RuleContent::Ipcidr(trie) => trie.contains(
+                    sess.destination
                         .ip()
-                        .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-                    trie.longest_match_str(ip).is_some()
+                        .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
+                ),
+                RuleContent::Classical(rules) => {
+                    for rule in rules.iter() {
+                        if rule.apply(sess) {
+                            return true;
+                        }
+                    }
+                    false
                 }
-                RuleContent::Classical(rules) => rules.iter().any(|r| r.apply(sess)),
             },
             Err(_) => {
-                warn!(
-                    "rule provider {} is busy (write lock held); treating as no \
-                     match",
-                    self.name()
-                );
+                debug!("rule provider {} is busy", self.name());
                 false
             }
-        }
-    }
-
-    fn match_rule(&self, sess: &Session) -> Option<String> {
-        let inner = self.inner.try_read().ok()?;
-        match &inner.content {
-            RuleContent::Domain(set) => {
-                if set.has(&sess.destination.host()) {
-                    Some(String::new())
-                } else {
-                    None
-                }
-            }
-            RuleContent::Ipcidr(trie) => {
-                let ip = sess
-                    .destination
-                    .ip()
-                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-                trie.longest_match_str(ip)
-            }
-            RuleContent::Classical(rules) => rules
-                .iter()
-                .find(|r| r.apply(sess))
-                .map(|r| format!("{},{}", r.type_name(), r.payload())),
         }
     }
 
@@ -540,17 +511,6 @@ mod tests {
             ..Default::default()
         };
         assert!(provider.search(&sess));
-        let rule = provider.match_rule(&sess);
-        assert!(rule.is_some());
-        let desc = rule.unwrap();
-        assert!(
-            desc.contains("DOMAIN-SUFFIX"),
-            "Expected DOMAIN-SUFFIX in '{desc}'"
-        );
-        assert!(
-            desc.contains("google.com"),
-            "Expected google.com in '{desc}'"
-        );
     }
 
     #[tokio::test]
