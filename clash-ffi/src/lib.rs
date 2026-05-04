@@ -1,16 +1,9 @@
 use clash_lib::{Config, Options, TokioRuntime, shutdown, start_scaffold};
-use tracing_oslog::OsLogger;
-use tracing_subscriber::{self, layer::SubscriberExt as _};
 use std::{
     ffi::{CStr, CString},
     os::raw::{c_char, c_int},
 };
 
-fn init_logging() {
-    let oslog = OsLogger::new("com.flhcc.clashrs", "default");
-    let collector = tracing_subscriber::registry().with(oslog);
-    tracing::subscriber::set_global_default(collector).expect("failed to set global subscriber");
-}
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers.
 #[unsafe(no_mangle)]
@@ -20,8 +13,6 @@ pub unsafe extern "C" fn clash_start(
     cwd: *const c_char,
     multithread: c_int,
 ) -> *mut c_char {
-    init_logging();
-
     unsafe {
         let config_str = CStr::from_ptr(config)
             .to_str()
