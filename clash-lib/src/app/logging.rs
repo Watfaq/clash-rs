@@ -139,7 +139,7 @@ fn setup_logging_inner(
         } else {
             format!("{cwd}/{log_file}")
         };
-        let writer = std::fs::File::options().append(true).open(log_path)?;
+        let writer = std::fs::File::options().append(true).create(true).open(log_path)?;
         let (non_blocking, guard) =
             tracing_appender::non_blocking::NonBlockingBuilder::default()
                 .buffered_lines_limit(16_000)
