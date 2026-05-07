@@ -31,7 +31,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    client: arti_client::TorClient<tor_rtcompat::PreferredRuntime>,
+    client: arti_client::TorClient<tor_rtcompat_compat::PreferredRuntime>,
 }
 
 impl std::fmt::Debug for Handler {
