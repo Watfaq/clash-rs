@@ -16,4 +16,12 @@ updates:
       actions-dependencies:
         patterns:
           - "*"
+  - package-ecosystem: "npm"
+    directory: "/clash-dashboard"
+    schedule:
+      interval: monthly
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
 
