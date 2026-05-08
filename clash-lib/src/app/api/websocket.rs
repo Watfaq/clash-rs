@@ -16,6 +16,7 @@ use crate::app::api::{
     AppState,
     handlers::{
         connection::GetConnectionsQuery,
+        flows::ws_handle as flows_ws_handle,
         memory::{GetMemoryQuery, GetMemoryResponse},
     },
 };
@@ -26,6 +27,7 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/traffic", get(traffic))
         .route("/memory", get(memory))
         .route("/logs", get(log))
+        .route("/flows", get(flows_ws_handle))
         .with_state(state)
 }
 

@@ -39,7 +39,7 @@ pub struct EnhancedResolver {
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
-    lru_cache: Option<Arc<RwLock<hickory_resolver::dns_lru::DnsLru>>>,
+    lru_cache: Option<hickory_resolver::ResponseCache>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     proxy_resolver: Option<Vec<ThreadSafeDNSClient>>,
@@ -230,17 +230,10 @@ impl EnhancedResolver {
             } else {
                 None
             },
-            lru_cache: Some(Arc::new(RwLock::new(
-                hickory_resolver::dns_lru::DnsLru::new(
-                    4096,
-                    hickory_resolver::dns_lru::TtlConfig::new(
-                        Some(Duration::from_secs(1)),
-                        Some(Duration::from_secs(1)),
-                        Some(Duration::from_secs(60)),
-                        Some(Duration::from_secs(10)),
-                    ),
-                ),
-            ))),
+            lru_cache: Some(hickory_resolver::ResponseCache::new(
+                4096,
+                hickory_resolver::TtlConfig::default(),
+            )),
             policy: if !cfg.nameserver_policy.is_empty() {
                 let mut p = trie::StringTrie::new();
                 for (domain, ns) in &cfg.nameserver_policy {
@@ -351,9 +344,9 @@ impl EnhancedResolver {
     async fn lookup_ip(
         &self,
         host: &str,
-        record_type: rr::record_type::RecordType,
+        record_type: rr::RecordType,
     ) -> anyhow::Result<Vec<net::IpAddr>> {
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
         let name = rr::Name::from_str_relaxed(host)
             .map_err(|_x| anyhow!("invalid domain: {}", host))?
@@ -361,69 +354,58 @@ impl EnhancedResolver {
         q.set_name(name);
         q.set_query_type(record_type);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
-        match self.exchange(&m).await {
-            Ok(result) => {
-                let ip_list = EnhancedResolver::ip_list_of_message(&result);
-                if !ip_list.is_empty() {
-                    Ok(ip_list)
-                } else {
-                    Err(anyhow!("no record for hostname: {}", host))
-                }
-            }
-            Err(e) => Err(e),
+        let result = self.exchange(&m).await?;
+        let ip_list = EnhancedResolver::ip_list_of_message(&result);
+        if ip_list.is_empty() {
+            return Err(anyhow!("no record for hostname: {}", host));
         }
+        Ok(ip_list)
     }
 
     #[instrument(skip_all, level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        if let Some(q) = message.query() {
-            trace!(q = q.to_string(), "start");
-            if let Some(lru) = &self.lru_cache
-                && let Some(cached) = lru.read().await.get(q, Instant::now())
-            {
-                if !message.recursion_desired() {
-                    trace!(q = q.to_string(), "cache hit, RA not desired");
-                    if let Ok(cached) = cached.inspect_err(|x| {
-                        warn!("failed to get cached message: {}", x);
-                    }) {
-                        trace!(
-                            q = q.to_string(),
-                            "cache hit for DNS query, returning cached response",
-                        );
-                        let mut reply =
-                            build_dns_response_message(message, true, false);
-                        reply.add_answers(cached.records().iter().cloned());
-                        return Ok(reply);
-                    }
-                } else {
-                    trace!(
-                        q = q.to_string(),
-                        "cache hit, RA desired, bypassing cache",
-                    );
-                }
-            }
-            trace!(q = q.to_string(), "querying resolver");
-            let res = self.exchange_no_cache(message).await.map(|mut r| {
-                if let Some(edns) = r.extensions_mut() {
-                    // Remove only padding options, keep everything else
-                    edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
-                }
-                r
-            });
-            trace!(q = q.to_string(), "query completed");
-            res
-        } else {
-            Err(anyhow!("invalid query"))
+        let q = message
+            .queries
+            .first()
+            .ok_or_else(|| anyhow!("invalid query"))?;
+
+        trace!(q = q.to_string(), "start");
+
+        // Cache hit — return early if recursion_desired is not set
+        if let Some(lru) = &self.lru_cache
+            && let Some(Ok(cached)) = lru.get(q, Instant::now()).map(|c| {
+                c.inspect_err(|x| warn!("failed to get cached message: {}", x))
+            })
+            && !message.metadata.recursion_desired
+        {
+            trace!(
+                q = q.to_string(),
+                "cache hit for DNS query, returning cached response",
+            );
+            let mut reply = build_dns_response_message(message, true, false);
+            reply.add_answers(cached.answers.iter().cloned());
+            return Ok(reply);
         }
+
+        trace!(q = q.to_string(), "querying resolver");
+        let res = self.exchange_no_cache(message).await.map(|mut r| {
+            if let Some(edns) = r.edns.as_mut() {
+                // Remove only padding options, keep everything else
+                edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
+            }
+            r
+        });
+        trace!(q = q.to_string(), "query completed");
+        res
     }
 
     async fn exchange_no_cache(
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
-        let q = message.query().unwrap();
+        let q = message.queries.first().unwrap();
 
         let query = async move {
             if EnhancedResolver::is_ip_request(q) {
@@ -444,11 +426,7 @@ impl EnhancedResolver {
             && !(q.query_type() == rr::RecordType::TXT
                 && q.name().to_ascii().starts_with("_acme-challenge."))
         {
-            lru.write().await.insert_records(
-                q.clone(),
-                msg.answers().iter().cloned(),
-                Instant::now(),
-            );
+            lru.insert(q.clone(), Ok(msg.clone()), Instant::now());
         }
 
         rv
@@ -549,18 +527,19 @@ impl EnhancedResolver {
     }
 
     fn domain_name_of_message(m: &op::Message) -> Option<String> {
-        m.query()
+        m.queries
+            .first()
             .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
     }
 
     pub(crate) fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
-        m.answers()
+        m.answers
             .iter()
             .filter(|r| {
                 r.record_type() == rr::RecordType::A
                     || r.record_type() == rr::RecordType::AAAA
             })
-            .map(|r| match r.data() {
+            .map(|r| match &r.data {
                 rr::RData::A(v4) => net::IpAddr::V4(**v4),
                 rr::RData::AAAA(v6) => net::IpAddr::V6(**v6),
                 _ => unreachable!("should be only A/AAAA"),
@@ -703,7 +682,8 @@ impl ClashResolver for EnhancedResolver {
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message
-            .query()
+            .queries
+            .first()
             .unwrap()
             .name()
             .to_utf8()
@@ -757,12 +737,14 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::client;
-    use hickory_proto::{
-        op, rr,
-        udp::UdpClientStream,
-        xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
+    use hickory_client::{
+        client,
+        proto::{
+            udp::UdpClientStream,
+            xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
+        },
     };
+    use hickory_proto::{op, rr};
     use std::{net::Ipv4Addr, sync::Arc};
 
     use crate::{
@@ -834,6 +816,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
+        // Use hickory_client::proto (0.25) types throughout so DnsRequest::new
+        // gets a compatible Message. TODO: remove shadowing once hickory-client
+        // 0.26.0 stable ships and aligns with hickory-proto 0.26.
+        use hickory_client::proto::{op, rr};
+
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
             .append_domain(&rr::Name::root())
@@ -961,7 +948,7 @@ mod tests {
     }
 
     async fn test_client(c: ThreadSafeDNSClient) {
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
         q.set_name(rr::Name::from_utf8("www.google.com").unwrap());
         q.set_query_type(rr::RecordType::A);
@@ -977,7 +964,7 @@ mod tests {
         assert!(!ips[0].is_unspecified());
         assert!(ips[0].is_ipv4());
 
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
         q.set_name(rr::Name::from_utf8("www.google.com").unwrap());
         q.set_query_type(rr::RecordType::AAAA);

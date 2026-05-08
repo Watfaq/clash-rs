@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  getProxies, selectProxy, getProxyDelay, getProxyProviders,
+  getProxies, selectProxy, getGroupDelay, getProxyProviders,
   updateProxyProvider, healthcheckProvider, getConfigs,
 } from '../lib/api';
 import { RefreshCw, ChevronDown, ChevronUp, Check, Activity } from 'lucide-react';
@@ -32,7 +32,7 @@ function getTypeBadgeStyle(type: string): { background: string; color: string } 
   if (type === 'URLTest') return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
   if (type === 'Fallback') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
   if (type === 'LoadBalance') return { background: 'rgba(175,82,222,0.1)', color: '#af52de' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+  return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 function getLastDelay(history: Proxy['history']): number | undefined {
@@ -45,7 +45,6 @@ export function Proxies() {
   const [testingGroups, setTestingGroups] = useState<Set<string>>(new Set());
   const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
   const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
 
@@ -89,8 +88,8 @@ export function Proxies() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(['proxies'], ctx.previous);
+      queryClient.invalidateQueries({ queryKey: ['proxies'] });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['proxies'] }),
   });
 
   const proxies = data?.proxies ?? {};
@@ -148,17 +147,11 @@ export function Proxies() {
     setTestingGroups((s) => new Set(s).add(group.name));
     setExpanded((prev) => new Set(prev).add(group.name));
     try {
-      await Promise.allSettled(
-        group.all.map(async (name) => {
-          try {
-            const res = await getProxyDelay(name, TEST_URL, TEST_TIMEOUT);
-            setLatencyMap((prev) => ({ ...prev, [name]: res.delay }));
-          } catch {
-            setLatencyMap((prev) => ({ ...prev, [name]: 0 }));
-          }
-        })
-      );
+      await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
       await queryClient.invalidateQueries({ queryKey: ['proxies'] });
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+    } catch {
+      // leave existing latency values unchanged on error
     } finally {
       setTestingGroups((s) => {
         const next = new Set(s);
@@ -200,7 +193,7 @@ export function Proxies() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading proxies...</div>
+        <div className="text-[15px]" style={{ color: 'var(--color-text-secondary)' }}>Loading proxies...</div>
       </div>
     );
   }
@@ -208,12 +201,12 @@ export function Proxies() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Proxies</h1>
         <span
           className="text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize"
           style={{
-            background: mode === 'rule' ? 'rgba(0,113,227,0.1)' : mode === 'global' ? 'rgba(52,199,89,0.1)' : 'rgba(0,0,0,0.06)',
-            color: mode === 'rule' ? '#0071e3' : mode === 'global' ? '#34c759' : '#6e6e73',
+            background: mode === 'rule' ? 'rgba(0,113,227,0.1)' : mode === 'global' ? 'rgba(52,199,89,0.1)' : 'var(--color-fill-medium)',
+            color: mode === 'rule' ? '#0071e3' : mode === 'global' ? '#34c759' : 'var(--color-text-secondary)',
           }}
         >
           {mode}
@@ -223,8 +216,8 @@ export function Proxies() {
       {mode === 'direct' ? (
         <div className="liquid-glass-card rounded-2xl p-10 flex flex-col items-center gap-3 text-center">
           <div className="text-4xl">⚡️</div>
-          <div className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Direct Mode</div>
-          <div className="text-[13px] max-w-xs" style={{ color: '#6e6e73' }}>
+          <div className="text-[17px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Direct Mode</div>
+          <div className="text-[13px] max-w-xs" style={{ color: 'var(--color-text-secondary)' }}>
             All traffic goes directly to its destination. No proxy groups to configure.
           </div>
         </div>
@@ -237,6 +230,8 @@ export function Proxies() {
               const isSelector = group.type === 'Selector';
               const accentColor = getGroupAccentColor(group.type);
               const typeBadge = getTypeBadgeStyle(group.type);
+              const groupLatency = getLastDelay(group.history ?? []);
+              const groupLatencyColor = getLatencyColor(groupLatency);
 
           return (
             <div
@@ -263,7 +258,7 @@ export function Proxies() {
                     }}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                      <span className="font-semibold text-[15px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                         {group.name}
                       </span>
                       <span
@@ -273,8 +268,16 @@ export function Proxies() {
                         {group.type}
                       </span>
                       {group.now && (
-                        <span className="text-[13px] truncate" style={{ color: '#6e6e73' }}>
+                        <span className="text-[13px] truncate" style={{ color: 'var(--color-text-secondary)' }}>
                           {group.now}
+                        </span>
+                      )}
+                      {groupLatency !== undefined && (
+                        <span
+                          className="text-[11px] font-mono flex-shrink-0"
+                          style={{ color: groupLatencyColor }}
+                        >
+                          {groupLatency === 0 ? 'Timeout' : `${groupLatency}ms`}
                         </span>
                       )}
                     </div>
@@ -284,16 +287,16 @@ export function Proxies() {
                         disabled={isTesting}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
                         style={{
-                          background: 'rgba(0,0,0,0.05)',
-                          color: '#6e6e73',
+                          background: 'var(--color-fill-subtle)',
+                          color: 'var(--color-text-secondary)',
                         }}
                       >
                         <RefreshCw size={12} className={isTesting ? 'animate-spin' : ''} />
                         {isTesting ? 'Testing…' : 'Test'}
                       </button>
                       {isExpanded
-                        ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
-                        : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                        ? <ChevronUp size={16} style={{ color: 'var(--color-text-secondary)' }} />
+                        : <ChevronDown size={16} style={{ color: 'var(--color-text-secondary)' }} />
                       }
                     </div>
                   </div>
@@ -302,10 +305,10 @@ export function Proxies() {
                   {isExpanded && (
                     <div
                       className="p-4 border-t"
-                      style={{ borderColor: 'rgba(0,0,0,0.06)' }}
+                      style={{ borderColor: 'var(--color-separator)' }}
                     >
                       {!isSelector && (
-                        <p className="text-[11px] mb-3 px-0.5" style={{ color: '#8e8e93' }}>
+                        <p className="text-[11px] mb-3 px-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
                           Auto-selected by latency — click to force override
                         </p>
                       )}
@@ -313,7 +316,7 @@ export function Proxies() {
                         {group.all?.map((proxyName) => {
                           const proxy = proxies[proxyName];
                           const history = proxy?.history ?? [];
-                          const latency = latencyMap[proxyName] ?? getLastDelay(history);
+                          const latency = getLastDelay(history);
                           const isSelected = group.now === proxyName;
                           const latencyColor = getLatencyColor(latency);
 
@@ -325,7 +328,7 @@ export function Proxies() {
                               style={
                                 isSelected
                                   ? { background: '#0071e3', borderColor: '#0071e3' }
-                                  : { background: 'white', borderColor: 'rgba(0,0,0,0.06)' }
+                                  : { background: 'var(--color-proxy-card-bg)', borderColor: 'var(--color-separator)' }
                               }
                             >
                               <div className="flex items-center gap-1.5 mb-1">
@@ -334,7 +337,7 @@ export function Proxies() {
                                 )}
                                 <div
                                   className="text-[13px] font-medium truncate"
-                                  style={{ color: isSelected ? 'white' : '#1d1d1f' }}
+                                  style={{ color: isSelected ? 'white' : 'var(--color-text-primary)' }}
                                 >
                                   {proxyName}
                                 </div>
@@ -369,7 +372,7 @@ export function Proxies() {
         <div className="space-y-3">
           <div
             className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
-            style={{ color: '#6e6e73' }}
+            style={{ color: 'var(--color-text-secondary)' }}
           >
             Providers
           </div>
@@ -385,7 +388,7 @@ export function Proxies() {
                 style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
               >
                 <div className="flex">
-                  <div className="w-1 flex-shrink-0" style={{ background: '#8e8e93' }} />
+                  <div className="w-1 flex-shrink-0" style={{ background: 'var(--color-text-tertiary)' }} />
                   <div className="flex-1">
                     <div
                       className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors"
@@ -402,23 +405,23 @@ export function Proxies() {
                       }}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                        <span className="font-semibold text-[15px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                           {provider.name}
                         </span>
                         <span
                           className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+                          style={{ background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' }}
                         >
                           {provider.vehicleType}
                         </span>
                         <span
                           className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
+                          style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-tertiary)' }}
                         >
                           {provider.proxies?.length ?? 0} proxies
                         </span>
                         {provider.updatedAt && (
-                          <span className="text-[11px] truncate" style={{ color: '#8e8e93' }}>
+                          <span className="text-[11px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
                             {new Date(provider.updatedAt).toLocaleTimeString()}
                           </span>
                         )}
@@ -428,7 +431,7 @@ export function Proxies() {
                           onClick={(e) => { e.stopPropagation(); runHealthcheck(provider); }}
                           disabled={isTesting}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
-                          style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                          style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
                         >
                           <Activity size={12} className={isTesting ? 'animate-pulse' : ''} />
                           {isTesting ? 'Testing…' : 'Test'}
@@ -437,33 +440,33 @@ export function Proxies() {
                           onClick={(e) => { e.stopPropagation(); runUpdate(provider); }}
                           disabled={isUpdating}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
-                          style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                          style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
                         >
                           <RefreshCw size={12} className={isUpdating ? 'animate-spin' : ''} />
                           {isUpdating ? 'Updating…' : 'Update'}
                         </button>
                         {isExpanded
-                          ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
-                          : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                          ? <ChevronUp size={16} style={{ color: 'var(--color-text-secondary)' }} />
+                          : <ChevronDown size={16} style={{ color: 'var(--color-text-secondary)' }} />
                         }
                       </div>
                     </div>
 
                     {isExpanded && provider.proxies && provider.proxies.length > 0 && (
-                      <div className="p-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                      <div className="p-4 border-t" style={{ borderColor: 'var(--color-separator)' }}>
                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                           {provider.proxies.map((proxy) => {
-                            const latency = latencyMap[proxy.name] ?? getLastDelay(proxy.history);
+                            const latency = getLastDelay(proxy.history);
                             const latencyColor = getLatencyColor(latency);
                             return (
                               <div
                                 key={proxy.name}
                                 className="px-3 py-2.5 rounded-xl text-left border"
-                                style={{ background: 'white', borderColor: 'rgba(0,0,0,0.06)' }}
+                                style={{ background: 'var(--color-proxy-card-bg)', borderColor: 'var(--color-separator)' }}
                               >
                                 <div
                                   className="text-[13px] font-medium truncate mb-1"
-                                  style={{ color: '#1d1d1f' }}
+                                  style={{ color: 'var(--color-text-primary)' }}
                                 >
                                   {proxy.name}
                                 </div>

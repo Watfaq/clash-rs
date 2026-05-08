@@ -1,6 +1,5 @@
 #![feature(cfg_version)]
 #![feature(ip)]
-#![feature(sync_unsafe_cell)]
 #![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 #![cfg_attr(not(version("1.88.0")), feature(let_chains))]
@@ -147,8 +146,13 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
         opts.log_file,
     );
 
+    let shutdown_token = tokio_util::sync::CancellationToken::new();
+    {
+        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
+        token_guard.push(shutdown_token.clone());
+    }
     rt.block_on(async {
-        match start(config, cwd, log_tx).await {
+        match start(config, cwd, log_tx, shutdown_token).await {
             Err(e) => {
                 eprintln!("start error: {e}");
                 Err(e)
@@ -156,6 +160,44 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
             Ok(_) => Ok(()),
         }
     })
+}
+
+/// Start a Clash instance in a background thread with independent lifecycle.
+/// Returns the thread handle and a CancellationToken to shut it down.
+/// Unlike `start_scaffold`, this does NOT register in the global
+/// SHUTDOWN_TOKEN.
+pub fn start_scaffold_instance(
+    opts: Options,
+) -> Result<(
+    std::thread::JoinHandle<()>,
+    tokio_util::sync::CancellationToken,
+)> {
+    let config: InternalConfig = opts.config.try_parse()?;
+    let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
+    let rt_kind = opts.rt.unwrap_or(TokioRuntime::MultiThread);
+
+    let token = tokio_util::sync::CancellationToken::new();
+    let token_clone = token.clone();
+
+    let handle = std::thread::spawn(move || {
+        let rt = match rt_kind {
+            TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread(),
+            TokioRuntime::SingleThread => {
+                tokio::runtime::Builder::new_current_thread()
+            }
+        }
+        .enable_all()
+        .build()
+        .expect("Failed to build runtime");
+
+        let (log_tx, _) = tokio::sync::broadcast::channel(100);
+
+        if let Err(e) = rt.block_on(start(config, cwd, log_tx, token_clone)) {
+            eprintln!("Clash instance error: {}", e);
+        }
+    });
+
+    Ok((handle, token))
 }
 
 static SHUTDOWN_TOKEN: std::sync::Mutex<Vec<tokio_util::sync::CancellationToken>> =
@@ -203,15 +245,9 @@ pub async fn start(
     config: InternalConfig,
     cwd: String,
     log_tx: broadcast::Sender<LogEvent>,
+    shutdown_token: tokio_util::sync::CancellationToken,
 ) -> Result<()> {
     setup_default_crypto_provider();
-
-    let shutdown_token = tokio_util::sync::CancellationToken::new();
-
-    {
-        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
-        token_guard.push(shutdown_token.clone());
-    }
 
     let cwd = PathBuf::from(cwd);
 

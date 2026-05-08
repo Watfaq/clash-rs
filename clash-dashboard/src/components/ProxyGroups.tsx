@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProxies, selectProxy, getProxyDelay } from '../lib/api';
+import { getProxies, getProxyProviders, selectProxy, getGroupDelay } from '../lib/api';
 import { RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import type { Proxy } from '../lib/api';
 
@@ -28,7 +28,7 @@ function getTypeBadgeStyle(type: string): { background: string; color: string } 
   if (type === 'URLTest') return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
   if (type === 'Fallback') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
   if (type === 'LoadBalance') return { background: 'rgba(175,82,222,0.1)', color: '#af52de' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+  return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 function getLastDelay(history: Proxy['history']): number | undefined {
@@ -43,13 +43,19 @@ interface ProxyGroupsProps {
 export function ProxyGroups({ mode }: ProxyGroupsProps) {
   const queryClient = useQueryClient();
   const [testingGroups, setTestingGroups] = useState<Set<string>>(new Set());
-  const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [groupLatencyMap, setGroupLatencyMap] = useState<Record<string, number>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['proxies'],
     queryFn: getProxies,
     refetchInterval: 30000,
+  });
+
+  const { data: providersData } = useQuery({
+    queryKey: ['providers'],
+    queryFn: getProxyProviders,
+    refetchInterval: 60000,
   });
 
   const selectMutation = useMutation({
@@ -69,11 +75,19 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(['proxies'], ctx.previous);
+      queryClient.invalidateQueries({ queryKey: ['proxies'] });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['proxies'] }),
   });
 
   const proxies = data?.proxies ?? {};
+
+  // Merge provider proxies so group chips show latency for provider-sourced members
+  const mergedProxies: Record<string, Proxy> = {};
+  for (const p of Object.values(providersData?.providers ?? {})) {
+    for (const px of p.proxies ?? []) mergedProxies[px.name] = px;
+  }
+  Object.assign(mergedProxies, proxies); // registry entries take precedence
+
   const globalGroup = proxies['GLOBAL'];
   const sortIndex: string[] = globalGroup?.all ?? [];
 
@@ -111,31 +125,32 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
     setTestingGroups((s) => new Set(s).add(group.name));
     setExpanded((prev) => new Set(prev).add(group.name));
     try {
-      await Promise.allSettled(
-        group.all.map(async (name) => {
-          try {
-            const res = await getProxyDelay(name, TEST_URL, TEST_TIMEOUT);
-            setLatencyMap((prev) => ({ ...prev, [name]: res.delay }));
-          } catch {
-            setLatencyMap((prev) => ({ ...prev, [name]: 0 }));
-          }
-        })
-      );
-      await queryClient.invalidateQueries({ queryKey: ['proxies'] });
+      const result = await getGroupDelay(group.name, TEST_URL, TEST_TIMEOUT);
+      // result is { [groupName]: latencyMs } — store the group's own latency
+      const ms = result[group.name];
+      if (ms !== undefined) {
+        setGroupLatencyMap((prev) => ({ ...prev, [group.name]: ms }));
+      }
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['proxies'] }),
+        queryClient.refetchQueries({ queryKey: ['providers'] }),
+      ]);
+    } catch {
+      // leave existing latency values unchanged on error
     } finally {
       setTestingGroups((s) => { const next = new Set(s); next.delete(group.name); return next; });
     }
   }
 
   if (isLoading) {
-    return <div className="text-[13px]" style={{ color: '#6e6e73' }}>Loading proxies…</div>;
+    return <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>Loading proxies…</div>;
   }
 
   if (mode === 'direct' || groups.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-4 text-center">
         <div className="text-2xl">⚡️</div>
-        <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+        <div className="text-[13px]" style={{ color: 'var(--color-text-secondary)' }}>
           {mode === 'direct' ? 'Direct mode — no proxy groups' : 'No groups for this mode'}
         </div>
       </div>
@@ -150,12 +165,17 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
         const isSelector = group.type === 'Selector';
         const accentColor = getGroupAccentColor(group.type);
         const typeBadge = getTypeBadgeStyle(group.type);
+        // Group's own latency: from last test result, falling back to group history
+        const groupProxy = proxies[group.name];
+        const historyLatency = getLastDelay(groupProxy?.history);
+        const headerLatency = groupLatencyMap[group.name] ?? historyLatency;
+        const headerLatencyColor = getLatencyColor(headerLatency);
 
         return (
           <div
             key={group.name}
             className="rounded-xl overflow-hidden border"
-            style={{ borderColor: 'rgba(0,0,0,0.06)', background: 'rgba(255,255,255,0.6)' }}
+            style={{ borderColor: 'var(--color-separator)', background: 'var(--color-proxy-card-bg)' }}
           >
             <div className="flex">
               <div className="w-1 flex-shrink-0" style={{ background: accentColor }} />
@@ -166,7 +186,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                   onClick={() => toggleExpanded(group.name)}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="font-semibold text-[14px] truncate" style={{ color: '#1d1d1f' }}>
+                    <span className="font-semibold text-[14px] truncate" style={{ color: 'var(--color-text-primary)' }}>
                       {group.name}
                     </span>
                     <span
@@ -176,8 +196,13 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                       {group.type}
                     </span>
                     {group.now && (
-                      <span className="text-[13px] truncate" style={{ color: '#6e6e73' }}>
+                      <span className="text-[13px] truncate" style={{ color: 'var(--color-text-secondary)' }}>
                         {group.now}
+                      </span>
+                    )}
+                    {headerLatency !== undefined && (
+                      <span className="text-[11px] font-mono flex-shrink-0" style={{ color: headerLatencyColor }}>
+                        {headerLatency === 0 ? 'Timeout' : `${headerLatency}ms`}
                       </span>
                     )}
                   </div>
@@ -186,30 +211,30 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                       onClick={(e) => { e.stopPropagation(); testGroupDelay(group); }}
                       disabled={isTesting}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium disabled:opacity-50"
-                      style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                      style={{ background: 'var(--color-fill-subtle)', color: 'var(--color-text-secondary)' }}
                     >
                       <RefreshCw size={11} className={isTesting ? 'animate-spin' : ''} />
                       {isTesting ? 'Testing…' : 'Test'}
                     </button>
                     {isExpanded
-                      ? <ChevronUp size={15} style={{ color: '#6e6e73' }} />
-                      : <ChevronDown size={15} style={{ color: '#6e6e73' }} />
+                      ? <ChevronUp size={15} style={{ color: 'var(--color-text-secondary)' }} />
+                      : <ChevronDown size={15} style={{ color: 'var(--color-text-secondary)' }} />
                     }
                   </div>
                 </div>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 border-t pt-3" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                  <div className="px-4 pb-4 border-t pt-3" style={{ borderColor: 'var(--color-separator)' }}>
                     {!isSelector && (
-                      <p className="text-[11px] mb-2.5" style={{ color: '#8e8e93' }}>
+                      <p className="text-[11px] mb-2.5" style={{ color: 'var(--color-text-tertiary)' }}>
                         Auto-selected — click to force override
                       </p>
                     )}
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
                       {group.all?.map((proxyName) => {
-                        const proxy = proxies[proxyName];
+                        const proxy = mergedProxies[proxyName];
                         const history = proxy?.history ?? [];
-                        const latency = latencyMap[proxyName] ?? getLastDelay(history);
+                        const latency = getLastDelay(history);
                         const isSelected = group.now === proxyName;
                         const latencyColor = getLatencyColor(latency);
                         const inner = (
@@ -218,7 +243,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                               {isSelected && <Check size={11} className="text-white flex-shrink-0" />}
                               <div
                                 className="text-[12px] font-medium truncate"
-                                style={{ color: isSelected ? 'white' : '#1d1d1f' }}
+                                style={{ color: isSelected ? 'white' : 'var(--color-text-primary)' }}
                               >
                                 {proxyName}
                               </div>
@@ -241,7 +266,7 @@ export function ProxyGroups({ mode }: ProxyGroupsProps) {
                         const chipStyle = {
                           ...(isSelected
                             ? { background: '#0071e3', borderColor: '#0071e3' }
-                            : { background: 'white', borderColor: 'rgba(0,0,0,0.06)' }),
+                            : { background: 'var(--color-input-focus-bg)', borderColor: 'var(--color-separator)' }),
                         };
 
                         return isSelector ? (

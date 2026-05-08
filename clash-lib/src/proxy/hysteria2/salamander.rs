@@ -13,8 +13,6 @@ use quinn::{
     AsyncUdpSocket, TokioRuntime,
     udp::{RecvMeta, Transmit},
 };
-use rand::Rng;
-
 type Blake2b256 = Blake2b<U32>;
 
 struct SalamanderObfs {
@@ -42,7 +40,7 @@ impl SalamanderObfs {
     }
 
     fn encrypt(&self, data: &mut [u8]) -> Bytes {
-        let salt: [u8; 8] = rand::rng().random();
+        let salt: [u8; 8] = rand::random::<[u8; 8]>();
 
         let mut res = BytesMut::with_capacity(8 + data.len());
         res.put_slice(&salt);

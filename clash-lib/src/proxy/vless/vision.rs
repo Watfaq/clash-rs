@@ -134,8 +134,11 @@ impl VisionStream {
         let content_len = data.len() as u16;
         // Add random padding only on the first frame for traffic-analysis
         // resistance; subsequent frames use no padding.
+        // Always at least 1 byte of padding on the first frame so receivers
+        // can rely on non-zero padding_len (and to avoid a flaky test where
+        // rand::random::<u8>() == 0 with probability 1/256).
         let padding_len: u16 = if is_first_frame {
-            rand::random::<u8>() as u16
+            (rand::random::<u8>() as u16) + 1
         } else {
             0
         };

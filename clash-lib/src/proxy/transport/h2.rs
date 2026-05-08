@@ -3,7 +3,6 @@ use bytes::{Bytes, BytesMut};
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::Request;
-use rand::Rng;
 use std::{collections::HashMap, fmt::Debug};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::error;
@@ -34,7 +33,7 @@ impl Client {
     }
 
     fn req(&self) -> std::io::Result<Request<()>> {
-        let uri_idx = rand::rng().random_range(0..self.hosts.len());
+        let uri_idx = rand::random_range(0..self.hosts.len());
         let uri = {
             http::Uri::builder()
                 .scheme("https")
@@ -124,9 +123,14 @@ impl AsyncRead for Http2Stream {
                 if to_read < data.len() {
                     self.buffer.extend_from_slice(&data[to_read..]);
                 }
+                // Release capacity for the entire received frame, including
+                // bytes saved to self.buffer.  This keeps the H2 flow-control
+                // window open so the remote end can send the next frame
+                // immediately rather than stalling until the application reads
+                // the buffered bytes.
                 self.recv
                     .flow_control()
-                    .release_capacity(to_read)
+                    .release_capacity(data.len())
                     .map_or_else(
                         |e| {
                             Err(std::io::Error::new(

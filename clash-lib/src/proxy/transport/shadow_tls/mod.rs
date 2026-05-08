@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use rand::{Rng, distr::Distribution};
+use rand::{RngExt, distr::Distribution};
 use std::{
     io,
     ptr::copy_nonoverlapping,
@@ -140,7 +140,7 @@ fn generate_session_id(hmac: &Hmac, buf: &[u8]) -> [u8; TLS_SESSION_ID_SIZE] {
     }
 
     let mut session_id = [0; TLS_SESSION_ID_SIZE];
-    rand::rng().fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
+    rand::fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
     let mut hmac = hmac.to_owned();
     hmac.update(&buf[0..SESSION_ID_START]);
     hmac.update(&session_id);

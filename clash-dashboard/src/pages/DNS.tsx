@@ -14,7 +14,7 @@ function getTypeBadgeStyle(typeNum: number): { background: string; color: string
   if (type === 'A') return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
   if (type === 'AAAA') return { background: 'rgba(0,113,227,0.1)', color: '#0071e3' };
   if (type === 'CNAME') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
+      return { background: 'var(--color-fill-medium)', color: 'var(--color-text-secondary)' };
 }
 
 export function DNS() {
@@ -42,12 +42,12 @@ export function DNS() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>DNS Lookup</h1>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>DNS Lookup</h1>
 
       {/* Query form */}
       <div className="flex gap-2">
         <div className="flex-1 relative">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#8e8e93' }} />
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-tertiary)' }} />
           <input
             type="text"
             placeholder="Hostname (e.g. example.com)"
@@ -61,9 +61,9 @@ export function DNS() {
             }}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[15px] focus:outline-none transition-shadow"
             style={{
-              background: 'rgba(255,255,255,0.8)',
-              border: '1px solid rgba(0,0,0,0.08)',
-              color: '#1d1d1f',
+              background: 'var(--color-input-bg)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-primary)',
             }}
           />
         </div>
@@ -72,9 +72,9 @@ export function DNS() {
           onChange={(e) => setType(e.target.value)}
           className="px-3 py-2.5 rounded-xl text-[15px] focus:outline-none"
           style={{
-            background: 'white',
-            border: '1px solid rgba(0,0,0,0.08)',
-            color: '#1d1d1f',
+            background: 'var(--color-input-focus-bg)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-primary)',
           }}
         >
           {DNS_TYPES.map((t) => (
@@ -109,7 +109,7 @@ export function DNS() {
             <div>
               <div
                 className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1"
-                style={{ color: '#6e6e73' }}
+                style={{ color: 'var(--color-text-secondary)' }}
               >
                 Answer
               </div>
@@ -123,12 +123,12 @@ export function DNS() {
                     className="flex items-center gap-3 px-4"
                     style={{
                       minHeight: 52,
-                      borderBottom: i < result.Answer!.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                      borderBottom: i < result.Answer!.length - 1 ? '1px solid var(--color-separator)' : 'none',
                     }}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-mono text-[13px] truncate" style={{ color: '#1d1d1f' }}>{a.name}</div>
-                      <div className="font-mono text-[11px]" style={{ color: '#8e8e93' }}>{a.TTL}s TTL</div>
+                      <div className="font-mono text-[13px] truncate" style={{ color: 'var(--color-text-primary)' }}>{a.name}</div>
+                      <div className="font-mono text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{a.TTL}s TTL</div>
                     </div>
                     <span
                       className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
@@ -157,9 +157,9 @@ export function DNS() {
           <div
             className="rounded-xl p-3 text-[11px] font-mono"
             style={{
-              background: 'white',
-              border: '1px solid rgba(0,0,0,0.06)',
-              color: '#8e8e93',
+              background: 'var(--color-input-focus-bg)',
+              border: '1px solid var(--color-separator)',
+              color: 'var(--color-text-tertiary)',
               boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
             }}
           >

@@ -3,17 +3,19 @@ import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
 import {
   LayoutDashboard, Activity, Filter, Terminal,
-  Server, SlidersHorizontal, Package,
+  Server, SlidersHorizontal, GitBranch, Shield,
 } from 'lucide-react';
 import logoUrl from '../assets/logo.png';
+import { ThemeToggle } from './ThemeToggle';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/providers', label: 'Providers', icon: Package },
+  { to: '/flows', label: 'Flows', icon: GitBranch },
   { to: '/connections', label: 'Connections', icon: Activity },
+  { to: '/proxies', label: 'Proxies', icon: Shield },
   { to: '/rules', label: 'Rules', icon: Filter },
-  { to: '/logs', label: 'Logs', icon: Terminal },
   { to: '/dns', label: 'DNS', icon: Server },
+  { to: '/logs', label: 'Logs', icon: Terminal },
   { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 
@@ -31,11 +33,11 @@ export function Layout() {
       {/* Top nav bar — Apple liquid glass */}
       <header className="liquid-glass flex-shrink-0 sticky top-0 z-50" style={{ height: 52 }}>
         {/* Inner content constrained to same max-width as pages */}
-        <div className="h-full max-w-5xl mx-auto px-4 flex items-center gap-3">
+        <div className="h-full max-w-7xl mx-auto px-4 flex items-center gap-3">
           {/* Logo — real clash-rs icon from public/favicon.svg */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <img src={logoUrl} alt="clash-rs" className="w-7 h-7 rounded-lg" />
-            <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: '#1d1d1f' }}>
+            <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: 'var(--color-text-primary)' }}>
               clash-rs
             </span>
           </div>
@@ -53,7 +55,7 @@ export function Layout() {
                   `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                     isActive
                       ? 'nav-pill-glass text-[#0071e3]'
-                      : 'text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-black/[0.05]'
+                      : 'nav-inactive'
                   }`
                 }
               >
@@ -62,6 +64,8 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
+
+          <ThemeToggle />
 
           {/* Connection status */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -74,7 +78,7 @@ export function Layout() {
                 />
               )}
             </div>
-            <span className="text-[13px] font-medium hidden sm:inline" style={{ color: '#6e6e73' }}>
+            <span className="text-[13px] font-medium hidden sm:inline" style={{ color: 'var(--color-text-secondary)' }}>
               {isConnected ? `v${version?.version}` : 'Offline'}
             </span>
           </div>
@@ -83,7 +87,7 @@ export function Layout() {
 
       {/* Page content — centred, max-width capped */}
       <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>
       </main>

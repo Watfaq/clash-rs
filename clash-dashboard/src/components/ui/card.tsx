@@ -32,7 +32,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn("text-[13px]", className)}
-      style={{ color: '#6e6e73' }}
+      style={{ color: 'var(--color-text-secondary)' }}
       {...props}
     />
   )
@@ -60,7 +60,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn("flex items-center rounded-b-xl border-t px-4 py-3", className)}
-      style={{ borderColor: 'rgba(0,0,0,0.06)', background: 'rgba(0,0,0,0.02)' }}
+      style={{ borderColor: 'var(--color-separator)', background: 'var(--color-fill-subtle)' }}
       {...props}
     />
   )

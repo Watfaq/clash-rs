@@ -5,6 +5,65 @@
 
 * { box-sizing: border-box; }
 
+/* ─── Theme tokens ────────────────────────────────────────────────────────── */
+:root {
+  --color-text-primary:    #1d1d1f;
+  --color-text-secondary:  #6e6e73;
+  --color-text-tertiary:   #8e8e93;
+  --color-separator:       rgba(0, 0, 0, 0.06);
+  --color-separator-subtle: rgba(0, 0, 0, 0.04);
+  --color-border:          rgba(0, 0, 0, 0.08);
+  --color-fill-subtle:     rgba(0, 0, 0, 0.04);
+  --color-fill-medium:     rgba(0, 0, 0, 0.06);
+  --color-fill-strong:     rgba(0, 0, 0, 0.10);
+  --color-input-bg:        rgba(255, 255, 255, 0.8);
+  --color-input-focus-bg:  #ffffff;
+  --color-proxy-card-bg:   rgba(255, 255, 255, 0.6);
+  --color-surface-float:   rgba(255, 255, 255, 0.97);
+  --color-toggle-off:      rgba(0, 0, 0, 0.15);
+  --color-bar-track:       rgba(0, 0, 0, 0.06);
+}
+
+/* System dark mode (only when no manual override) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-text-primary:    #f5f5f7;
+    --color-text-secondary:  #98989d;
+    --color-text-tertiary:   #6e6e73;
+    --color-separator:       rgba(255, 255, 255, 0.08);
+    --color-separator-subtle: rgba(255, 255, 255, 0.05);
+    --color-border:          rgba(255, 255, 255, 0.12);
+    --color-fill-subtle:     rgba(255, 255, 255, 0.06);
+    --color-fill-medium:     rgba(255, 255, 255, 0.10);
+    --color-fill-strong:     rgba(255, 255, 255, 0.14);
+    --color-input-bg:        rgba(255, 255, 255, 0.08);
+    --color-input-focus-bg:  rgba(255, 255, 255, 0.13);
+    --color-proxy-card-bg:   rgba(58, 58, 60, 0.85);
+    --color-surface-float:   rgba(36, 36, 38, 0.97);
+    --color-toggle-off:      rgba(255, 255, 255, 0.18);
+    --color-bar-track:       rgba(255, 255, 255, 0.10);
+  }
+}
+
+/* Manual dark override */
+:root[data-theme="dark"] {
+  --color-text-primary:    #f5f5f7;
+  --color-text-secondary:  #98989d;
+  --color-text-tertiary:   #6e6e73;
+  --color-separator:       rgba(255, 255, 255, 0.08);
+  --color-separator-subtle: rgba(255, 255, 255, 0.05);
+  --color-border:          rgba(255, 255, 255, 0.12);
+  --color-fill-subtle:     rgba(255, 255, 255, 0.06);
+  --color-fill-medium:     rgba(255, 255, 255, 0.10);
+  --color-fill-strong:     rgba(255, 255, 255, 0.14);
+  --color-input-bg:        rgba(255, 255, 255, 0.08);
+  --color-input-focus-bg:  rgba(255, 255, 255, 0.13);
+  --color-proxy-card-bg:   rgba(58, 58, 60, 0.85);
+  --color-surface-float:   rgba(36, 36, 38, 0.97);
+  --color-toggle-off:      rgba(255, 255, 255, 0.18);
+  --color-bar-track:       rgba(255, 255, 255, 0.10);
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
@@ -18,12 +77,19 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-  body {
+  :root:not([data-theme="light"]) body {
     background: radial-gradient(ellipse at 20% 50%, rgba(0,113,227,0.08) 0%, transparent 50%),
                 radial-gradient(ellipse at 80% 20%, rgba(52,199,89,0.08) 0%, transparent 50%),
                 #1c1c1e;
     color: #f5f5f7;
   }
+}
+
+:root[data-theme="dark"] body {
+  background: radial-gradient(ellipse at 20% 50%, rgba(0,113,227,0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(52,199,89,0.08) 0%, transparent 50%),
+              #1c1c1e;
+  color: #f5f5f7;
 }
 
 /* ─── Liquid Glass ────────────────────────────────────────────────────────── */
@@ -63,7 +129,7 @@ body {
 .liquid-glass > * { position: relative; z-index: 1; }
 
 @media (prefers-color-scheme: dark) {
-  .liquid-glass {
+  :root:not([data-theme="light"]) .liquid-glass {
     background: rgba(28, 28, 30, 0.78);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
@@ -71,7 +137,7 @@ body {
       0 1px 0 rgba(0, 0, 0, 0.4),
       0 8px 32px rgba(0, 0, 0, 0.45);
   }
-  .liquid-glass::before {
+  :root:not([data-theme="light"]) .liquid-glass::before {
     background: linear-gradient(
       118deg,
       rgba(255, 255, 255, 0.1) 0%,
@@ -80,6 +146,25 @@ body {
       rgba(255, 255, 255, 0.04) 100%
     );
   }
+}
+
+:root[data-theme="dark"] .liquid-glass {
+  background: rgba(28, 28, 30, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.14),
+    0 1px 0 rgba(0, 0, 0, 0.4),
+    0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="dark"] .liquid-glass::before {
+  background: linear-gradient(
+    118deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.02) 30%,
+    rgba(255, 255, 255, 0.0) 55%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
 }
 
 /* Card: content cards (subtler, frosted white) */
@@ -114,20 +199,36 @@ body {
 .liquid-glass-card > * { position: relative; z-index: 1; }
 
 @media (prefers-color-scheme: dark) {
-  .liquid-glass-card {
+  :root:not([data-theme="light"]) .liquid-glass-card {
     background: rgba(44, 44, 46, 0.82);
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
       0 4px 20px rgba(0, 0, 0, 0.35);
   }
-  .liquid-glass-card::before {
+  :root:not([data-theme="light"]) .liquid-glass-card::before {
     background: linear-gradient(
       150deg,
       rgba(255, 255, 255, 0.07) 0%,
       rgba(255, 255, 255, 0.0) 40%
     );
   }
+}
+
+:root[data-theme="dark"] .liquid-glass-card {
+  background: rgba(44, 44, 46, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="dark"] .liquid-glass-card::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.0) 40%
+  );
 }
 
 /* Vivid card shimmer sweep (animated light streak across gradient cards) */
@@ -170,14 +271,41 @@ body {
     0 2px 8px rgba(0, 113, 227, 0.15);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nav-pill-glass {
+    background: rgba(0, 113, 227, 0.2);
+    border-color: rgba(0, 113, 227, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 2px 8px rgba(0,113,227,0.25);
+  }
+}
+
+:root[data-theme="dark"] .nav-pill-glass {
+  background: rgba(0, 113, 227, 0.2);
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 2px 8px rgba(0,113,227,0.25);
+}
+
+/* ─── Nav inactive link ───────────────────────────────────────────────────── */
+.nav-inactive { color: var(--color-text-secondary); }
+.nav-inactive:hover { color: var(--color-text-primary); background: var(--color-fill-medium); }
+
+/* ─── Config input ────────────────────────────────────────────────────────── */
+.config-input { background: var(--color-fill-subtle); }
+.config-input:focus { background: var(--color-input-focus-bg); }
+
 /* ─── Scrollbars ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
 @media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 }
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
 
 .uplot canvas { border-radius: 8px; }
 

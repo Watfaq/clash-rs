@@ -2,8 +2,9 @@ import { HashRouter as BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
-import { Providers } from './pages/Providers';
+import { ProxyList } from './pages/ProxyList';
 import { Connections } from './pages/Connections';
+import { Flows } from './pages/Flows';
 import { Rules } from './pages/Rules';
 import { Logs } from './pages/Logs';
 import { DNS } from './pages/DNS';
@@ -25,8 +26,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Overview />} />
-            <Route path="providers" element={<Providers />} />
+            <Route path="proxies" element={<ProxyList />} />
+            <Route path="providers" element={<ProxyList />} />
             <Route path="connections" element={<Connections />} />
+            <Route path="flows" element={<Flows />} />
             <Route path="rules" element={<Rules />} />
             <Route path="logs" element={<Logs />} />
             <Route path="dns" element={<DNS />} />

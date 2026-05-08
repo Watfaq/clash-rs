@@ -172,11 +172,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
+  const contentType = response.headers.get('content-type') ?? '';
   const raw = await response.text();
-  if (!raw.trim()) {
+  if (!raw.trim() || !contentType.includes('application/json')) {
     return undefined as T;
   }
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`Invalid JSON response from ${path}`);
+  }
 }
 
 // Version
@@ -217,6 +222,10 @@ export const updateProxyProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}`, { method: 'PUT' });
 export const healthcheckProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}/healthcheck`);
+export const getProviderProxyDelay = (providerName: string, proxyName: string, url: string, timeout: number) =>
+  request<{ delay: number }>(
+    `/providers/proxies/${encodeURIComponent(providerName)}/${encodeURIComponent(proxyName)}/healthcheck?url=${encodeURIComponent(url)}&timeout=${timeout}`
+  );
 
 // Rule Providers
 export interface RuleProvider {
@@ -236,7 +245,7 @@ export const updateRuleProvider = (name: string) =>
 export const getRuleProviderRules = (name: string) =>
   request<{ rules: string[] }>(`/providers/rules/${encodeURIComponent(name)}/rules`);
 export const matchRuleProvider = (name: string, target: string) =>
-  request<{ match: boolean }>(`/providers/rules/${encodeURIComponent(name)}/match?target=${encodeURIComponent(target)}`);
+  request<{ match: boolean; rule?: string }>(`/providers/rules/${encodeURIComponent(name)}/match?target=${encodeURIComponent(target)}`);
 
 // Rules
 export const getRules = () => request<{ rules: Rule[] }>('/rules');

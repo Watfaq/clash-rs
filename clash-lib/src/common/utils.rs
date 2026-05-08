@@ -8,10 +8,7 @@ use crate::{
 use async_recursion::async_recursion;
 use futures::StreamExt;
 use http_body_util::{BodyDataStream, Empty};
-use rand::{
-    Fill, Rng,
-    distr::uniform::{SampleRange, SampleUniform},
-};
+use rand::distr::uniform::{SampleRange, SampleUniform};
 use sha2::Digest;
 use std::{
     collections::HashMap,
@@ -27,16 +24,11 @@ where
     T: SampleUniform,
     R: SampleRange<T>,
 {
-    let mut rng = rand::rng();
-    rng.random_range(range)
+    rand::random_range(range)
 }
 
-pub fn rand_fill<T>(buf: &mut T)
-where
-    T: Fill + ?Sized,
-{
-    let mut rng = rand::rng();
-    rng.fill(buf)
+pub fn rand_fill(buf: &mut [u8]) {
+    rand::fill(buf)
 }
 
 #[allow(dead_code)]
@@ -70,7 +62,7 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
 pub fn md5_str(bytes: &[u8]) -> String {
     let mut hasher = md5::Md5::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn current_timestamp_secs() -> u64 {

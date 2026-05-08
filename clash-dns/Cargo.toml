@@ -13,12 +13,16 @@ aws-lc-rs = [
     "hickory-server/https-aws-lc-rs",
     "hickory-server/h3-aws-lc-rs",
     "hickory-proto/dnssec-aws-lc-rs",
+    "hickory-client/https-aws-lc-rs",
+    "hickory-client/h3-aws-lc-rs",
 ]
 ring = [
     "rustls/ring",
     "hickory-server/https-ring",
     "hickory-server/h3-ring",
     "hickory-proto/dnssec-ring",
+    "hickory-client/https-ring",
+    "hickory-client/h3-ring",
 ]
 
 [dependencies]
@@ -35,8 +39,8 @@ rustls-pemfile = "2"
 webpki-roots = "1.0"
 
 hickory-client = { version = "0.25", default-features = false }
-hickory-server = { version = "0.25", default-features = false }
-hickory-proto = { version = "0.25", default-features = false }
+hickory-server = { version = "0.26", default-features = false }
+hickory-proto = { version = "0.26", default-features = false }
 
 
 

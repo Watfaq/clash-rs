@@ -28,6 +28,7 @@ use super::{
 };
 mod datagram;
 use datagram::OutboundDatagramAnytls;
+pub mod inbound;
 
 // AnyTLS frame command bytes (see the anytls protocol spec).
 const CMD_WASTE: u8 = 0;

@@ -31,7 +31,9 @@ pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
     dns_resolver: ThreadSafeDNSResolver,
 
+    country_mmdb: Option<MmdbLookup>,
     asn_mmdb: Option<MmdbLookup>,
+    rule_providers: HashMap<String, ThreadSafeRuleProvider>,
 }
 
 pub type ArcRouter = Arc<Router>;
@@ -80,8 +82,14 @@ impl Router {
                 .collect(),
             dns_resolver,
 
+            country_mmdb,
             asn_mmdb,
+            rule_providers: rule_provider_registry,
         }
+    }
+
+    pub fn get_rule_providers(&self) -> &HashMap<String, ThreadSafeRuleProvider> {
+        &self.rule_providers
     }
 
     /// this mutates the session, attaching resolved IP and ASN
@@ -92,6 +100,7 @@ impl Router {
         let mut sess_resolved = false;
 
         for r in self.rules.iter() {
+            // Resolve IP when needed
             if sess.destination.is_domain()
                 && r.should_resolve_ip()
                 && !sess_resolved
@@ -104,24 +113,14 @@ impl Router {
                 sess_resolved = true;
             }
 
-            let maybe_ip = sess.resolved_ip.or(sess.destination.ip());
-            if let (Some(ip), Some(asn_mmdb)) = (maybe_ip, &self.asn_mmdb) {
-                // try simplified mmdb first
-                let rv = asn_mmdb.lookup_country(ip);
-                if let Ok(country) = rv {
-                    sess.asn = Some(country.country_code);
-                }
-                if sess.asn.is_none() {
-                    match asn_mmdb.lookup_asn(ip) {
-                        Ok(asn) => {
-                            trace!("asn for {} is {:?}", ip, asn);
-                            sess.asn = Some(asn.asn_name);
-                        }
-                        Err(e) => {
-                            trace!("failed to lookup ASN for {}: {}", ip, e);
-                        }
-                    }
-                }
+            // Lookup geo information with guard clause
+            if let Some(ip) = sess.resolved_ip.or(sess.destination.ip()) {
+                Self::populate_geo_for_ip(
+                    ip,
+                    &self.country_mmdb,
+                    &self.asn_mmdb,
+                    sess,
+                );
             }
 
             if r.apply(sess) {
@@ -136,6 +135,59 @@ impl Router {
         }
 
         (MATCH, None)
+    }
+
+    /// Look up country code and ASN for an IP address.
+    /// Uses `country_mmdb` for the ISO 3166-1 alpha-2 country code.
+    /// For ASN, preserves the original strategy: try
+    /// `asn_mmdb.lookup_country()` first (simplified/fast path, e.g.
+    /// Country.mmdb), fall back to `asn_mmdb.lookup_asn()` for the org
+    /// name.
+    fn populate_geo_for_ip(
+        ip: std::net::IpAddr,
+        country_mmdb: &Option<MmdbLookup>,
+        asn_mmdb: &Option<MmdbLookup>,
+        sess: &mut Session,
+    ) {
+        // Preserve existing geo metadata — avoids overriding prior enrichment
+        if sess.country.is_some() && sess.asn.is_some() {
+            return;
+        }
+
+        if sess.country.is_none()
+            && let Some(country_mmdb) = country_mmdb
+        {
+            match country_mmdb.lookup_country(ip) {
+                Ok(country) => {
+                    trace!("country for {} is {:?}", ip, country.country_code);
+                    sess.country = Some(country.country_code);
+                }
+                Err(e) => {
+                    trace!("failed to lookup country for {}: {}", ip, e);
+                }
+            }
+        }
+
+        if sess.asn.is_none()
+            && let Some(asn_mmdb) = asn_mmdb
+        {
+            // try simplified mmdb first (e.g. Country.mmdb doubles as a fast
+            // country-code lookup on the asn_mmdb slot)
+            if let Ok(country) = asn_mmdb.lookup_country(ip) {
+                sess.asn = Some(country.country_code);
+                return;
+            }
+            // fall back to full ASN lookup
+            match asn_mmdb.lookup_asn(ip) {
+                Ok(asn) => {
+                    trace!("asn for {} is {:?}", ip, asn);
+                    sess.asn = Some(asn.asn_name);
+                }
+                Err(e) => {
+                    trace!("failed to lookup ASN for {}: {}", ip, e);
+                }
+            }
+        }
     }
 
     async fn load_rule_providers(

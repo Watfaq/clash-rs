@@ -16,7 +16,7 @@ use crate::{
     session::{Network, Session, Type},
 };
 use futures::{SinkExt, StreamExt};
-use hickory_proto::{
+use hickory_client::proto::{
     runtime::{
         RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd,
     },

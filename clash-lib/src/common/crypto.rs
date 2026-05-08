@@ -1,4 +1,4 @@
-use aes::cipher::{AsyncStreamCipher, KeyIvInit};
+use aes::cipher::KeyIvInit;
 use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
 use anyhow::{Ok, anyhow};
 
@@ -9,17 +9,20 @@ pub fn aes_cfb_encrypt(
 ) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into())
+            cfb_mode::Encryptor::<aes::Aes128>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .encrypt(data);
             Ok(())
         }
         24 => {
-            cfb_mode::Encryptor::<aes::Aes192>::new(key.into(), iv.into())
+            cfb_mode::Encryptor::<aes::Aes192>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .encrypt(data);
             Ok(())
         }
         32 => {
-            cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into())
+            cfb_mode::Encryptor::<aes::Aes256>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .encrypt(data);
             Ok(())
         }
@@ -34,17 +37,20 @@ pub fn aes_cfb_decrypt(
 ) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into())
+            cfb_mode::Decryptor::<aes::Aes128>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .decrypt(data);
             Ok(())
         }
         24 => {
-            cfb_mode::Decryptor::<aes::Aes192>::new(key.into(), iv.into())
+            cfb_mode::Decryptor::<aes::Aes192>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .decrypt(data);
             Ok(())
         }
         32 => {
-            cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into())
+            cfb_mode::Decryptor::<aes::Aes256>::new_from_slices(key, iv)
+                .map_err(|e| anyhow!("{e}"))?
                 .decrypt(data);
             Ok(())
         }

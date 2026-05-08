@@ -158,7 +158,7 @@ impl Runner for ApiRunner {
                         dns_enabled,
                     ),
                 )
-                .nest("/rules", handlers::rule::routes(router))
+                .nest("/rules", handlers::rule::routes(router.clone()))
                 .nest("/group", handlers::group::routes(outbound_manager.clone()))
                 .nest(
                     "/proxies",
@@ -168,10 +168,12 @@ impl Runner for ApiRunner {
                     "/providers/proxies",
                     handlers::provider::routes(outbound_manager),
                 )
+                .nest("/providers/rules", handlers::provider::rule_routes(router))
                 .nest(
                     "/connections",
-                    handlers::connection::routes(statistics_manager),
+                    handlers::connection::routes(statistics_manager.clone()),
                 )
+                .nest("/flows", handlers::flows::routes(statistics_manager))
                 .nest("/dns", handlers::dns::routes(dns_resolver))
                 .layer(middleware::from_fn(
                     middlewares::fix_json_content_type::fix_content_type,

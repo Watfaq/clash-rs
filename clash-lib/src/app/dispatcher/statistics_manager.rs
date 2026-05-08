@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, atomic::Ordering},
 };
 
@@ -28,6 +28,10 @@ impl ProxyChain {
     pub async fn push(&self, s: String) {
         let mut chain = self.0.write().await;
         chain.push(s);
+    }
+
+    pub async fn snapshot(&self) -> Vec<String> {
+        self.0.read().await.clone()
     }
 }
 
@@ -77,6 +81,7 @@ type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
 
 pub struct Manager {
     connections: Arc<Mutex<ConnectionMap>>,
+    closed_flows: Arc<Mutex<VecDeque<Arc<TrackerInfo>>>>,
     upload_temp: AtomicU64,
     download_temp: AtomicU64,
     upload_blip: AtomicU64,
@@ -92,6 +97,7 @@ impl Manager {
     pub fn new() -> Arc<Self> {
         let v = Arc::new(Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
+            closed_flows: Arc::new(Mutex::new(VecDeque::new())),
             upload_temp: AtomicU64::new(0),
             download_temp: AtomicU64::new(0),
             upload_blip: AtomicU64::new(0),
@@ -120,6 +126,7 @@ impl Manager {
     pub fn untrack(&self, id: uuid::Uuid) {
         let connections = self.connections.clone();
         let user_period_stats = self.user_period_stats.clone();
+        let closed_flows = self.closed_flows.clone();
 
         tokio::spawn(async move {
             let mut connections = connections.lock().await;
@@ -139,8 +146,32 @@ impl Manager {
                     entry.upload += upload;
                     entry.download += download;
                 }
+
+                // Push to the closed_flows ring buffer (cap 1000).
+                let mut ring = closed_flows.lock().await;
+                ring.push_back(info);
+                if ring.len() > 1000 {
+                    ring.pop_front();
+                }
             }
         });
+    }
+
+    /// Return `Arc<TrackerInfo>` for every currently-active connection.
+    /// Unlike `snapshot()`, this preserves the full `session_holder` so
+    /// callers can access destination, source, and network fields directly.
+    pub async fn active_connections_snapshot(&self) -> Vec<Arc<TrackerInfo>> {
+        let conns = self.connections.lock().await;
+        conns
+            .values()
+            .map(|(tracked, _)| tracked.tracker_info())
+            .collect()
+    }
+
+    /// Return a snapshot of recently closed connections (up to 1000 entries).
+    pub async fn closed_flows_snapshot(&self) -> Vec<Arc<TrackerInfo>> {
+        let ring = self.closed_flows.lock().await;
+        ring.iter().cloned().collect()
     }
 
     /// Return per-user traffic accumulated since the last call (for both closed

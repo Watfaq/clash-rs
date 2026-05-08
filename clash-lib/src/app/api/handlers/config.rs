@@ -9,6 +9,7 @@ use axum::{
 
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -158,12 +159,11 @@ async fn update_configs(
     let g = state.global_state.lock().await;
     match (req.path, req.payload) {
         (_, Some(payload)) => {
-            let msg = "config reloading from payload".to_string();
             let cfg = crate::Config::Str(payload);
             match g.reload_tx.send((cfg, done)).await {
                 Ok(_) => {
                     wait.await.unwrap();
-                    (StatusCode::NO_CONTENT, msg).into_response()
+                    StatusCode::NO_CONTENT.into_response()
                 }
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -187,12 +187,11 @@ async fn update_configs(
                     .into_response();
             }
 
-            let msg = format!("config reloading from file {path}");
             let cfg: crate::Config = crate::Config::File(path);
             match g.reload_tx.send((cfg, done)).await {
                 Ok(_) => {
                     wait.await.unwrap();
-                    (StatusCode::NO_CONTENT, msg).into_response()
+                    StatusCode::NO_CONTENT.into_response()
                 }
 
                 Err(_) => (
@@ -320,5 +319,9 @@ async fn patch_configs(
         global_state.log_level = log_level;
     }
 
-    StatusCode::ACCEPTED.into_response()
+    (
+        StatusCode::ACCEPTED,
+        axum::response::Json(json!({"message": "configs updated"})),
+    )
+        .into_response()
 }

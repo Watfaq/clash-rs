@@ -1,5 +1,4 @@
-use aead::{KeyInit, generic_array::GenericArray};
-use aes::cipher::BlockEncrypt;
+use aes::cipher::{BlockCipherEncrypt, KeyInit};
 use bytes::{Buf, BufMut, BytesMut};
 
 use crate::common::{crypto, errors::map_io_error, utils};
@@ -28,13 +27,13 @@ fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
         KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
     );
     let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
-    let key = GenericArray::from(pk);
-    let cipher = aes::Aes128::new(&key);
+    let cipher = aes::Aes128::new_from_slice(&pk).expect("valid 16-byte key");
     let mut block = [0u8; 16];
     buf.copy_to_slice(&mut block);
-    let mut block = GenericArray::from(block);
-    cipher.encrypt_block(&mut block);
-    block.as_slice()[..16].try_into().unwrap()
+    let mut block_arr = aes::cipher::Block::<aes::Aes128>::default();
+    block_arr.copy_from_slice(&block);
+    cipher.encrypt_block(&mut block_arr);
+    block_arr.as_slice()[..16].try_into().unwrap()
 }
 
 pub(crate) fn seal_vmess_aead_header(
@@ -109,8 +108,7 @@ mod tests {
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
         },
     };
-    use aead::{KeyInit, generic_array::GenericArray};
-    use aes::cipher::BlockEncrypt;
+    use aes::cipher::{BlockCipherEncrypt, KeyInit};
     use bytes::{Buf, BufMut, BytesMut};
 
     #[test]
@@ -133,13 +131,13 @@ mod tests {
             KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
         );
         let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
-        let key = GenericArray::from(pk);
-        let cipher = aes::Aes128::new(&key);
+        let cipher = aes::Aes128::new_from_slice(&pk).expect("valid key");
         let mut block = [0u8; 16];
         buf.copy_to_slice(&mut block);
-        let mut block = GenericArray::from(block);
-        cipher.encrypt_block(&mut block);
-        let block: [u8; 16] = block.as_slice()[..16].try_into().unwrap();
+        let mut block_arr = aes::cipher::Block::<aes::Aes128>::default();
+        block_arr.copy_from_slice(&block);
+        cipher.encrypt_block(&mut block_arr);
+        let block: [u8; 16] = block_arr.as_slice()[..16].try_into().unwrap();
         assert_eq!(
             block.to_vec(),
             vec![

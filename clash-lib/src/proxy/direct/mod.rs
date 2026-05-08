@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+pub(crate) mod datagram;
+
 use crate::{
     app::{
         dispatcher::{
@@ -12,7 +14,7 @@ use crate::{
     config::internal::proxy::PROXY_DIRECT,
     proxy::{
         OutboundHandler,
-        datagram::OutboundDatagramImpl,
+        direct::datagram::OutboundDatagramImpl,
         utils::{family_hint_for_session, new_tcp_stream, new_udp_socket},
     },
     session::Session,

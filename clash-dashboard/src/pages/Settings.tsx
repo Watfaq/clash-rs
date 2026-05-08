@@ -53,12 +53,12 @@ export function Settings() {
     outline: 'none',
     textAlign: 'right',
     fontSize: 15,
-    color: '#1d1d1f',
+    color: 'var(--color-text-primary)',
   };
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--color-text-primary)' }}>Settings</h1>
 
       {/* Dev mode banner */}
       {showDevPrompt && (
@@ -71,8 +71,8 @@ export function Settings() {
         >
           <AlertTriangle size={16} style={{ color: '#ff9500', flexShrink: 0, marginTop: 2 }} />
           <div className="space-y-1">
-            <div className="text-[13px] font-semibold" style={{ color: '#1d1d1f' }}>Dev mode detected</div>
-            <div className="text-[12px]" style={{ color: '#6e6e73' }}>
+            <div className="text-[13px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>Dev mode detected</div>
+            <div className="text-[12px]" style={{ color: 'var(--color-text-secondary)' }}>
               Set the API URL below to point to your running clash-rs instance, then click Save &amp; Connect.
             </div>
           </div>
@@ -117,41 +117,41 @@ export function Settings() {
       <div>
         <div
           className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1"
-          style={{ color: '#6e6e73' }}
+          style={{ color: 'var(--color-text-secondary)' }}
         >
           API Connection
         </div>
         <div className="liquid-glass-card rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
           <div
             className="flex items-center gap-3 px-4"
-            style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+            style={{ minHeight: 52, borderBottom: '1px solid var(--color-separator)' }}
           >
-            <span className="text-[15px] flex-shrink-0" style={{ color: '#1d1d1f' }}>API URL</span>
+            <span className="text-[15px] flex-shrink-0" style={{ color: 'var(--color-text-primary)' }}>API URL</span>
             <input
               type="text"
               value={apiUrl}
               onChange={(e) => setApiUrlState(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
               placeholder="http://127.0.0.1:9090"
-              style={{ ...inputStyle, color: '#6e6e73' }}
+              style={{ ...inputStyle, color: 'var(--color-text-secondary)' }}
             />
           </div>
           <div
             className="flex items-center gap-3 px-4"
             style={{ minHeight: 52 }}
           >
-            <span className="text-[15px] flex-shrink-0" style={{ color: '#1d1d1f' }}>Secret</span>
+            <span className="text-[15px] flex-shrink-0" style={{ color: 'var(--color-text-primary)' }}>Secret</span>
             <input
               type="password"
               value={secret}
               onChange={(e) => setSecretState(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
               placeholder="API secret (leave blank if none)"
-              style={{ ...inputStyle, color: '#6e6e73' }}
+              style={{ ...inputStyle, color: 'var(--color-text-secondary)' }}
             />
           </div>
         </div>
-        <div className="text-[12px] mt-2 px-1" style={{ color: '#6e6e73' }}>
+        <div className="text-[12px] mt-2 px-1" style={{ color: 'var(--color-text-secondary)' }}>
           When served from the clash-rs binary, defaults to the current origin.
         </div>
       </div>
