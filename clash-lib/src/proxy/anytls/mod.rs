@@ -279,6 +279,8 @@ impl Handler {
         Ok(buf)
     }
 
+    /// Write one AnyTLS frame. The 7-byte header is batched into a single
+    /// `write_all` to avoid three separate async write round-trips per frame.
     async fn write_frame(
         writer: &mut (impl AsyncWrite + Unpin),
         command: u8,
@@ -291,22 +293,27 @@ impl Handler {
                 "anytls frame payload exceeds 65535 bytes",
             ));
         }
-
-        writer.write_u8(command).await?;
-        writer.write_u32(stream_id).await?;
-        writer.write_u16(data.len() as u16).await?;
+        let mut header = [0u8; 7];
+        header[0] = command;
+        header[1..5].copy_from_slice(&stream_id.to_be_bytes());
+        header[5..7].copy_from_slice(&(data.len() as u16).to_be_bytes());
+        writer.write_all(&header).await?;
         if !data.is_empty() {
             writer.write_all(data).await?;
         }
         Ok(())
     }
 
+    /// Read one AnyTLS frame. The 7-byte header is read in a single
+    /// `read_exact` to avoid three separate async read round-trips per frame.
     async fn read_frame(
         reader: &mut (impl AsyncRead + Unpin),
     ) -> io::Result<(u8, u32, Vec<u8>)> {
-        let command = reader.read_u8().await?;
-        let stream_id = reader.read_u32().await?;
-        let data_len = reader.read_u16().await? as usize;
+        let mut header = [0u8; 7];
+        reader.read_exact(&mut header).await?;
+        let command = header[0];
+        let stream_id = u32::from_be_bytes(header[1..5].try_into().unwrap());
+        let data_len = u16::from_be_bytes(header[5..7].try_into().unwrap()) as usize;
         let mut data = vec![0u8; data_len];
         if data_len > 0 {
             reader.read_exact(&mut data).await?;
