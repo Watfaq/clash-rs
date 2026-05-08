@@ -276,14 +276,18 @@ impl AsyncRead for TrackedStream {
 
         let v = Pin::new(self.inner.as_mut()).poll_read(cx, buf);
         let download = buf.filled().len();
-        self.manager.push_downloaded(download);
-        self.tracker
-            .download_total
-            .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
-        if self.tracker.session_holder.inbound_user.is_some() {
+        // Skip atomic counter updates when no bytes were read (e.g. Poll::Pending),
+        // avoiding multiple no-op fetch_add calls on every wakeup in the hot path.
+        if download > 0 {
+            self.manager.push_downloaded(download);
             self.tracker
-                .user_download
-                .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
+                .download_total
+                .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+            if self.tracker.session_holder.inbound_user.is_some() {
+                self.tracker
+                    .user_download
+                    .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
+            }
         }
 
         v
