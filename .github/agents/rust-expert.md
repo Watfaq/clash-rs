@@ -53,3 +53,7 @@ Key directories inside `clash-lib/src/`:
 - Do not over-engineer: no premature abstractions, no unnecessary generics.
 - Prefer editing existing files over creating new ones.
 - Follow existing patterns in the codebase before introducing new ones.
+
+## Git Workflow
+
+- **Never commit or push directly to `master`** — always create a PR branch and open a pull request.
