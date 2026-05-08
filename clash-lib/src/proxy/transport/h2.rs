@@ -123,9 +123,14 @@ impl AsyncRead for Http2Stream {
                 if to_read < data.len() {
                     self.buffer.extend_from_slice(&data[to_read..]);
                 }
+                // Release capacity for the entire received frame, including
+                // bytes saved to self.buffer.  This keeps the H2 flow-control
+                // window open so the remote end can send the next frame
+                // immediately rather than stalling until the application reads
+                // the buffered bytes.
                 self.recv
                     .flow_control()
-                    .release_capacity(to_read)
+                    .release_capacity(data.len())
                     .map_or_else(
                         |e| {
                             Err(std::io::Error::new(

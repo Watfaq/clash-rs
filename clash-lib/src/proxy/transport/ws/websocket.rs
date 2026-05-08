@@ -79,12 +79,22 @@ impl AsyncWrite for WebsocketConn {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        // poll_ready flushes any previously queued frame before accepting a
+        // new one.  Once it returns Ready the sink is empty and we can safely
+        // queue the next frame with start_send.
+        //
+        // We intentionally do NOT call poll_flush here.  Per the AsyncWrite
+        // contract poll_write should only buffer data; the caller is
+        // responsible for calling poll_flush when it needs the data on the
+        // wire.  Flushing inside poll_write caused a data-duplication bug:
+        // if poll_flush returned Poll::Pending, poll_write returned Pending
+        // without updating the caller's position counter, so the next
+        // poll_write call would re-queue the same frame and send it twice.
         ready!(Pin::new(&mut self.inner).poll_ready(cx)).map_err(map_io_error)?;
         let message = Message::Binary(Bytes::copy_from_slice(buf));
         Pin::new(&mut self.inner)
             .start_send(message)
             .map_err(map_io_error)?;
-        ready!(self.poll_flush(cx)?);
         std::task::Poll::Ready(Ok(buf.len()))
     }
 
