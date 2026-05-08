@@ -47,6 +47,7 @@ async fn proxy(
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    client: Client<Connector, hyper::body::Incoming>,
     fw_mark: Option<u32>,
 ) -> Result<Response<BoxBody<Bytes, std::io::Error>>, ProxyError> {
     if authenticator.enabled()
@@ -54,11 +55,6 @@ async fn proxy(
     {
         return Ok(res);
     }
-
-    let client = Client::builder(TokioExecutor::new())
-        .http1_title_case_headers(true)
-        .http1_preserve_header_case(true)
-        .build(Connector::new(src, dispatcher.clone(), fw_mark));
 
     // TODO: handle other upgrades: https://github.com/hyperium/hyper/blob/master/examples/upgrades.rs
     if req.method() == Method::CONNECT {
@@ -121,6 +117,7 @@ struct ProxyService {
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    client: Client<Connector, hyper::body::Incoming>,
     fw_mark: Option<u32>,
 }
 
@@ -135,6 +132,7 @@ impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
             self.src,
             self.dispatcher.clone(),
             self.authenticator.clone(),
+            self.client.clone(),
             self.fw_mark,
         ))
     }
@@ -148,6 +146,11 @@ pub async fn handle(
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
 ) {
+    let client = Client::builder(TokioExecutor::new())
+        .http1_title_case_headers(true)
+        .http1_preserve_header_case(true)
+        .build(Connector::new(src, dispatcher.clone(), fw_mark));
+
     let result = http1::Builder::new()
         .preserve_header_case(true)
         .title_case_headers(true)
@@ -157,6 +160,7 @@ pub async fn handle(
                 src,
                 dispatcher,
                 authenticator,
+                client,
                 fw_mark,
             },
         )
