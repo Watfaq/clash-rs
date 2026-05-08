@@ -48,7 +48,7 @@ jobs:
   docker:
     name: Docker
     needs: [build]
-    uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@v1.0.13
+    uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@v1.0.12
     secrets:
       dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
