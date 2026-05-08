@@ -1337,7 +1337,7 @@ dependencies = [
  "h3-quinn 0.0.10",
  "hex",
  "hickory-client",
- "hickory-proto 0.26.0",
+ "hickory-proto 0.26.1",
  "hickory-resolver 0.26.0",
  "hmac 0.13.0",
  "http",
@@ -3546,7 +3546,7 @@ dependencies = [
  "h2",
  "h3 0.0.8",
  "h3-quinn 0.0.10",
- "hickory-proto 0.26.0",
+ "hickory-proto 0.26.1",
  "http",
  "idna",
  "ipnet",
@@ -3599,9 +3599,9 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.26.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a916d0494600d99ecb15aadfab677ad97c4de559e8f1af0c129353a733ac1fcc"
+checksum = "0bab31817bfb44672a252e97fe81cd0c18d1b2cf892108922f6818820df8c643"
 dependencies = [
  "aws-lc-rs",
  "bitflags 2.11.0",
@@ -3652,7 +3652,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.0",
+ "hickory-proto 0.26.1",
  "ipconfig",
  "ipnet",
  "jni 0.22.4",
@@ -3688,7 +3688,7 @@ dependencies = [
  "h3 0.0.8",
  "h3-quinn 0.0.10",
  "hickory-net",
- "hickory-proto 0.26.0",
+ "hickory-proto 0.26.1",
  "hickory-resolver 0.26.0",
  "http",
  "ipnet",
@@ -11627,7 +11627,7 @@ dependencies = [
  "env_logger",
  "futures",
  "hickory-client",
- "hickory-proto 0.26.0",
+ "hickory-proto 0.26.1",
  "hickory-server",
  "mockall",
  "rustls",
