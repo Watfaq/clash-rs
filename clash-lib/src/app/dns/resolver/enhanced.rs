@@ -373,12 +373,10 @@ impl EnhancedResolver {
 
         trace!(q = q.to_string(), "start");
 
-        // Cache hit — return early if recursion_desired is not set
         if let Some(lru) = &self.lru_cache
             && let Some(Ok(cached)) = lru.get(q, Instant::now()).map(|c| {
                 c.inspect_err(|x| warn!("failed to get cached message: {}", x))
             })
-            && !message.metadata.recursion_desired
         {
             trace!(
                 q = q.to_string(),
