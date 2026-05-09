@@ -373,12 +373,11 @@ impl EnhancedResolver {
 
         trace!(q = q.to_string(), "start");
 
-        // Cache hit — return early if recursion_desired is not set
+        // Cache hit — return early if cached response exists
         if let Some(lru) = &self.lru_cache
             && let Some(Ok(cached)) = lru.get(q, Instant::now()).map(|c| {
                 c.inspect_err(|x| warn!("failed to get cached message: {}", x))
             })
-            && !message.metadata.recursion_desired
         {
             trace!(
                 q = q.to_string(),
@@ -1236,6 +1235,52 @@ mod tests {
             ip.to_string() == "1.1.1.1" || ip.to_string() == "1.0.0.1",
             "unexpected IP: {}",
             ip
+        );
+    }
+
+    /// Regression test for DNS cache never being hit due to contradictory
+    /// recursion_desired checks. The cache should be hit regardless of the RD
+    /// flag.
+    #[tokio::test]
+    #[ignore = "network unstable on CI"]
+    async fn test_dns_cache_hit_with_recursion_desired() {
+        use std::time::Duration;
+
+        let resolver = EnhancedResolver::new_default().await;
+
+        // First query - should hit the upstream DNS server
+        let start = std::time::Instant::now();
+        let first_result = resolver
+            .resolve("www.google.com", false)
+            .await
+            .expect("first query should succeed");
+        let first_duration = start.elapsed();
+
+        assert!(first_result.is_some(), "should get an IP address");
+
+        // Small delay to ensure cache is written
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Second query - should hit the cache and be much faster
+        let start = std::time::Instant::now();
+        let second_result = resolver
+            .resolve("www.google.com", false)
+            .await
+            .expect("second query should succeed");
+        let second_duration = start.elapsed();
+
+        assert!(
+            second_result.is_some(),
+            "should get an IP address from cache"
+        );
+
+        // Cache hit should be significantly faster (at least 5x faster)
+        // Network queries typically take 50-500ms, cache hits should be <10ms
+        assert!(
+            second_duration < first_duration / 5,
+            "cache hit should be much faster: first={:?}, second={:?}",
+            first_duration,
+            second_duration
         );
     }
 }
