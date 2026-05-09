@@ -1001,15 +1001,24 @@ mod tests {
         tests::initialize,
     };
     use futures::TryFutureExt;
+    use httpmock::{Method::GET, MockServer};
     use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
     #[tokio::test]
     async fn test_proxy_manager_alive() {
         initialize();
-        let mut mock_resolver = MockClashResolver::new();
-        mock_resolver.expect_resolve().returning(|_, _| {
-            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(142, 250, 66, 227))))
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET).path("/generate_204");
+            then.status(204);
         });
+        let url = server.url("/generate_204");
+
+        let mut mock_resolver = MockClashResolver::new();
+        mock_resolver
+            .expect_resolve()
+            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST))));
         mock_resolver.expect_ipv6().return_const(false);
 
         let manager =
@@ -1018,11 +1027,7 @@ mod tests {
         let mock_handler = Arc::new(direct::Handler::new(PROXY_DIRECT));
 
         manager
-            .url_test(
-                mock_handler.clone(),
-                "http://www.gstatic.com/generate_204",
-                None,
-            )
+            .url_test(mock_handler.clone(), &url, None)
             .await
             .expect("test failed");
 
@@ -1031,7 +1036,7 @@ mod tests {
             manager
                 .last_delay(PROXY_DIRECT)
                 .await
-                .is_some_and(|x| x.as_millis() > 0)
+                .is_some_and(|x| x.as_nanos() > 0)
         );
         assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
 
@@ -1040,11 +1045,7 @@ mod tests {
 
         for _ in 0..10 {
             manager
-                .url_test(
-                    mock_handler.clone(),
-                    "http://www.gstatic.com/generate_204",
-                    None,
-                )
+                .url_test(mock_handler.clone(), &url, None)
                 .await
                 .expect("test failed");
         }
@@ -1054,7 +1055,7 @@ mod tests {
             manager
                 .last_delay(PROXY_DIRECT)
                 .await
-                .is_some_and(|x| x.as_millis() > 0)
+                .is_some_and(|x| x.as_nanos() > 0)
         );
         assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 10);
     }
