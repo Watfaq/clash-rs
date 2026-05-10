@@ -279,7 +279,18 @@ impl Dispatcher {
                     }
                 };
 
-                sess.source = packet.src_addr.clone().must_into_socket_addr();
+                // Canonicalize IPv4-mapped IPv6 source addresses (e.g. a
+                // client connecting via IPv4 on a dual-stack inbound socket
+                // appears as ::ffff:x.x.x.x).  Without canonicalization,
+                // direct/mod.rs sees sess.source.is_ipv4() == false and picks
+                // bind_addr=:: while family_hint picks AF_INET for the
+                // destination — binding an AF_INET socket to [::]:0 fails with
+                // EAFNOSUPPORT (os error 97), silently dropping all UDP replies.
+                sess.source = packet
+                    .src_addr
+                    .clone()
+                    .must_into_socket_addr()
+                    .to_canonical();
                 sess.destination = dest.clone();
                 sess.inbound_user = packet.inbound_user.clone();
 
