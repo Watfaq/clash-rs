@@ -94,10 +94,14 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let family_hint = family_hint_for_session(sess, &resolver).await;
-        let bind_addr: std::net::IpAddr = if sess.source.is_ipv4() {
-            std::net::Ipv4Addr::UNSPECIFIED.into()
-        } else {
-            std::net::Ipv6Addr::UNSPECIFIED.into()
+        // Align bind_addr family with the socket family driven by family_hint.
+        // Binding an AF_INET6 socket to 0.0.0.0 (IPv4) returns EAFNOSUPPORT,
+        // so when the destination (family_hint) is IPv6 we must bind to [::].
+        // Fall back to sess.source only when family_hint has no preference.
+        let bind_addr: std::net::IpAddr = match family_hint.as_ref() {
+            Some(hint) if hint.is_ipv6() => std::net::Ipv6Addr::UNSPECIFIED.into(),
+            _ if sess.source.is_ipv4() => std::net::Ipv4Addr::UNSPECIFIED.into(),
+            _ => std::net::Ipv6Addr::UNSPECIFIED.into(),
         };
         let d = new_udp_socket(
             Some((bind_addr, 0).into()),
