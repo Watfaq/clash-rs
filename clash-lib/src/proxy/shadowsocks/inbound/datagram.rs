@@ -1,5 +1,7 @@
 use crate::{
-    common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
+    common::errors::new_io_error,
+    proxy::{datagram::UdpPacket, utils::ToCanonical},
+    session::SocksAddr,
 };
 use futures::ready;
 use shadowsocks::{ProxySocket, relay::udprelay::options::UdpSocketControlData};
@@ -87,6 +89,17 @@ impl futures::Stream for InboundShadowsocksDatagram {
 
             match rv {
                 Ok((n, src, target, _, ctrl)) => {
+                    // Canonicalize IPv4-mapped IPv6 source addresses (e.g.
+                    // ::ffff:x.x.x.x → x.x.x.x) so the key stored here
+                    // matches the canonical sess.source the dispatcher assigns
+                    // after commit 6783909.  Without this, the Sink's
+                    // client_controls lookup uses the canonical address
+                    // (from pkt.dst_addr = sess.source) but finds no entry
+                    // because it was stored under the raw IPv4-mapped form,
+                    // producing "no control entry" and dropping all IPv4 UDP
+                    // replies.
+                    let src = src.to_canonical();
+
                     // Upsert the per-client control entry so responses to this
                     // client are encrypted with the correct uPSK and echo the
                     // correct client_session_id.  packet_id is kept per-client
