@@ -16,23 +16,27 @@ use tracing::{debug, error, instrument, trace};
 pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]
     {
-        let s = socket2::SockRef::from(s);
-        s.set_tcp_keepalive(
+        let sock_ref = socket2::SockRef::from(s);
+        sock_ref.set_tcp_keepalive(
             &TcpKeepalive::new()
                 .with_time(Duration::from_secs(10))
                 .with_interval(Duration::from_secs(1))
                 .with_retries(3),
-        )
+        )?;
     }
     #[cfg(target_os = "windows")]
     {
-        let s = socket2::SockRef::from(s);
-        s.set_tcp_keepalive(
+        let sock_ref = socket2::SockRef::from(s);
+        sock_ref.set_tcp_keepalive(
             &TcpKeepalive::new()
                 .with_time(Duration::from_secs(10))
                 .with_interval(Duration::from_secs(1)),
-        )
+        )?;
     }
+    // Disable Nagle's algorithm so that small writes (e.g. HTTP response
+    // headers arriving from the proxy side) are forwarded to the client
+    // immediately without waiting for a full TCP segment.
+    s.set_nodelay(true)
 }
 
 #[instrument(skip(so_mark))]

@@ -339,7 +339,7 @@ pub async fn start(
                 new_components.cache_store.clone(),
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
-                Some(reload_token.clone()),
+                Some(reload_token.child_token()),
                 new_components.dns_listen.clone(),
                 new_components.dns_enabled,
             ));

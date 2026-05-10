@@ -373,12 +373,11 @@ impl EnhancedResolver {
 
         trace!(q = q.to_string(), "start");
 
-        // Cache hit — return early if recursion_desired is not set
+        // Cache hit — return early
         if let Some(lru) = &self.lru_cache
             && let Some(Ok(cached)) = lru.get(q, Instant::now()).map(|c| {
                 c.inspect_err(|x| warn!("failed to get cached message: {}", x))
             })
-            && !message.metadata.recursion_desired
         {
             trace!(
                 q = q.to_string(),
@@ -745,7 +744,7 @@ mod tests {
         },
     };
     use hickory_proto::{op, rr};
-    use std::{net::Ipv4Addr, sync::Arc};
+    use std::{net::Ipv4Addr, sync::Arc, time::Instant};
 
     use crate::{
         app::dns::{
@@ -812,6 +811,51 @@ mod tests {
             Some("::1".parse::<std::net::Ipv6Addr>().unwrap()),
             "IPv6 literal should be returned directly"
         );
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_hit_with_recursion_desired() {
+        use hickory_proto::op;
+
+        let mut resolver = EnhancedResolver::new_default().await;
+        resolver.main.clear(); // ensure cache miss would fail deterministically
+        resolver.lru_cache = Some(hickory_resolver::ResponseCache::new(
+            16,
+            hickory_resolver::TtlConfig::default(),
+        ));
+
+        let mut request = op::Message::query();
+        let mut query = op::Query::new();
+        let name = rr::Name::from_str_relaxed("example.com")
+            .unwrap()
+            .append_domain(&rr::Name::root())
+            .unwrap();
+        query.set_name(name.clone());
+        query.set_query_type(rr::RecordType::A);
+        request.add_query(query);
+        request.metadata.recursion_desired = true;
+
+        let mut cached = op::Message::response(0, op::OpCode::Query);
+        let ip = std::net::Ipv4Addr::new(127, 0, 0, 1);
+        cached.add_answer(rr::Record::from_rdata(
+            name,
+            300,
+            rr::RData::A(rr::rdata::A(ip)),
+        ));
+
+        let lru = resolver.lru_cache.as_ref().unwrap();
+        let q = request.queries.first().unwrap().clone();
+        lru.insert(q, Ok(cached), Instant::now());
+
+        let response = resolver
+            .exchange(&request)
+            .await
+            .expect("should be served from cache");
+        assert_eq!(response.answers.len(), 1);
+        match &response.answers[0].data {
+            rr::RData::A(a) => assert_eq!(a.0, ip),
+            other => panic!("expected A record, got {other:?}"),
+        }
     }
 
     #[tokio::test]

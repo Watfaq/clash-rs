@@ -50,6 +50,12 @@ impl TcpStream {
         let (r, w) = tokio::io::split(self);
         (r, w)
     }
+
+    fn notify_tcp_socket_ready(&self) {
+        if let Err(e) = self.stack_notifier.send(IfaceEvent::TcpSocketReady) {
+            error!("Failed to notify TCP socket ready: {e}");
+        }
+    }
 }
 
 impl std::fmt::Debug for TcpStream {
@@ -107,9 +113,7 @@ impl tokio::io::AsyncRead for TcpStream {
         let n = read_buf.dequeue_slice(recv_buf);
         buf.advance(n);
 
-        self.stack_notifier
-            .send(IfaceEvent::TcpSocketReady)
-            .expect("Failed to notify TCP socket ready");
+        self.notify_tcp_socket_ready();
         trace!("TcpStream::poll_read: (proxy)read {n} bytes from recv buffer");
 
         Poll::Ready(Ok(()))
@@ -143,18 +147,14 @@ impl tokio::io::AsyncWrite for TcpStream {
                 trace!(
                     "TcpStream::poll_write: send buffer is full, waiting for space"
                 );
-                self.stack_notifier
-                    .send(IfaceEvent::TcpSocketReady)
-                    .expect("Failed to notify TCP socket ready");
+                self.notify_tcp_socket_ready();
                 return std::task::Poll::Pending;
             }
         }
 
         let n = send_buf.enqueue_slice(buf);
 
-        self.stack_notifier
-            .send(IfaceEvent::TcpSocketReady)
-            .expect("Failed to notify TCP socket ready");
+        self.notify_tcp_socket_ready();
         trace!("TcpStream::poll_write: (proxy)write {n} bytes to send buffer");
 
         Poll::Ready(Ok(n))
@@ -164,9 +164,7 @@ impl tokio::io::AsyncWrite for TcpStream {
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        self.stack_notifier
-            .send(IfaceEvent::TcpSocketReady)
-            .expect("Failed to notify TCP socket ready");
+        self.notify_tcp_socket_ready();
         Poll::Ready(Ok(()))
     }
 
@@ -247,5 +245,16 @@ mod tests {
         assert!(
             matches!(result, Poll::Ready(Err(err)) if err.kind() == ErrorKind::BrokenPipe)
         );
+    }
+
+    #[test]
+    fn poll_flush_still_succeeds_when_notifier_closed() {
+        let (mut stream, rx) = build_stream();
+        drop(rx);
+        let mut cx = noop_cx();
+
+        let result = Pin::new(&mut stream).poll_flush(&mut cx);
+
+        assert!(matches!(result, Poll::Ready(Ok(()))));
     }
 }

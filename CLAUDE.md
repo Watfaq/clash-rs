@@ -146,3 +146,7 @@ Main configuration sections:
 - `rules` - Traffic routing rules
 - `proxies` - Outbound proxy definitions
 - `proxy-groups` - Proxy group configurations
+
+## Git Workflow
+
+**Never commit or push directly to `master`** — always create a PR branch and open a pull request.
