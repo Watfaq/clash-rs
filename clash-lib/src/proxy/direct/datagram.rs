@@ -164,7 +164,23 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             }
         };
 
-        let n = ready!(inner.poll_send_to(cx, p.data.as_slice(), dst))?;
+        // When sending from a dual-stack AF_INET6 socket, the OS requires IPv4
+        // destinations to be expressed as IPv4-mapped IPv6 addresses
+        // (::ffff:x.x.x.x). Tokio's poll_send_to does not do this automatically
+        // and will return EINVAL otherwise.
+        let send_dst = match (inner.local_addr()?.is_ipv6(), dst) {
+            (true, SocketAddr::V4(v4)) => {
+                SocketAddr::V6(std::net::SocketAddrV6::new(
+                    v4.ip().to_ipv6_mapped(),
+                    v4.port(),
+                    0,
+                    0,
+                ))
+            }
+            _ => dst,
+        };
+
+        let n = ready!(inner.poll_send_to(cx, p.data.as_slice(), send_dst))?;
 
         let now = Instant::now();
         ip_to_logical
@@ -211,6 +227,21 @@ impl Stream for OutboundDatagramImpl {
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
+                // On dual-stack (AF_INET6) sockets the OS returns IPv4
+                // sender addresses in IPv4-mapped form (::ffff:x.x.x.x).
+                // Canonicalize back to plain IPv4 so that ip_to_logical
+                // lookups succeed and the returned src_addr matches what the
+                // caller (e.g. a DNS client) expects.
+                let src = match src {
+                    SocketAddr::V6(v6) => {
+                        if let Some(v4) = v6.ip().to_ipv4_mapped() {
+                            SocketAddr::from((v4, v6.port()))
+                        } else {
+                            src
+                        }
+                    }
+                    _ => src,
+                };
                 let src_addr = ip_to_logical
                     .get(&src)
                     .map(|(logical, _)| logical.clone())

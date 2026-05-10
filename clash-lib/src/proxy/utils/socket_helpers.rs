@@ -1,12 +1,12 @@
 use super::platform::must_bind_socket_on_interface;
-use crate::{
-    app::{dns::ThreadSafeDNSResolver, net::OutboundInterface},
-    session::Session,
-};
+use crate::app::net::OutboundInterface;
 
 use futures::io;
 use socket2::TcpKeepalive;
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    time::Duration,
+};
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     time::timeout,
@@ -184,26 +184,6 @@ pub async fn new_udp_socket(
     UdpSocket::from_std(socket.into())
 }
 
-pub async fn family_hint_for_session(
-    sess: &Session,
-    resolver: &ThreadSafeDNSResolver,
-) -> Option<std::net::SocketAddr> {
-    if let Some(resolved_ip) = sess.resolved_ip {
-        Some(SocketAddr::new(resolved_ip, sess.destination.port()))
-    } else if let Some(host) = sess.destination.ip() {
-        Some(SocketAddr::new(host, sess.destination.port()))
-    } else {
-        let host = sess.destination.host();
-        resolver
-            .resolve_v6(&host, false)
-            .await
-            .map(|ip| {
-                ip.map(|ip| SocketAddr::new(ip.into(), sess.destination.port()))
-            })
-            .ok()?
-    }
-}
-
 /// Convert ipv6 mapped ipv4 address back to ipv4. Other address remain
 /// unchanged. e.g. ::ffff:127.0.0.1 -> 127.0.0.1
 pub trait ToCanonical {
@@ -241,6 +221,50 @@ pub fn try_create_dualstack_socket(
         }
     };
     Ok((socket, dualstack))
+}
+
+/// Create a dual-stack UDP socket bound to `[::]`, falling back to an IPv4
+/// socket bound to `0.0.0.0` if IPv6 is unavailable.  The resulting socket
+/// can send to both IPv4 and IPv6 destinations without EAFNOSUPPORT, which
+/// is required when one outbound socket is reused across destinations with
+/// different address families (e.g. in the DIRECT handler).
+pub fn new_dual_stack_udp_socket(
+    iface: Option<&OutboundInterface>,
+    #[cfg(target_os = "linux")] so_mark: Option<u32>,
+) -> std::io::Result<UdpSocket> {
+    let dual_stack = SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0));
+    let ipv4_only = SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0));
+
+    let (socket, bind_addr) =
+        match try_create_dualstack_socket(dual_stack, socket2::Type::DGRAM) {
+            Ok((s, true)) => (s, dual_stack),
+            Ok((_, false)) | Err(_) => (
+                socket2::Socket::new(
+                    socket2::Domain::IPV4,
+                    socket2::Type::DGRAM,
+                    None,
+                )?,
+                ipv4_only,
+            ),
+        };
+
+    if let Some(iface) = iface {
+        let family = socket2::Domain::for_address(bind_addr);
+        must_bind_socket_on_interface(&socket, iface, family).inspect_err(|x| {
+            error!("failed to bind socket to interface: {}", x);
+        })?;
+    } else {
+        socket.bind(&bind_addr.into())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some(so_mark) = so_mark {
+        socket.set_mark(so_mark)?;
+    }
+
+    socket.set_broadcast(true)?;
+    socket.set_nonblocking(true)?;
+    UdpSocket::from_std(socket.into())
 }
 
 pub fn try_create_dualstack_tcplistener(
