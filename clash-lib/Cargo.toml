@@ -33,7 +33,7 @@ ring = [
 shadowsocks = ["dep:shadowsocks", "dep:blake3"]
 tuic = ["dep:tuic-core", "dep:register-count", "dep:tuic-quinn"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
-onion = ["dep:arti-client", "dep:tor-rtcompat", "dep:tor-rtcompat-compat", "arti-client/onion-service-client"]
+onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
 tailscale = ["dep:tailscale"]
@@ -179,9 +179,9 @@ maxminddb = "0.28"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+arti-client = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
 tor-rtcompat = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls"] }
-tor-rtcompat-compat = { package = "tor-rtcompat", version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls"] }
+
 
 # tuic
 tuic-core= { tag = "v1.8.1", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
