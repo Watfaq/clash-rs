@@ -4275,6 +4275,7 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de99ad8adc878ee0e68509ad256152ce23b8bbe45f5539d04e179630aca40a9"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "derive_more",
  "enum-assoc",
@@ -6634,6 +6635,7 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e3f04d716273d25e4923541e625e0084256f72cad7e2e7e50a0e0926aa739f"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "getrandom 0.3.4",
  "lru-slab",
@@ -6858,6 +6860,7 @@ version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57f6d249aad744e274e682777a50283a225a32705394ee6d5fcc01efa25e4055"
 dependencies = [
+ "aws-lc-rs",
  "pem",
  "ring",
  "rustls-pki-types",
@@ -7416,6 +7419,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68483c81131e4f08f8d565632f8b9fec9f71e86f422648175ba03bbd84ea8228"
 dependencies = [
  "aes-gcm 0.10.3",
+ "aws-lc-rs",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -8119,11 +8123,12 @@ dependencies = [
 [[package]]
 name = "shadowquic"
 version = "0.3.4"
-source = "git+https://github.com/spongebob888/shadowquic.git?rev=277f47a59607a91d11bcb4ae98309a320617d4b2#277f47a59607a91d11bcb4ae98309a320617d4b2"
+source = "git+https://github.com/ibigbug/shadowquic.git?rev=a910118d5e3ab53e19e2b11347c5abaa93347ce6#a910118d5e3ab53e19e2b11347c5abaa93347ce6"
 dependencies = [
  "anyhow",
  "arc-swap",
  "async-trait",
+ "aws-lc-rs",
  "brutal-core",
  "bytes",
  "clap",
@@ -8155,7 +8160,7 @@ dependencies = [
 [[package]]
 name = "shadowquic-macros"
 version = "0.3.4"
-source = "git+https://github.com/spongebob888/shadowquic.git?rev=277f47a59607a91d11bcb4ae98309a320617d4b2#277f47a59607a91d11bcb4ae98309a320617d4b2"
+source = "git+https://github.com/ibigbug/shadowquic.git?rev=a910118d5e3ab53e19e2b11347c5abaa93347ce6#a910118d5e3ab53e19e2b11347c5abaa93347ce6"
 dependencies = [
  "crabtime",
  "proc-macro2",
@@ -11525,7 +11530,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",
@@ -12178,6 +12183,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d43b0f71ce057da06bc0851b23ee24f3f86190b07203dd8f567d0b706a185202"
 dependencies = [
  "asn1-rs",
+ "aws-lc-rs",
  "data-encoding",
  "der-parser",
  "lazy_static",
