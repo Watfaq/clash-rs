@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::{FutureExt, SinkExt, StreamExt, future::BoxFuture};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::{
@@ -304,6 +304,20 @@ impl Runner for TunRunner {
                     match pkt {
                         Ok(pkt) => {
                             if let Err(e) = tun_sink.send(pkt.into_bytes()).await {
+                                // TimedOut means the Wintun/TUN send ring buffer
+                                // was full for too long (driver backpressure). Drop
+                                // the packet and keep the runner alive — packet loss
+                                // is normal at the IP layer; TCP will retransmit and
+                                // UDP is inherently best-effort.
+                                if e.kind() == std::io::ErrorKind::TimedOut
+                                    || e.kind() == std::io::ErrorKind::WouldBlock
+                                {
+                                    warn!(
+                                        "tun send buffer full, dropping packet: {}",
+                                        e
+                                    );
+                                    continue;
+                                }
                                 error!("failed to send pkt to tun: {}", e);
                                 break;
                             }

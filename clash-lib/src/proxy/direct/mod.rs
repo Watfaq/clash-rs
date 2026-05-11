@@ -15,7 +15,7 @@ use crate::{
     proxy::{
         OutboundHandler,
         direct::datagram::OutboundDatagramImpl,
-        utils::{family_hint_for_session, new_tcp_stream, new_udp_socket},
+        utils::{new_dual_stack_udp_socket, new_tcp_stream},
     },
     session::Session,
 };
@@ -93,23 +93,17 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let family_hint = family_hint_for_session(sess, &resolver).await;
-        let bind_addr: std::net::IpAddr = if sess.source.is_ipv4() {
-            std::net::Ipv4Addr::UNSPECIFIED.into()
-        } else {
-            std::net::Ipv6Addr::UNSPECIFIED.into()
-        };
-        let d = new_udp_socket(
-            Some((bind_addr, 0).into()),
+        // The outbound socket is shared across ALL destinations from the same
+        // client (keyed by src_addr only in the dispatcher). Use a dual-stack
+        // socket so one socket can send to both IPv4 and IPv6 destinations
+        // without EAFNOSUPPORT.
+        let udp = new_dual_stack_udp_socket(
             sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
-            family_hint,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
-
-        let d = ChainedDatagramWrapper::new(d);
+        )?;
+        let d =
+            ChainedDatagramWrapper::new(OutboundDatagramImpl::new(udp, resolver));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

@@ -44,6 +44,3 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docker_test)', 'cfg(throug
 [workspace.lints.clippy]
 redundant_clone = "deny"
 needless_collect = "deny"
-
-[patch.crates-io]
-shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust", rev = "dee2d932dc580e0e1b7a5a591ff5f8c51f70495e" }
