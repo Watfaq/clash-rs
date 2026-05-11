@@ -20,7 +20,7 @@ use tracing::debug;
 
 use crate::proxy::AnyStream;
 
-pub type RealityTlsStream = tokio_watfaq_rustls::client::TlsStream<AnyStream>;
+pub type RealityTlsStream = tokio_rustls::client::TlsStream<AnyStream>;
 
 /// Options passed to `VisionStream` when XTLS-splice mode is active.
 ///
