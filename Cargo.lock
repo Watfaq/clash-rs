@@ -746,6 +746,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-vec"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1397,7 +1406,7 @@ dependencies = [
  "sock2proc",
  "socket2 0.6.3",
  "ssh-key",
- "sysinfo 0.39.0",
+ "sysinfo 0.39.1",
  "tailscale",
  "tar",
  "tempfile",
@@ -5221,9 +5230,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.2"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags 2.11.1",
  "cfg-if",
@@ -6955,9 +6964,9 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.14.7"
+version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10b99e0098aa4082912d4c649628623db6aba77335e4f4569ff5083a6448b32e"
+checksum = "57f6d249aad744e274e682777a50283a225a32705394ee6d5fcc01efa25e4055"
 dependencies = [
  "pem",
  "ring",
@@ -7373,7 +7382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36140e8a20297bc2e8338807c3d9ca911f7fa49d7539cbcd6d48d3befd70efd8"
 dependencies = [
  "log",
- "nix 0.31.2",
+ "nix 0.31.3",
  "ssh-encoding",
  "windows-sys 0.61.2",
 ]
@@ -7505,7 +7514,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "subtle",
  "zeroize",
 ]
@@ -7520,7 +7529,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "subtle",
  "zeroize",
 ]
@@ -7570,7 +7579,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
@@ -7582,18 +7591,6 @@ name = "rustls-platform-verifier-android"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
-dependencies = [
- "aws-lc-rs",
- "ring",
- "rustls-pki-types",
- "untrusted 0.9.0",
-]
 
 [[package]]
 name = "rustls-webpki"
@@ -8882,9 +8879,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.39.0"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd9f9fe3d2b7b75cf4f2805e5b9926e8ac47146667b16b86298c4a8bf08cc469"
+checksum = "a4deba334e1190ba7cb498327affa11e5ece10d26a30ab2f27fcf09504b8d8b6"
 dependencies = [
  "libc",
  "memchr",
@@ -9260,7 +9257,7 @@ dependencies = [
 [[package]]
 name = "tokio-watfaq-rustls"
 version = "0.26.0"
-source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8#cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=d05361bc0ff7e659cbdc5658e6929ca59aed8559#d05361bc0ff7e659cbdc5658e6929ca59aed8559"
 dependencies = [
  "rustls-pki-types",
  "tokio",
@@ -10349,7 +10346,7 @@ dependencies = [
  "pin-project",
  "rustls",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
@@ -11150,7 +11147,7 @@ dependencies = [
  "libloading 0.9.0",
  "log",
  "netconfig-rs",
- "nix 0.31.2",
+ "nix 0.31.3",
  "route_manager",
  "scopeguard",
  "tokio",
@@ -11671,17 +11668,16 @@ dependencies = [
 
 [[package]]
 name = "watfaq-rustls"
-version = "0.23.21"
-source = "git+https://github.com/Watfaq/rustls.git?rev=c3ab043d673029d245fd618b9bc86fd6a6109bae#c3ab043d673029d245fd618b9bc86fd6a6109bae"
+version = "0.23.40"
+source = "git+https://github.com/Watfaq/rustls.git?rev=0828f676ac355efe0f335055413f3704d1fe495c#0828f676ac355efe0f335055413f3704d1fe495c"
 dependencies = [
  "aws-lc-rs",
  "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "subtle",
- "x25519-dalek 2.0.1",
  "zeroize",
 ]
 
@@ -12352,10 +12348,11 @@ dependencies = [
 
 [[package]]
 name = "yasna"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
+checksum = "b5f6765e852b9b4dc8e2a76843e4d64d1cea8e79bcde0b6901aea8e7c7f08282"
 dependencies = [
+ "bit-vec",
  "time",
 ]
 
