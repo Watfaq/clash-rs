@@ -4,7 +4,7 @@ use anyhow;
 use bollard::{
     API_DEFAULT_VERSION, Docker, body_full,
     config::ContainerInspectResponse,
-    models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
+    models::{ContainerCreateBody, HostConfig, Mount, MountType, PortBinding},
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
         LogsOptions, RemoveContainerOptions, StartContainerOptions,
@@ -640,7 +640,7 @@ impl DockerTestRunnerBuilder {
                 .map(|(src, dst)| Mount {
                     target: Some(dst.to_string()),
                     source: Some(src.to_string()),
-                    typ: Some(MountTypeEnum::BIND),
+                    typ: Some(MountType::BIND),
                     read_only: Some(false),
                     ..Default::default()
                 })
