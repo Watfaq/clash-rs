@@ -385,7 +385,7 @@ mod tests {
     use hickory_net::{
         client::{Client, ClientHandle},
         h2::{HttpsClientStream, HttpsClientStreamBuilder},
-        h3::H3ClientStreamBuilder,
+        h3::{H3ClientStream, H3ClientStreamBuilder},
         runtime::TokioRuntimeProvider,
         tcp::TcpClientStream,
         tls::tls_client_connect,
@@ -423,9 +423,9 @@ mod tests {
             }
         };
 
-        let answers = response.answers();
+        let answers = &response.answers;
 
-        if let RData::A(ip) = answers[0].data() {
+        if let RData::A(ip) = &answers[0].data {
             assert_eq!(ip.0, std::net::Ipv4Addr::new(93, 184, 215, 14))
         } else {
             unreachable!("unexpected result")
@@ -597,7 +597,7 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let stream = H3ClientStreamBuilder::builder()
+        let stream = H3ClientStream::builder()
             .crypto_config(tls_config)
             .build(doh3_addr, "dns.example.com".into(), "/dns-query".into())
             .await?;

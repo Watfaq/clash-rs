@@ -736,7 +736,7 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_net::{client, udp::UdpClientStream};
+    use hickory_net::{DnsHandle, client, udp::UdpClientStream, xfer::FirstAnswer};
     use hickory_proto::{
         op::{self, DnsRequest, DnsRequestOptions},
         rr,
