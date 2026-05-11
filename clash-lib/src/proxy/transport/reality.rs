@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
-use watfaq_rustls::{
+use rustls::{
     ClientConfig, RootCertStore, client::RealityConfig, pki_types::ServerName,
 };
+use tokio_rustls::{TlsConnector, client::TlsStream};
 
 use std::{
     io,

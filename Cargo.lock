@@ -1417,7 +1417,6 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",
- "tokio-watfaq-rustls",
  "tor-rtcompat",
  "totp-rs",
  "tower",
@@ -1437,7 +1436,6 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-netstack",
- "watfaq-rustls",
  "webpki-roots",
  "windows 0.62.2",
  "zip",
@@ -7506,8 +7504,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.40"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
+source = "git+https://github.com/Watfaq/rustls.git?branch=watfaq%2F0.23.40#8211697ce28686d72c92c2fc4b440b7ffc9a3ee3"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -9180,8 +9177,7 @@ dependencies = [
 [[package]]
 name = "tokio-rustls"
 version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?branch=watfaq%2F0.26.4#b26e3e2b7a0161d505fd12d6e545b16463f1a45f"
 dependencies = [
  "rustls",
  "tokio",
@@ -9252,16 +9248,6 @@ dependencies = [
  "pin-project-lite",
  "slab",
  "tokio",
-]
-
-[[package]]
-name = "tokio-watfaq-rustls"
-version = "0.26.0"
-source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=d05361bc0ff7e659cbdc5658e6929ca59aed8559#d05361bc0ff7e659cbdc5658e6929ca59aed8559"
-dependencies = [
- "rustls-pki-types",
- "tokio",
- "watfaq-rustls",
 ]
 
 [[package]]
@@ -11664,21 +11650,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tun-rs",
-]
-
-[[package]]
-name = "watfaq-rustls"
-version = "0.23.40"
-source = "git+https://github.com/Watfaq/rustls.git?rev=0828f676ac355efe0f335055413f3704d1fe495c#0828f676ac355efe0f335055413f3704d1fe495c"
-dependencies = [
- "aws-lc-rs",
- "log",
- "once_cell",
- "ring",
- "rustls-pki-types",
- "rustls-webpki",
- "subtle",
- "zeroize",
 ]
 
 [[package]]

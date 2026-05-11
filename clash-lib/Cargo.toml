@@ -10,23 +10,21 @@ default = ["zero_copy", "aws-lc-rs", "dashboard"]
 aws-lc-rs = [
     "dep:aws-lc-rs",
     "rustls/aws-lc-rs",
-    "watfaq-rustls/aws-lc-rs",
     "quinn-proto/rustls-aws-lc-rs",
-    "watfaq-dns/aws-lc-rs",
     "russh/aws-lc-rs",
     "boringtun/aws-lc-rs",
     "hickory-client/https-aws-lc-rs",
     "tuic-quinn?/rustls-aws-lc-rs",
+    "watfaq-dns/aws-lc-rs",
 ]
 ring = [
     "rustls/ring",
-    "watfaq-rustls/ring",
     "quinn-proto/ring",
-    "watfaq-dns/ring",
     "russh/ring",
     "boringtun/ring",
     "hickory-client/https-ring",
     "tuic-quinn?/rustls-ring",
+    "watfaq-dns/ring",
 ]
 
 # Protos
@@ -74,10 +72,6 @@ rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2"
 rcgen = { version = "0.14", features = ["pem"] }
 webpki-roots = "1.0"
-
-# shadow-tls
-tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "d05361bc0ff7e659cbdc5658e6929ca59aed8559", default-features = false, features = ["logging", "tls12"] }
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "0828f676ac355efe0f335055413f3704d1fe495c", default-features = false }
 
 # Error handing & logging
 thiserror = "2"
