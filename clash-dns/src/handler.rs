@@ -18,10 +18,6 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     zone_handler::MessageResponseBuilder,
 };
-#[cfg(feature = "aws-lc-rs")]
-use rustls::crypto::aws_lc_rs::sign::any_supported_type;
-#[cfg(all(not(feature = "aws-lc-rs"), feature = "ring"))]
-use rustls::crypto::ring::sign::any_supported_type;
 use rustls::{server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey};
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
@@ -36,7 +32,14 @@ struct CertificateKeyPair {
 impl From<CertificateKeyPair> for Arc<dyn rustls::server::ResolvesServerCert> {
     fn from(pair: CertificateKeyPair) -> Self {
         Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
-            CertifiedKey::new(pair.certs, any_supported_type(&pair.key).unwrap()),
+            CertifiedKey::new(
+                pair.certs,
+                rustls::crypto::CryptoProvider::get_default()
+                    .expect("no default crypto provider installed")
+                    .key_provider
+                    .load_private_key(pair.key)
+                    .expect("unsupported private key type"),
+            ),
         )))
     }
 }
