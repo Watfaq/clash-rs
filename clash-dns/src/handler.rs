@@ -386,14 +386,12 @@ mod tests {
         client::{Client, ClientHandle},
         h2::{HttpsClientStream, HttpsClientStreamBuilder},
         h3::H3ClientStreamBuilder,
+        runtime::TokioRuntimeProvider,
         tcp::TcpClientStream,
         tls::tls_client_connect,
         udp::UdpClientStream,
     };
-    use hickory_proto::{
-        rr::{DNSClass, Name, RData, RecordType, rdata::A},
-        runtime::TokioRuntimeProvider,
-    };
+    use hickory_proto::rr::{DNSClass, Name, RData, RecordType, rdata::A};
     use rustls::{ClientConfig, pki_types::ServerName};
     use std::{sync::Arc, time::Duration};
     use tokio::{
@@ -428,7 +426,7 @@ mod tests {
         let answers = response.answers();
 
         if let RData::A(ip) = answers[0].data() {
-            assert_eq!(*ip, A::new(93, 184, 215, 14))
+            assert_eq!(ip.0, std::net::Ipv4Addr::new(93, 184, 215, 14))
         } else {
             unreachable!("unexpected result")
         }

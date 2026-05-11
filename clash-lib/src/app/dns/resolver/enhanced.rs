@@ -871,19 +871,18 @@ mod tests {
         q.set_name(name);
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
             DnsRuntimeProvider::new_direct(None, None),
         )
         .build();
-        let (client, bg) = client::Client::connect(stream).await.unwrap();
-
+        let (client, bg) = client::Client::<DnsRuntimeProvider>::from_sender(stream);
         tokio::spawn(bg);
 
         let mut req = DnsRequest::new(m, DnsRequestOptions::default());
-        req.set_id(rand::random::<u16>());
+        req.metadata.id = rand::random::<u16>();
         let res = client.send(req).first_answer().await;
         assert!(res.is_ok());
     }
