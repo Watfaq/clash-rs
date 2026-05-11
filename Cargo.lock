@@ -1351,7 +1351,7 @@ dependencies = [
  "h3-quinn",
  "hex",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "hickory-resolver",
  "hmac 0.13.0",
  "http",
@@ -2341,11 +2341,10 @@ dependencies = [
 [[package]]
 name = "dhcproto"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "425ab19f6a915beac79cac8ec2810c1311b502ae14d7f294682081cf5ae4c5bb"
+source = "git+https://github.com/bluecatengineering/dhcproto?rev=eece41c9a13b0e4912fb9a8f08401ab01b4123d4#eece41c9a13b0e4912fb9a8f08401ab01b4123d4"
 dependencies = [
  "dhcproto-macros",
- "hickory-proto 0.25.2",
+ "hickory-proto",
  "ipnet",
  "rand 0.9.4",
  "thiserror 2.0.18",
@@ -2354,8 +2353,7 @@ dependencies = [
 [[package]]
 name = "dhcproto-macros"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3944d18b1889ce23702b0ea0230e87033cf5b4659e233419b5c00da3983a387b"
+source = "git+https://github.com/bluecatengineering/dhcproto?rev=eece41c9a13b0e4912fb9a8f08401ab01b4123d4#eece41c9a13b0e4912fb9a8f08401ab01b4123d4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3536,7 +3534,7 @@ dependencies = [
  "h2",
  "h3",
  "h3-quinn",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "http",
  "idna",
  "ipnet",
@@ -3549,28 +3547,6 @@ dependencies = [
  "tinyvec",
  "tokio",
  "tokio-rustls",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "hickory-proto"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
-dependencies = [
- "async-trait",
- "cfg-if",
- "data-encoding",
- "enum-as-inner",
- "futures-channel",
- "futures-util",
- "idna",
- "ipnet",
- "once_cell",
- "rand 0.9.4",
- "thiserror 2.0.18",
- "tinyvec",
  "tracing",
  "url",
 ]
@@ -3609,7 +3585,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "ipconfig",
  "ipnet",
  "jni",
@@ -3645,7 +3621,7 @@ dependencies = [
  "h3",
  "h3-quinn",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "hickory-resolver",
  "http",
  "ipnet",
@@ -11535,7 +11511,7 @@ dependencies = [
  "env_logger",
  "futures",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "hickory-server",
  "mockall",
  "rustls",
