@@ -736,14 +736,11 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::{
-        client,
-        proto::{
-            udp::UdpClientStream,
-            xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
-        },
+    use hickory_net::{client, udp::UdpClientStream};
+    use hickory_proto::{
+        op::{self, DnsRequest, DnsRequestOptions},
+        rr,
     };
-    use hickory_proto::{op, rr};
     use std::{net::Ipv4Addr, sync::Arc, time::Instant};
 
     use crate::{
@@ -860,10 +857,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
-        // Use hickory_client::proto (0.25) types throughout so DnsRequest::new
-        // gets a compatible Message. TODO: remove shadowing once hickory-client
-        // 0.26.0 stable ships and aligns with hickory-proto 0.26.
-        use hickory_client::proto::{op, rr};
+        use hickory_net::proto::{op, rr};
 
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
@@ -871,7 +865,7 @@ mod tests {
             .unwrap();
         assert_eq!(name.to_string(), "some_domain.understore.");
 
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
 
         q.set_name(name);

@@ -16,11 +16,10 @@ use crate::{
     session::{Network, Session, Type},
 };
 use futures::{SinkExt, StreamExt};
-use hickory_client::proto::{
-    runtime::{
-        RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd,
-    },
-    udp::DnsUdpSocket,
+
+use hickory_net::runtime::{
+    DnsUdpSocket, RuntimeProvider, TokioHandle, TokioTime,
+    iocompat::AsyncIoTokioAsStd,
 };
 use tokio::sync::Mutex;
 

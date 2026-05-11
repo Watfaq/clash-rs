@@ -379,26 +379,28 @@ mod tests {
         tls::{self, global_root_store},
     };
     use futures::FutureExt;
-    use hickory_client::{
+    use hickory_net::{
         client::{Client, ClientHandle},
-        proto::{
-            h2::HttpsClientStreamBuilder,
-            h3::H3ClientStreamBuilder,
-            rr::{DNSClass, Name, RData, RecordType, rdata::A},
-            runtime::TokioRuntimeProvider,
-            rustls::tls_client_connect,
-            tcp::TcpClientStream,
-            udp::UdpClientStream,
-        },
+        h2::{HttpsClientStream, HttpsClientStreamBuilder},
+        h3::H3ClientStreamBuilder,
+        tcp::TcpClientStream,
+        tls::tls_client_connect,
+        udp::UdpClientStream,
     };
-    use rustls::ClientConfig;
+    use hickory_proto::{
+        rr::{DNSClass, Name, RData, RecordType, rdata::A},
+        runtime::TokioRuntimeProvider,
+    };
+    use rustls::{ClientConfig, pki_types::ServerName};
     use std::{sync::Arc, time::Duration};
     use tokio::{
         net::{TcpListener, UdpSocket},
         task::JoinHandle,
     };
 
-    async fn send_query(client: &mut Client) -> anyhow::Result<()> {
+    async fn send_query(
+        client: &mut Client<TokioRuntimeProvider>,
+    ) -> anyhow::Result<()> {
         let name = Name::from_ascii("www.example.com.").unwrap();
 
         let mut retries = 3;
@@ -523,16 +525,16 @@ mod tests {
         let stream =
             UdpClientStream::builder(udp_addr, TokioRuntimeProvider::new()).build();
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
-        let (stream, sender) =
+        let (stream_future, sender) =
             TcpClientStream::new(tcp_addr, None, None, TokioRuntimeProvider::new());
-
-        let (mut client, handle) = Client::new(stream, sender, None).await?;
-        tokio::spawn(handle);
+        let stream = stream_future.await?;
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::new(stream, sender);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -544,20 +546,23 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let (stream, sender) = tls_client_connect(
+        let server_name = ServerName::try_from("dns.example.com").unwrap();
+        let (stream_future, sender) = tls_client_connect(
             dot_addr,
-            "dns.example.com".to_owned(),
+            server_name,
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         );
 
-        let (mut client, handle) =
-            Client::with_timeout(stream, sender, Duration::from_secs(5), None)
-                .await
-                .inspect_err(|e| {
-                    assert!(false, "Failed to connect to DoT server: {}", e);
-                })?;
-        tokio::spawn(handle);
+        let stream = stream_future.await.inspect_err(|e| {
+            assert!(false, "Failed to connect to DoT server: {}", e);
+        })?;
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::with_timeout(
+            stream,
+            sender,
+            Duration::from_secs(5),
+        );
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -570,18 +575,15 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let stream = HttpsClientStreamBuilder::with_client_config(
+        let stream = HttpsClientStream::builder(
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         )
-        .build(
-            doh_addr,
-            "dns.example.com".to_owned(),
-            "/dns-query".to_owned(),
-        );
+        .build(doh_addr, "dns.example.com".into(), "/dns-query".into())
+        .await?;
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -594,17 +596,13 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let stream = H3ClientStreamBuilder::default()
+        let stream = H3ClientStreamBuilder::builder()
             .crypto_config(tls_config)
-            .clone()
-            .build(
-                doh3_addr,
-                "dns.example.com".to_owned(),
-                "/dns-query".to_owned(),
-            );
+            .build(doh3_addr, "dns.example.com".into(), "/dns-query".into())
+            .await?;
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
         Ok(())
