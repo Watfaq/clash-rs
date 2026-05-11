@@ -13,7 +13,7 @@ aws-lc-rs = [
     "quinn-proto/rustls-aws-lc-rs",
     "russh/aws-lc-rs",
     "boringtun/aws-lc-rs",
-    "hickory-client/https-aws-lc-rs",
+    "hickory-net/https-aws-lc-rs",
     "tuic-quinn?/rustls-aws-lc-rs",
     "watfaq-dns/aws-lc-rs",
 ]
@@ -22,7 +22,7 @@ ring = [
     "quinn-proto/ring",
     "russh/ring",
     "boringtun/ring",
-    "hickory-client/https-ring",
+    "hickory-net/https-ring",
     "tuic-quinn?/rustls-ring",
     "watfaq-dns/ring",
 ]
@@ -158,11 +158,11 @@ educe = "0.6"
 
 # DNS
 watfaq-dns = { path = "../clash-dns", default-features = false }
-hickory-client = { version = "0.25", default-features = false }
+hickory-net = { version = "0.26", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 hickory-proto = { version = "0.26", default-features = false }
 
-dhcproto = "0.14"
+dhcproto = { git = "https://github.com/bluecatengineering/dhcproto", rev = "eece41c9a13b0e4912fb9a8f08401ab01b4123d4" }
 ssh-key = { version = "0.6", features = ["std"] }
 
 rand = "0.10"

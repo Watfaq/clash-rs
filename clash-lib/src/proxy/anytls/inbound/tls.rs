@@ -115,10 +115,7 @@ mod tests {
     use super::*;
 
     fn install_crypto_provider() {
-        #[cfg(feature = "aws-lc-rs")]
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::setup_default_crypto_provider();
     }
 
     #[test]
