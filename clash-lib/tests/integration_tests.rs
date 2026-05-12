@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use clash_lib::{Config, Options};
-use common::{Socks5UdpSession, start_clash, wait_port_ready};
+use common::{ClashInstance, Socks5UdpSession, start_clash, wait_port_ready};
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -133,33 +133,35 @@ async fn integration_test_anytls() {
         client_config.to_string_lossy()
     );
 
-    std::thread::spawn(move || {
-        start_clash(Options {
+    // Use ClashInstance so server/client are properly shut down when the test
+    // ends, releasing ports 8902/9092 and 8998/9095 for subsequent tests.
+    let _server = ClashInstance::start(
+        Options {
             config: Config::File(server_config.to_string_lossy().to_string()),
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
-        })
-        .expect("Failed to start AnyTLS server");
-    });
+        },
+        vec![8902, 9092],
+    )
+    .expect("Failed to start AnyTLS server");
 
-    std::thread::spawn(move || {
-        start_clash(Options {
+    let _client = ClashInstance::start(
+        Options {
             config: Config::File(client_config.to_string_lossy().to_string()),
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
-        })
-        .expect("Failed to start AnyTLS client");
-    });
+        },
+        vec![8998, 9095],
+    )
+    .expect("Failed to start AnyTLS client");
 
     let mock_server = httpmock::MockServer::start();
     let mock = mock_server.mock(|when, then| {
         when.method(httpmock::Method::GET).path("/");
         then.status(200).body("Mock response for AnyTLS testing");
     });
-
-    wait_port_ready(8998).expect("AnyTLS proxy port is not ready");
 
     let proxy = reqwest::Proxy::all("socks5://127.0.0.1:8998")
         .expect("Failed to create proxy");
@@ -216,27 +218,29 @@ async fn integration_test_anytls_udp() {
     });
 
     // ── Start clash server and client ─────────────────────────────────────────
-    std::thread::spawn(move || {
-        start_clash(Options {
+    // Use ClashInstance so server/client are properly shut down when the test
+    // ends, releasing ports 8902/9092 and 8998/9095 for subsequent tests.
+    let _server = ClashInstance::start(
+        Options {
             config: Config::File(server_config.to_string_lossy().to_string()),
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
-        })
-        .expect("Failed to start AnyTLS server");
-    });
+        },
+        vec![8902, 9092],
+    )
+    .expect("Failed to start AnyTLS server");
 
-    std::thread::spawn(move || {
-        start_clash(Options {
+    let _client = ClashInstance::start(
+        Options {
             config: Config::File(client_config.to_string_lossy().to_string()),
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
-        })
-        .expect("Failed to start AnyTLS client");
-    });
-
-    wait_port_ready(8998).expect("AnyTLS proxy port is not ready");
+        },
+        vec![8998, 9095],
+    )
+    .expect("Failed to start AnyTLS client");
 
     // ── SOCKS5 UDP ASSOCIATE handshake ────────────────────────────────────────
     let mut tcp = tokio::net::TcpStream::connect("127.0.0.1:8998")

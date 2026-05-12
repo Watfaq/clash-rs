@@ -384,14 +384,14 @@ mod tests {
     use futures::FutureExt;
     use hickory_net::{
         client::{Client, ClientHandle},
-        h2::{HttpsClientStream, HttpsClientStreamBuilder},
-        h3::{H3ClientStream, H3ClientStreamBuilder},
+        h2::HttpsClientStream,
+        h3::H3ClientStream,
         runtime::TokioRuntimeProvider,
         tcp::TcpClientStream,
         tls::tls_client_connect,
         udp::UdpClientStream,
     };
-    use hickory_proto::rr::{DNSClass, Name, RData, RecordType, rdata::A};
+    use hickory_proto::rr::{DNSClass, Name, RData, RecordType};
     use rustls::{ClientConfig, pki_types::ServerName};
     use std::{sync::Arc, time::Duration};
     use tokio::{

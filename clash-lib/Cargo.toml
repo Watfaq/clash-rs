@@ -11,20 +11,26 @@ aws-lc-rs = [
     "dep:aws-lc-rs",
     "rustls/aws-lc-rs",
     "quinn-proto/rustls-aws-lc-rs",
+    "quinn/rustls-aws-lc-rs",
     "russh/aws-lc-rs",
     "boringtun/aws-lc-rs",
     "hickory-net/https-aws-lc-rs",
     "tuic-quinn?/rustls-aws-lc-rs",
     "watfaq-dns/aws-lc-rs",
+    "rcgen/aws_lc_rs",
+    "shadowquic?/aws-lc-rs",
 ]
 ring = [
     "rustls/ring",
     "quinn-proto/ring",
+    "quinn/rustls-ring",
     "russh/ring",
     "boringtun/ring",
     "hickory-net/https-ring",
     "tuic-quinn?/rustls-ring",
     "watfaq-dns/ring",
+    "rcgen/ring",
+    "shadowquic?/ring",
 ]
 
 # Protos
@@ -32,7 +38,7 @@ shadowsocks = ["dep:shadowsocks", "dep:blake3"]
 tuic = ["dep:tuic-core", "dep:register-count", "dep:tuic-quinn"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
-shadowquic = ["dep:shadowquic"]
+shadowquic = ["dep:shadowquic", "shadowquic?/shadowquic-quinn", "shadowquic?/sunnyquic-iroh-quinn"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
 tailscale = ["dep:tailscale"]
 tproxy = [
@@ -70,7 +76,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["loggin
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2"] }
 rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2"
-rcgen = { version = "0.14", features = ["pem"] }
+rcgen = { version = "0.14", default-features = false, features = ["pem"] }
 webpki-roots = "1.0"
 
 # Error handing & logging
@@ -183,7 +189,7 @@ register-count = { version = "0.1", optional = true }
 # tuic-quinn gives tuic-specific quinn fork with rustls support (same fork as tuic-core uses internally)
 tuic-quinn = { package = "quinn", branch = "bbrv3", git = "https://github.com/Tipuch/quinn.git", optional = true, default-features = false, features = ["runtime-tokio"] }
 
-quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
+quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio"] }
 
 # hysteria2
 h3 = "0.0.8"
@@ -202,7 +208,7 @@ dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic
-shadowquic = { version = "0.3.4", optional = true, git = "https://github.com/spongebob888/shadowquic.git", rev = "277f47a59607a91d11bcb4ae98309a320617d4b2" }
+shadowquic = { version = "0.3.4", optional = true, default-features = false, git = "https://github.com/ibigbug/shadowquic.git", rev = "a910118d5e3ab53e19e2b11347c5abaa93347ce6" }
 
 # experimental
 downcast-rs = "2.0"
