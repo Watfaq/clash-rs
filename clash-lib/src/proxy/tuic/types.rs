@@ -52,9 +52,7 @@ impl TuicEndpoint {
                         iface.as_ref(),
                         #[cfg(target_os = "linux")]
                         None,
-                        self.server
-                            .ip
-                            .map(|ip| SocketAddr::new(ip, self.server.port)),
+                        Some(remote_addr),
                     )
                     .await?
                 };
