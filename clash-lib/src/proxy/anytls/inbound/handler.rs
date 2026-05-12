@@ -580,10 +580,7 @@ mod tests {
     use tokio_rustls::TlsConnector;
 
     fn install_crypto_provider() {
-        #[cfg(feature = "aws-lc-rs")]
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::setup_default_crypto_provider();
     }
 
     /// Tests the complete AnyTLS server-side handshake parsing over a real TLS
@@ -847,18 +844,10 @@ mod tests {
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            #[cfg(feature = "aws-lc-rs")]
-            {
-                rustls::crypto::aws_lc_rs::default_provider()
-                    .signature_verification_algorithms
-                    .supported_schemes()
-            }
-            #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
-            {
-                rustls::crypto::ring::default_provider()
-                    .signature_verification_algorithms
-                    .supported_schemes()
-            }
+            rustls::crypto::CryptoProvider::get_default()
+                .expect("no default crypto provider installed")
+                .signature_verification_algorithms
+                .supported_schemes()
         }
     }
 

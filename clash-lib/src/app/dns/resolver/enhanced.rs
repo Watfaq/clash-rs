@@ -736,14 +736,11 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::{
-        client,
-        proto::{
-            udp::UdpClientStream,
-            xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
-        },
+    use hickory_net::{DnsHandle, client, udp::UdpClientStream, xfer::FirstAnswer};
+    use hickory_proto::{
+        op::{self, DnsRequest, DnsRequestOptions},
+        rr,
     };
-    use hickory_proto::{op, rr};
     use std::{net::Ipv4Addr, sync::Arc, time::Instant};
 
     use crate::{
@@ -860,10 +857,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
-        // Use hickory_client::proto (0.25) types throughout so DnsRequest::new
-        // gets a compatible Message. TODO: remove shadowing once hickory-client
-        // 0.26.0 stable ships and aligns with hickory-proto 0.26.
-        use hickory_client::proto::{op, rr};
+        use hickory_net::proto::{op, rr};
 
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
@@ -871,25 +865,24 @@ mod tests {
             .unwrap();
         assert_eq!(name.to_string(), "some_domain.understore.");
 
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
 
         q.set_name(name);
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
             DnsRuntimeProvider::new_direct(None, None),
         )
         .build();
-        let (client, bg) = client::Client::connect(stream).await.unwrap();
-
+        let (client, bg) = client::Client::<DnsRuntimeProvider>::from_sender(stream);
         tokio::spawn(bg);
 
         let mut req = DnsRequest::new(m, DnsRequestOptions::default());
-        req.set_id(rand::random::<u16>());
+        req.metadata.id = rand::random::<u16>();
         let res = client.send(req).first_answer().await;
         assert!(res.is_ok());
     }
