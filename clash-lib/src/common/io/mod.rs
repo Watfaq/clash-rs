@@ -69,18 +69,6 @@ pub struct CopyBuffer {
 }
 
 impl CopyBuffer {
-    #[allow(unused)]
-    pub fn new() -> Self {
-        Self {
-            read_done: false,
-            need_flush: false,
-            pos: 0,
-            cap: 0,
-            amt: 0,
-            buf: vec![0; 2 * 1024].into_boxed_slice(),
-        }
-    }
-
     pub fn new_with_capacity(size: usize) -> Result<Self, std::io::Error> {
         let mut buf = Vec::new();
         buf.try_reserve(size)
@@ -153,26 +141,39 @@ impl CopyBuffer {
             }
 
             // If our buffer has some data, let's write it out!
+            //
+            // We track the position before the write loop so that we can
+            // reset the idle timer at most once per poll_copy invocation
+            // rather than once per partial-write chunk, avoiding redundant
+            // Sleep::reset() and Instant::now() calls on the hot path.
+            let pos_before_write = self.pos;
             while self.pos < self.cap {
                 let me = &mut *self;
-                let i =
-                    ready!(writer.as_mut().poll_write(cx, &me.buf[me.pos..me.cap]))?;
-                if i == 0 {
-                    return Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "write zero byte into writer",
-                    )));
-                } else {
-                    self.pos += i;
-                    self.amt += i as u64;
-                    self.need_flush = true;
-                    // Reset idle timeout on successful write
-                    if let (Some(timeout), Some(duration)) =
-                        (idle_timeout.as_mut(), idle_timeout_duration)
-                    {
-                        timeout
-                            .as_mut()
-                            .reset(tokio::time::Instant::now() + duration);
+                match writer.as_mut().poll_write(cx, &me.buf[me.pos..me.cap]) {
+                    Poll::Ready(Ok(0)) => {
+                        return Poll::Ready(Err(io::Error::new(
+                            io::ErrorKind::WriteZero,
+                            "write zero byte into writer",
+                        )));
+                    }
+                    Poll::Ready(Ok(i)) => {
+                        self.pos += i;
+                        self.amt += i as u64;
+                        self.need_flush = true;
+                    }
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Pending => {
+                        // If any bytes were written before the write stalled,
+                        // reset the idle timer once to keep the connection alive.
+                        if self.pos > pos_before_write
+                            && let (Some(timeout), Some(duration)) =
+                                (idle_timeout.as_mut(), idle_timeout_duration)
+                        {
+                            timeout
+                                .as_mut()
+                                .reset(tokio::time::Instant::now() + duration);
+                        }
+                        return Poll::Pending;
                     }
                 }
             }
@@ -184,6 +185,17 @@ impl CopyBuffer {
                 self.pos <= self.cap,
                 "writer returned length larger than input slice"
             );
+
+            // Reset the idle timer once after successfully draining the write
+            // buffer — at most one Sleep::reset() per poll_copy invocation.
+            if self.pos > pos_before_write
+                && let (Some(timeout), Some(duration)) =
+                    (idle_timeout.as_mut(), idle_timeout_duration)
+            {
+                timeout
+                    .as_mut()
+                    .reset(tokio::time::Instant::now() + duration);
+            }
 
             // If we've written all the data and we've seen EOF, flush out the
             // data and finish the transfer.

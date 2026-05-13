@@ -65,7 +65,7 @@ impl tower::Service<Uri> for Connector {
         let destination = maybe_socks_addr(&url);
         let fw_mark = self.fw_mark;
         async move {
-            let (left, right) = duplex(1024 * 1024);
+            let (left, right) = duplex(64 * 1024);
 
             let sess = Session {
                 network: Network::Tcp,
