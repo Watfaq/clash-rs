@@ -9,11 +9,23 @@ pub(crate) fn must_bind_socket_on_interface(
 ) -> io::Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
     {
-        use tracing::error;
         socket
             .bind_device(Some(iface.name.as_bytes()))
-            .inspect_err(|e| {
-                error!("failed to bind socket to interface {}: {e}", iface.name);
+            .or_else(|e| {
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::AddrNotAvailable | io::ErrorKind::NotFound
+                ) {
+                    tracing::warn!(
+                        "stale interface '{}' for bind_device, \
+                         falling back to default route: {e}",
+                        iface.name
+                    );
+                    Ok(())
+                } else {
+                    tracing::error!("failed to bind socket to interface {}: {e}", iface.name);
+                    Err(e)
+                }
             })
     }
     #[cfg(not(any(
