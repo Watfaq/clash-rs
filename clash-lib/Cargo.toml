@@ -148,7 +148,7 @@ rust-embed = { version = "8", optional = true }
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
 watfaq-netstack = { path = "../clash-netstack", optional = true }
-smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
+smoltcp = { version = "0.13", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true }
 
 # WireGuard
 boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "9ddf1b5", package = "boring-noise", optional = true, default-features = false }

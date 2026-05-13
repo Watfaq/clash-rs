@@ -1402,7 +1402,7 @@ dependencies = [
  "sha2 0.11.0",
  "shadowquic",
  "shadowsocks",
- "smoltcp 0.12.0 (git+https://github.com/smoltcp-rs/smoltcp.git?rev=ac32e64)",
+ "smoltcp 0.13.1",
  "sock2proc",
  "socket2 0.6.3",
  "ssh-key",
@@ -5086,7 +5086,7 @@ dependencies = [
  "etherparse 0.16.0",
  "futures",
  "rand 0.8.6",
- "smoltcp 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smoltcp 0.12.0",
  "spin 0.9.8",
  "tokio",
  "tokio-util",
@@ -8385,20 +8385,6 @@ dependencies = [
 
 [[package]]
 name = "smoltcp"
-version = "0.12.0"
-source = "git+https://github.com/smoltcp-rs/smoltcp.git?rev=ac32e64#ac32e643a4b7e09161193071526b3ca5a0deedb5"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "cfg-if",
- "defmt 0.3.100",
- "heapless 0.8.0",
- "log",
- "managed",
-]
-
-[[package]]
-name = "smoltcp"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f73d40463bba65efc9adc6370b56df76d563cc46e2482bba58351b4afb7535e"
@@ -8408,6 +8394,7 @@ dependencies = [
  "cfg-if",
  "defmt 0.3.100",
  "heapless 0.9.3",
+ "log",
  "managed",
 ]
 
@@ -11530,7 +11517,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",
@@ -11542,7 +11529,7 @@ dependencies = [
  "netstack-lwip",
  "netstack-smoltcp",
  "rand 0.10.1",
- "smoltcp 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smoltcp 0.13.1",
  "socket2 0.6.3",
  "tokio",
  "tracing",
