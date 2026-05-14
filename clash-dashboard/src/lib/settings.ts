@@ -1,5 +1,20 @@
 export const getApiUrl = () => localStorage.getItem('clash-api-url') || window.location.origin;
-// Secret is session-scoped (sessionStorage) — not persisted across browser restarts.
-export const getSecret = () => sessionStorage.getItem('clash-api-secret') || '';
+export const getSecret = () => {
+  const persisted = localStorage.getItem('clash-api-secret');
+  if (persisted !== null) {
+    return persisted;
+  }
+
+  const legacySessionSecret = sessionStorage.getItem('clash-api-secret');
+  if (legacySessionSecret !== null) {
+    localStorage.setItem('clash-api-secret', legacySessionSecret);
+    return legacySessionSecret;
+  }
+
+  return '';
+};
 export const setApiUrl = (url: string) => localStorage.setItem('clash-api-url', url);
-export const setSecret = (s: string) => sessionStorage.setItem('clash-api-secret', s);
+export const setSecret = (s: string) => {
+  localStorage.setItem('clash-api-secret', s);
+  sessionStorage.removeItem('clash-api-secret');
+};
