@@ -11,7 +11,7 @@ use crate::{
             ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
-        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::providers::proxy_provider::ArcProxyProvider,
     },
     common::errors::new_io_error,
     proxy::{
@@ -34,7 +34,7 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
-    providers: Vec<ThreadSafeProxyProvider>,
+    providers: Vec<ArcProxyProvider>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -49,7 +49,7 @@ impl Handler {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(
         opts: HandlerOptions,
-        providers: Vec<ThreadSafeProxyProvider>,
+        providers: Vec<ArcProxyProvider>,
     ) -> AnyOutboundHandler {
         Arc::new(Self { opts, providers })
     }

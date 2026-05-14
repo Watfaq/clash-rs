@@ -1,11 +1,11 @@
 use crate::{
-    app::remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+    app::remote_content_manager::providers::proxy_provider::ArcProxyProvider,
     proxy::AnyOutboundHandler,
 };
 use std::collections::HashSet;
 
 pub async fn get_proxies_from_providers(
-    providers: &Vec<ThreadSafeProxyProvider>,
+    providers: &Vec<ArcProxyProvider>,
     touch: bool,
 ) -> Vec<AnyOutboundHandler> {
     let mut proxies = vec![];

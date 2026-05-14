@@ -8,7 +8,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
+            ProxyManager, providers::proxy_provider::ArcProxyProvider,
         },
     },
     proxy::{
@@ -31,7 +31,7 @@ pub struct Handler {
     opts: HandlerOptions,
     tolerance: u16,
 
-    providers: Vec<ThreadSafeProxyProvider>,
+    providers: Vec<ArcProxyProvider>,
     proxy_manager: ProxyManager,
     fastest_proxy_index: AtomicU16,
 }
@@ -48,7 +48,7 @@ impl Handler {
     pub fn new(
         opts: HandlerOptions,
         tolerance: u16,
-        providers: Vec<ThreadSafeProxyProvider>,
+        providers: Vec<ArcProxyProvider>,
         proxy_manager: ProxyManager,
     ) -> Self {
         Self {

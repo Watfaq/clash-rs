@@ -13,7 +13,7 @@ use crate::{
     app::remote_content_manager::providers::Provider, proxy::AnyOutboundHandler,
 };
 
-pub type ThreadSafeProxyProvider = Arc<dyn ProxyProvider + Send + Sync>;
+pub type ArcProxyProvider = Arc<dyn ProxyProvider + Send + Sync>;
 
 #[async_trait]
 pub trait ProxyProvider: Provider {
