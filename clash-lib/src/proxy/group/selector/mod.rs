@@ -11,7 +11,7 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
-        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::providers::proxy_provider::ArcProxyProvider,
     },
     proxy::{
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
@@ -41,7 +41,7 @@ pub struct HandlerOptions {
 #[derive(Clone)]
 pub struct Handler {
     opts: HandlerOptions,
-    providers: Vec<ThreadSafeProxyProvider>,
+    providers: Vec<ArcProxyProvider>,
     current_selected_index: Arc<AtomicU16>,
 }
 
@@ -56,11 +56,11 @@ impl std::fmt::Debug for Handler {
 impl Handler {
     pub async fn new(
         opts: HandlerOptions,
-        providers: Vec<ThreadSafeProxyProvider>,
+        providers: Vec<ArcProxyProvider>,
         selected: Option<String>,
     ) -> Self {
         let provider = providers.first().unwrap();
-        let proxies = provider.read().await.proxies().await;
+        let proxies = provider.proxies().await;
 
         Self {
             opts,
@@ -229,8 +229,6 @@ impl GroupProxyAPIResponse for Handler {
 mod tests {
     use std::sync::Arc;
 
-    use tokio::sync::RwLock;
-
     use crate::proxy::{
         group::selector::ThreadSafeSelectorControl,
         mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
@@ -257,7 +255,7 @@ mod tests {
                 udp: false,
                 ..Default::default()
             },
-            vec![Arc::new(RwLock::new(mock_provider))],
+            vec![Arc::new(mock_provider)],
             None,
         )
         .await;

@@ -25,7 +25,7 @@ use crate::{
                 ProviderVehicleType, ThreadSafeProviderVehicle, file_vehicle,
                 http_vehicle,
                 proxy_provider::{
-                    PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
+                    ArcProxyProvider, PlainProvider, ProxySetProvider,
                 },
             },
         },
@@ -51,7 +51,6 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -63,7 +62,7 @@ pub struct OutboundManager {
     /// single source of truth for all handlers after initialization.
     registry: OutboundHandlerRegistry,
     /// name -> provider
-    proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
+    proxy_providers: HashMap<String, ArcProxyProvider>,
     proxy_manager: ProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
@@ -158,7 +157,7 @@ impl OutboundManager {
     }
 
     /// this doesn't populate history/liveness information
-    pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
+    pub fn get_proxy_provider(&self, name: &str) -> Option<ArcProxyProvider> {
         self.proxy_providers.get(name).cloned()
     }
 
@@ -260,7 +259,7 @@ impl OutboundManager {
         proxy_manager.check(outbounds, url, Some(timeout)).await
     }
 
-    pub fn get_proxy_providers(&self) -> HashMap<String, ThreadSafeProxyProvider> {
+    pub fn get_proxy_providers(&self) -> HashMap<String, ArcProxyProvider> {
         self.proxy_providers.clone()
     }
 
@@ -500,16 +499,13 @@ impl OutboundManager {
             self.proxy_manager.clone(),
         );
 
-        let pd = Arc::new(RwLock::new(PlainProvider::new(
-            PROXY_GLOBAL.to_owned(),
-            g,
-            hc,
-        )?));
+        let pd: ArcProxyProvider =
+            Arc::new(PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc)?);
 
         let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
-        let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
+        let mut providers: Vec<ArcProxyProvider> = vec![pd.clone()];
         for p in self.proxy_providers.values() {
-            let vehicle_type = p.read().await.vehicle_type();
+            let vehicle_type = p.vehicle_type();
             if matches!(
                 vehicle_type,
                 ProviderVehicleType::Http | ProviderVehicleType::File
@@ -556,7 +552,7 @@ impl OutboundManager {
         let selector_control = &mut self.selector_control;
 
         /// Common boilerplate: build providers list from proxies and
-        /// use_provider. Returns `Vec<ThreadSafeProxyProvider>`
+        /// use_provider. Returns `Vec<ArcProxyProvider>`
         /// directly — the caller checks for emptiness.
         #[allow(clippy::too_many_arguments)]
         fn build_group_providers(
@@ -567,9 +563,9 @@ impl OutboundManager {
             lazy: bool,
             handlers: &HashMap<String, AnyOutboundHandler>,
             proxy_manager: &ProxyManager,
-            provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
-        ) -> Result<Vec<ThreadSafeProxyProvider>, Error> {
-            let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+            provider_registry: &mut HashMap<String, ArcProxyProvider>,
+        ) -> Result<Vec<ArcProxyProvider>, Error> {
+            let mut providers: Vec<ArcProxyProvider> = vec![];
 
             if let Some(proxies) = proxies
                 && !proxies.is_empty()
@@ -609,8 +605,8 @@ impl OutboundManager {
             lazy: bool,
             handlers: &HashMap<String, AnyOutboundHandler>,
             proxy_manager: ProxyManager,
-            provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
-        ) -> Result<ThreadSafeProxyProvider, Error> {
+            provider_registry: &mut HashMap<String, ArcProxyProvider>,
+        ) -> Result<ArcProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
                 return Err(Error::InvalidConfig(format!(
                     "proxy group name `{name}` is reserved"
@@ -636,11 +632,11 @@ impl OutboundManager {
                 proxy_manager,
             );
 
-            let pd = Arc::new(RwLock::new(
+            let pd: ArcProxyProvider = Arc::new(
                 PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
                     Error::InvalidConfig(format!("invalid provider config: {x}"))
                 })?,
-            ));
+            );
 
             provider_registry.insert(name.to_owned(), pd.clone());
 
@@ -884,14 +880,14 @@ impl OutboundManager {
             vehicle: ThreadSafeProviderVehicle,
             interval_secs: u64,
             hc: HealthCheck,
-        ) -> Result<ThreadSafeProxyProvider, Error> {
+        ) -> Result<ArcProxyProvider, Error> {
             ProxySetProvider::new(
                 name.to_owned(),
                 Duration::from_secs(interval_secs),
                 vehicle,
                 hc,
             )
-            .map(|p| Arc::new(RwLock::new(p)) as ThreadSafeProxyProvider)
+            .map(|p| Arc::new(p) as ArcProxyProvider)
             .map_err(|x| {
                 Error::InvalidConfig(format!("invalid provider config: {x}"))
             })
@@ -944,9 +940,8 @@ impl OutboundManager {
 
         let mut failed = Vec::new();
         for p in provider_registry.values() {
-            let name = p.read().await.name().to_owned();
+            let name = p.name().to_owned();
             info!("initializing provider {}", name);
-            let p = p.write().await;
             if let Err(err) = p.initialize().await {
                 error!("failed to initialize proxy provider {}: {}", name, err);
                 failed.push(name);

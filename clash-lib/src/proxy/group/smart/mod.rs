@@ -17,7 +17,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
+            ProxyManager, providers::proxy_provider::ArcProxyProvider,
         },
     },
     proxy::{
@@ -88,7 +88,7 @@ pub struct Handler {
     /// Configuration options
     opts: HandlerOptions,
     /// Proxy providers for obtaining available proxies
-    providers: Vec<ThreadSafeProxyProvider>,
+    providers: Vec<ArcProxyProvider>,
     /// Proxy manager for health checks and metrics
     proxy_manager: ProxyManager,
     /// Centralized state management
@@ -109,7 +109,7 @@ impl Handler {
     /// Create a new smart proxy group handler with persistence support
     pub fn new_with_cache(
         opts: HandlerOptions,
-        providers: Vec<ThreadSafeProxyProvider>,
+        providers: Vec<ArcProxyProvider>,
         proxy_manager: ProxyManager,
         cache_store: crate::app::profile::ThreadSafeCacheFile,
     ) -> Self {
@@ -766,7 +766,6 @@ mod tests {
         tests::initialize,
     };
     use tempfile::tempdir;
-    use tokio::sync::RwLock;
 
     // Constants for the mock Shadowsocks server
     const PASSWORD: &str = "FzcLbKs2dY9mhL_smart";
@@ -813,8 +812,7 @@ mod tests {
         provider
             .expect_proxies()
             .returning(move || vec![ss_handler.clone()]);
-        let thread_safe_provider: ThreadSafeProxyProvider =
-            Arc::new(RwLock::new(provider));
+        let thread_safe_provider: ArcProxyProvider = Arc::new(provider);
 
         // Setup HandlerOptions for Smart group
         let smart_opts = super::HandlerOptions {

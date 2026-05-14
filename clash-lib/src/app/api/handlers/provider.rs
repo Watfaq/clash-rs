@@ -20,7 +20,7 @@ use serde_json::json;
 use crate::{
     app::{
         api::AppState, outbound::manager::ThreadSafeOutboundManager,
-        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::providers::proxy_provider::ArcProxyProvider,
         router::ArcRouter,
     },
     proxy::AnyOutboundHandler,
@@ -67,7 +67,6 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     let mut providers = HashMap::new();
 
     for (name, p) in outbound_manager.get_proxy_providers() {
-        let p = p.read().await;
         let proxies = p.proxies().await;
         let proxies = futures::future::join_all(
             proxies.iter().map(|x| outbound_manager.get_proxy(x)),
@@ -106,16 +105,14 @@ async fn find_proxy_provider_by_name(
 }
 
 async fn get_provider(
-    Extension(provider): Extension<ThreadSafeProxyProvider>,
+    Extension(provider): Extension<ArcProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.read().await;
     axum::response::Json(provider.as_map().await)
 }
 
 async fn update_provider(
-    Extension(provider): Extension<ThreadSafeProxyProvider>,
+    Extension(provider): Extension<ArcProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.read().await;
     match provider.update().await {
         Ok(_) => (
             StatusCode::ACCEPTED,
@@ -135,9 +132,8 @@ async fn update_provider(
 }
 
 async fn provider_healthcheck(
-    Extension(provider): Extension<ThreadSafeProxyProvider>,
+    Extension(provider): Extension<ArcProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.read().await;
     provider.healthcheck().await;
 
     (
@@ -151,12 +147,11 @@ struct ProviderProxyPath {
     proxy_name: String,
 }
 async fn find_proxy_provider_proxy_by_name(
-    Extension(provider): Extension<ThreadSafeProxyProvider>,
+    Extension(provider): Extension<ArcProxyProvider>,
     Path(ProviderProxyPath { proxy_name }): Path<ProviderProxyPath>,
     mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    let provider = provider.read().await;
     let proxies = provider.proxies().await;
     let proxy = proxies.iter().find(|x| x.name() == proxy_name);
 
