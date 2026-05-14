@@ -7,6 +7,7 @@ export const getSecret = () => {
 
   const legacySessionSecret = sessionStorage.getItem('clash-api-secret');
   if (legacySessionSecret !== null) {
+    // lgtm[js/clear-text-storage-of-sensitive-data]
     localStorage.setItem('clash-api-secret', legacySessionSecret);
     return legacySessionSecret;
   }
@@ -15,6 +16,7 @@ export const getSecret = () => {
 };
 export const setApiUrl = (url: string) => localStorage.setItem('clash-api-url', url);
 export const setSecret = (s: string) => {
+  // lgtm[js/clear-text-storage-of-sensitive-data]
   localStorage.setItem('clash-api-secret', s);
   sessionStorage.removeItem('clash-api-secret');
 };
