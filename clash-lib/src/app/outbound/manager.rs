@@ -51,7 +51,6 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -500,16 +499,13 @@ impl OutboundManager {
             self.proxy_manager.clone(),
         );
 
-        let pd = Arc::new(RwLock::new(PlainProvider::new(
-            PROXY_GLOBAL.to_owned(),
-            g,
-            hc,
-        )?));
+        let pd: ThreadSafeProxyProvider =
+            Arc::new(PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc)?);
 
         let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
         let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
         for p in self.proxy_providers.values() {
-            let vehicle_type = p.read().await.vehicle_type();
+            let vehicle_type = p.vehicle_type();
             if matches!(
                 vehicle_type,
                 ProviderVehicleType::Http | ProviderVehicleType::File
@@ -636,11 +632,11 @@ impl OutboundManager {
                 proxy_manager,
             );
 
-            let pd = Arc::new(RwLock::new(
+            let pd: ThreadSafeProxyProvider = Arc::new(
                 PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
                     Error::InvalidConfig(format!("invalid provider config: {x}"))
                 })?,
-            ));
+            );
 
             provider_registry.insert(name.to_owned(), pd.clone());
 
@@ -891,7 +887,7 @@ impl OutboundManager {
                 vehicle,
                 hc,
             )
-            .map(|p| Arc::new(RwLock::new(p)) as ThreadSafeProxyProvider)
+            .map(|p| Arc::new(p) as ThreadSafeProxyProvider)
             .map_err(|x| {
                 Error::InvalidConfig(format!("invalid provider config: {x}"))
             })
@@ -944,9 +940,8 @@ impl OutboundManager {
 
         let mut failed = Vec::new();
         for p in provider_registry.values() {
-            let name = p.read().await.name().to_owned();
+            let name = p.name().to_owned();
             info!("initializing provider {}", name);
-            let p = p.write().await;
             if let Err(err) = p.initialize().await {
                 error!("failed to initialize proxy provider {}: {}", name, err);
                 failed.push(name);

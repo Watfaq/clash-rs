@@ -766,7 +766,6 @@ mod tests {
         tests::initialize,
     };
     use tempfile::tempdir;
-    use tokio::sync::RwLock;
 
     // Constants for the mock Shadowsocks server
     const PASSWORD: &str = "FzcLbKs2dY9mhL_smart";
@@ -813,8 +812,7 @@ mod tests {
         provider
             .expect_proxies()
             .returning(move || vec![ss_handler.clone()]);
-        let thread_safe_provider: ThreadSafeProxyProvider =
-            Arc::new(RwLock::new(provider));
+        let thread_safe_provider: ThreadSafeProxyProvider = Arc::new(provider);
 
         // Setup HandlerOptions for Smart group
         let smart_opts = super::HandlerOptions {

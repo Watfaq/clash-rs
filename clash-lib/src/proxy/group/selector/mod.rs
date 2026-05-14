@@ -60,7 +60,7 @@ impl Handler {
         selected: Option<String>,
     ) -> Self {
         let provider = providers.first().unwrap();
-        let proxies = provider.read().await.proxies().await;
+        let proxies = provider.proxies().await;
 
         Self {
             opts,
@@ -229,8 +229,6 @@ impl GroupProxyAPIResponse for Handler {
 mod tests {
     use std::sync::Arc;
 
-    use tokio::sync::RwLock;
-
     use crate::proxy::{
         group::selector::ThreadSafeSelectorControl,
         mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
@@ -257,7 +255,7 @@ mod tests {
                 udp: false,
                 ..Default::default()
             },
-            vec![Arc::new(RwLock::new(mock_provider))],
+            vec![Arc::new(mock_provider)],
             None,
         )
         .await;

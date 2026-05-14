@@ -206,8 +206,6 @@ impl GroupProxyAPIResponse for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use tokio::sync::RwLock;
-
     use super::*;
     use crate::{
         proxy::{
@@ -271,8 +269,7 @@ mod tests {
             .expect_proxies()
             .returning(move || vec![ss_handler.clone()]);
 
-        let handler =
-            Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        let handler = Handler::new(Default::default(), vec![Arc::new(provider)]);
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
@@ -308,8 +305,7 @@ mod tests {
             .expect_proxies()
             .returning(move || vec![ss_handler.clone(), ss_handler.clone()]);
 
-        let handler =
-            Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        let handler = Handler::new(Default::default(), vec![Arc::new(provider)]);
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }
