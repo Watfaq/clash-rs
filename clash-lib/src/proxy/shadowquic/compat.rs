@@ -64,8 +64,8 @@ impl Stream for UdpSessionWrapper {
         self.r.poll_recv(cx).map(|x| {
             x.map(|x| UdpPacket {
                 data: x.0.into(),
-                src_addr: self.src_addr.clone(),
-                dst_addr: to_clash_socks_addr(x.1),
+                src_addr: to_clash_socks_addr(x.1),
+                dst_addr: self.src_addr.clone(),
                 inbound_user: None,
             })
         })

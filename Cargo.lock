@@ -765,9 +765,6 @@ name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "bitvec"
@@ -5222,7 +5219,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
 dependencies = [
  "bitflags 2.11.1",
- "serde",
 ]
 
 [[package]]
@@ -8122,11 +8118,11 @@ dependencies = [
 
 [[package]]
 name = "shadowquic"
-version = "0.3.4"
-source = "git+https://github.com/ibigbug/shadowquic.git?rev=a910118d5e3ab53e19e2b11347c5abaa93347ce6#a910118d5e3ab53e19e2b11347c5abaa93347ce6"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e233defda06e8a512ced38c3d3c206af6ffaf73b6fdc60b92fc1b58a32c8d41e"
 dependencies = [
  "anyhow",
- "arc-swap",
  "async-trait",
  "aws-lc-rs",
  "brutal-core",
@@ -8135,14 +8131,12 @@ dependencies = [
  "educe 0.6.0",
  "iroh-quinn",
  "iroh-quinn-proto",
- "notify",
  "quinn-jls",
  "quinn-proto-jls",
  "rcgen",
  "ring",
  "rustls",
  "rustls-jls",
- "rustls-native-certs",
  "sendfd",
  "serde",
  "serde-saphyr",
@@ -8160,7 +8154,8 @@ dependencies = [
 [[package]]
 name = "shadowquic-macros"
 version = "0.3.4"
-source = "git+https://github.com/ibigbug/shadowquic.git?rev=a910118d5e3ab53e19e2b11347c5abaa93347ce6#a910118d5e3ab53e19e2b11347c5abaa93347ce6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7983a5c6234960c92a6f9919f0445df0b4c925934c7b87c07a8e8b7fde15c70c"
 dependencies = [
  "crabtime",
  "proc-macro2",
