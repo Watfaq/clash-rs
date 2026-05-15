@@ -287,9 +287,8 @@ pub struct DnsClient {
 
 impl DnsClient {
     /// Rebuild the DNS stream with retries, waiting between attempts.
-    /// This is needed because iOS can temporarily return EADDRNOTAVAIL during
-    /// network transitions (Wi-Fi ↔ cellular), and the DNS client's TCP
-    /// connection must be re-established to recover.
+    /// Observed on iOS: EADDRNOTAVAIL during network transitions can break
+    /// DNS client connections; retrying gives the OS time to settle.
     async fn rebuild_with_retries(
         &self,
     ) -> anyhow::Result<(client::Client<DnsRuntimeProvider>, JoinHandle<()>)> {
@@ -298,20 +297,32 @@ impl DnsClient {
 
         for attempt in 0..=MAX_RETRIES {
             match dns_stream_builder(&self.cfg).await {
-                Ok(result) => return Ok(result),
+                Ok(result) => {
+                    if attempt > 0 {
+                        info!(
+                            "{}: dns client rebuild succeeded on attempt {}/{}",
+                            self.id(),
+                            attempt + 1,
+                            MAX_RETRIES + 1
+                        );
+                    }
+                    return Ok(result);
+                }
                 Err(e) if attempt < MAX_RETRIES => {
                     warn!(
-                        "dns client rebuild attempt {}/{} failed: {e}, \
+                        "{}: dns client rebuild attempt {}/{} failed: {e:#}, \
                          retrying in {}ms",
+                        self.id(),
                         attempt + 1,
-                        MAX_RETRIES,
+                        MAX_RETRIES + 1,
                         RETRY_DELAY.as_millis()
                     );
                     tokio::time::sleep(RETRY_DELAY).await;
                 }
                 Err(e) => {
                     warn!(
-                        "dns client rebuild failed after {} attempts: {e}",
+                        "{}: dns client rebuild failed after {} attempts: {e:#}",
+                        self.id(),
                         MAX_RETRIES + 1
                     );
                     return Err(e.into());
