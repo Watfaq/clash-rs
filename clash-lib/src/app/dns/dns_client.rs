@@ -286,6 +286,43 @@ pub struct DnsClient {
 }
 
 impl DnsClient {
+    /// Rebuild the DNS stream with retries, waiting between attempts.
+    /// This is needed because iOS can temporarily return EADDRNOTAVAIL during
+    /// network transitions (Wi-Fi ↔ cellular), and the DNS client's TCP
+    /// connection must be re-established to recover.
+    async fn rebuild_with_retries(
+        &self,
+    ) -> anyhow::Result<(client::Client<DnsRuntimeProvider>, JoinHandle<()>)> {
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(200);
+
+        for attempt in 0..=MAX_RETRIES {
+            match dns_stream_builder(&self.cfg).await {
+                Ok(result) => return Ok(result),
+                Err(e) if attempt < MAX_RETRIES => {
+                    warn!(
+                        "dns client rebuild attempt {}/{} failed: {e}, \
+                         retrying in {}ms",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        RETRY_DELAY.as_millis()
+                    );
+                    tokio::time::sleep(RETRY_DELAY).await;
+                }
+                Err(e) => {
+                    warn!(
+                        "dns client rebuild failed after {} attempts: {e}",
+                        MAX_RETRIES + 1
+                    );
+                    return Err(e.into());
+                }
+            }
+        }
+        unreachable!()
+    }
+}
+
+impl DnsClient {
     pub async fn new_client(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
 
@@ -519,7 +556,7 @@ impl Client for DnsClient {
                             "dns client background task is finished, likely \
                              connection closed, restarting a new one"
                         );
-                        let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                        let (client, bg) = self.rebuild_with_retries().await?;
                         inner.c.replace(client);
                         inner.bg_handle.replace(bg);
                     } else {
@@ -532,7 +569,7 @@ impl Client for DnsClient {
                 _ => {
                     // initializing client
                     info!("initializing dns client: {}", &self.cfg);
-                    let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                    let (client, bg) = self.rebuild_with_retries().await?;
                     inner.c.replace(client);
                     inner.bg_handle.replace(bg);
                 }
