@@ -91,8 +91,12 @@ pub(crate) fn must_bind_socket_on_interface(
         }
     }
     if family == socket2::Domain::IPV6 {
-        if let Err(x) = must_bind_socket_on_interface(socket, iface, socket2::Domain::IPV4) {
-            tracing::warn!("try bind dualstack socket on interface failed, it's ipv6 only:{x}");
+        if let Err(x) =
+            must_bind_socket_on_interface(socket, iface, socket2::Domain::IPV4)
+        {
+            tracing::warn!(
+                "try bind dualstack socket on interface failed, it's ipv6 only:{x}"
+            );
         }
     }
     Ok(())
