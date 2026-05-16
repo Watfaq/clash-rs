@@ -26,6 +26,7 @@ fn start_unique_client() -> (ClashInstance, u16) {
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -76,6 +77,7 @@ async fn test_config_reload_via_payload() {
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -167,6 +169,112 @@ async fn test_get_set_allow_lan() {
     // _clash will be dropped here, automatically cleaning up
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn test_config_reload_rejects_empty_or_directory_path_without_panicking() {
+    let (_clash, api_port) = start_unique_client();
+    let configs_url = format!("http://127.0.0.1:{}/configs", api_port);
+
+    let reload_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body("{\"path\":\"\"}".into())
+        .expect("Failed to build PUT /configs request");
+
+    let reload_res =
+        send_http_request::<String>(configs_url.parse().unwrap(), reload_req)
+            .await
+            .expect("Failed to send PUT /configs request");
+    assert_eq!(
+        reload_res.status(),
+        http::StatusCode::BAD_REQUEST,
+        "PUT /configs with empty path should be rejected"
+    );
+
+    let reload_dir_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body("{\"path\":\".\"}".into())
+        .expect("Failed to build PUT /configs request for directory path");
+
+    let reload_dir_res =
+        send_http_request::<String>(configs_url.parse().unwrap(), reload_dir_req)
+            .await
+            .expect("Failed to send PUT /configs request for directory path");
+    assert_eq!(
+        reload_dir_res.status(),
+        http::StatusCode::BAD_REQUEST,
+        "PUT /configs with directory path should be rejected"
+    );
+
+    // Ensure API is still alive after the rejected reload request.
+    let get_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build GET /configs request");
+
+    let get_res = send_http_request(configs_url.parse().unwrap(), get_req)
+        .await
+        .expect("Failed to send GET /configs request");
+    assert_eq!(
+        get_res.status(),
+        http::StatusCode::OK,
+        "GET /configs should still succeed after invalid reload request"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_config_reload_via_empty_path_uses_stored_config_path() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+
+    let port_base = alloc_ports(CLIENT_PORT_BLOCK);
+    let config_str = make_client_config_str(port_base);
+
+    // Write config to a temp file so we can pass a real config_path.
+    let tmp = tempfile::NamedTempFile::new().expect("Failed to create temp file");
+    std::fs::write(tmp.path(), &config_str).expect("Failed to write config");
+    let config_file = tmp.path().to_string_lossy().to_string();
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::Str(config_str),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+            config_path: Some(config_file),
+        },
+        (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
+    )
+    .expect("Failed to start clash");
+
+    let configs_url = format!("http://127.0.0.1:{}/configs", port_base);
+
+    // PUT /configs with empty path should reload from the stored config_path
+    // and return 204 No Content (not 400).
+    let req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body("{\"path\":\"\"}".into())
+        .expect("Failed to build PUT /configs request");
+
+    let res = send_http_request::<String>(configs_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send PUT /configs request");
+    assert_eq!(
+        res.status(),
+        http::StatusCode::NO_CONTENT,
+        "PUT /configs with empty path and a stored config_path should succeed"
+    );
+}
+
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 async fn test_connections_returns_proxy_chain_names() {
@@ -200,6 +308,7 @@ async fn test_connections_returns_proxy_chain_names() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![server_base, server_base + 1],
     )
@@ -212,6 +321,7 @@ async fn test_connections_returns_proxy_chain_names() {
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (client_base..client_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -611,6 +721,7 @@ async fn test_user_stats_endpoint_empty_on_no_traffic() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![server_base, server_base + 1],
     )
