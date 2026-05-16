@@ -34,7 +34,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -118,7 +118,18 @@ impl ProxySetProvider {
                     Some(proxies) => {
                         let proxies = proxies
                             .into_iter()
-                            .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
+                            .filter_map(|x| {
+                                match OutboundProxyProtocol::try_from(x) {
+                                    Ok(p) => Some(p),
+                                    Err(e) => {
+                                        warn!(
+                                            provider = n.as_str(),
+                                            "skipping proxy due to parse error: {e}"
+                                        );
+                                        None
+                                    }
+                                }
+                            })
                             .map(|x| match x {
                                 OutboundProxyProtocol::Direct(d) => {
                                     Ok(Arc::new(direct::Handler::new(&d.name)) as _)
@@ -190,7 +201,17 @@ impl ProxySetProvider {
                                 }
                             })
                             .collect::<Result<Vec<_>, crate::Error>>();
-                        Ok(proxies?)
+                        match proxies {
+                            Ok(proxies) => Ok(proxies),
+                            Err(e) => {
+                                warn!(
+                                    provider = n.as_str(),
+                                    "proxy provider failed to construct handler: \
+                                     {e}"
+                                );
+                                Err(e.into())
+                            }
+                        }
                     }
                     _ => Err(Error::InvalidConfig(format!("{n}: proxies is empty"))
                         .into()),

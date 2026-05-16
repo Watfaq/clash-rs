@@ -59,8 +59,10 @@ impl Handler {
         providers: Vec<ArcProxyProvider>,
         selected: Option<String>,
     ) -> Self {
-        let provider = providers.first().unwrap();
-        let proxies = provider.proxies().await;
+        let proxies = match providers.first() {
+            Some(provider) => provider.proxies().await,
+            None => Vec::new(),
+        };
 
         Self {
             opts,
@@ -74,14 +76,14 @@ impl Handler {
         }
     }
 
-    async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
+    async fn selected_proxy(&self, touch: bool) -> Option<AnyOutboundHandler> {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         let current_fastest_index = self
             .current_selected_index
             .load(std::sync::atomic::Ordering::Relaxed);
         for (idx, proxy) in proxies.iter().enumerate() {
             if idx == current_fastest_index as usize {
-                return proxy.clone();
+                return Some(proxy.clone());
             }
         }
         let proxy_name = proxies
@@ -91,7 +93,7 @@ impl Handler {
         warn!("selected proxy `{}` not found", proxy_name);
         // in the case the selected proxy is not found(stale cache), return the
         // first one
-        proxies.first().unwrap().clone()
+        proxies.first().cloned()
     }
 }
 
@@ -112,8 +114,6 @@ impl SelectorControl for Handler {
 
     #[cfg(test)]
     async fn current(&self) -> String {
-        use std::panic;
-
         let proxies = get_proxies_from_providers(&self.providers, false).await;
 
         proxies
@@ -123,7 +123,7 @@ impl SelectorControl for Handler {
                     as usize,
             )
             .map(|p| p.name().to_owned())
-            .unwrap_or_else(|| panic!("no proxy found for {}", self.name()))
+            .unwrap_or_else(|| "<none>".to_owned())
     }
 }
 
@@ -140,7 +140,13 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        self.opts.udp && self.selected_proxy(false).await.support_udp().await
+        if !self.opts.udp {
+            return false;
+        }
+        match self.selected_proxy(false).await {
+            Some(selected) => selected.support_udp().await,
+            None => false,
+        }
     }
 
     async fn connect_stream(
@@ -148,7 +154,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let selected = self.selected_proxy(true).await;
+        let selected = self.selected_proxy(true).await.ok_or_else(|| {
+            io::Error::other(format!("no proxy found for {}", self.name()))
+        })?;
         let s = selected.connect_stream(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
@@ -161,7 +169,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let selected = self.selected_proxy(true).await;
+        let selected = self.selected_proxy(true).await.ok_or_else(|| {
+            io::Error::other(format!("no proxy found for {}", self.name()))
+        })?;
         let s = selected.connect_datagram(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
@@ -182,6 +192,9 @@ impl OutboundHandler for Handler {
         let s = self
             .selected_proxy(true)
             .await
+            .ok_or_else(|| {
+                io::Error::other(format!("no proxy found for {}", self.name()))
+            })?
             .connect_stream_with_connector(sess, resolver, connector)
             .await?;
 
@@ -197,6 +210,9 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await
+            .ok_or_else(|| {
+                io::Error::other(format!("no proxy found for {}", self.name()))
+            })?
             .connect_datagram_with_connector(sess, resolver, connector)
             .await
     }
@@ -213,7 +229,7 @@ impl GroupProxyAPIResponse for Handler {
     }
 
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
-        Some(Handler::selected_proxy(self, false).await)
+        Handler::selected_proxy(self, false).await
     }
 
     fn get_latency_test_url(&self) -> Option<String> {
@@ -266,7 +282,7 @@ mod tests {
 
         assert_eq!(selector_control.current().await, "provider1".to_owned());
         assert_eq!(
-            outbound_handler.selected_proxy(false).await.name(),
+            outbound_handler.selected_proxy(false).await.unwrap().name(),
             "provider1".to_owned()
         );
 
@@ -274,11 +290,38 @@ mod tests {
 
         assert_eq!(selector_control.current().await, "provider2".to_owned());
         assert_eq!(
-            outbound_handler.selected_proxy(false).await.name(),
+            outbound_handler.selected_proxy(false).await.unwrap().name(),
             "provider2".to_owned()
         );
 
         let fail = selector_control.select("provider3").await;
         assert!(fail.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_selector_empty_provider() {
+        let mut mock_provider = MockDummyProxyProvider::new();
+        mock_provider
+            .expect_name()
+            .return_const("provider1".to_owned());
+        mock_provider.expect_proxies().returning(Vec::new);
+
+        let handler = super::Handler::new(
+            super::HandlerOptions {
+                name: "test-empty".to_owned(),
+                udp: true,
+                ..Default::default()
+            },
+            vec![Arc::new(mock_provider)],
+            None,
+        )
+        .await;
+
+        let selector_control =
+            Arc::new(handler.clone()) as ThreadSafeSelectorControl;
+
+        assert_eq!(selector_control.current().await, "<none>".to_owned());
+        assert!(handler.selected_proxy(false).await.is_none());
+        assert!(selector_control.select("provider1").await.is_err());
     }
 }
