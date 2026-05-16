@@ -125,7 +125,7 @@ pub struct GlobalState {
     cwd: String,
     /// Path to the config file used at startup. Used by the dashboard "Reload"
     /// button which sends an empty path to mean "reload current config".
-    pub config_path: Option<String>,
+    config_path: Option<String>,
 }
 
 pub fn start_scaffold(opts: Options) -> Result<()> {
