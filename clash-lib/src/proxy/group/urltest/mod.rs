@@ -64,13 +64,11 @@ impl Handler {
         get_proxies_from_providers(&self.providers, touch).await
     }
 
-    async fn fastest(&self, touch: bool) -> AnyOutboundHandler {
+    async fn fastest(&self, touch: bool) -> Option<AnyOutboundHandler> {
         let proxy_manager = self.proxy_manager.clone();
 
         let proxies = self.get_proxies(touch).await;
-        let mut fastest = proxies
-            .first()
-            .unwrap_or_else(|| panic!("no proxy found for {}", self.name()));
+        let mut fastest = proxies.first()?;
 
         let mut fastest_delay = proxy_manager
             .last_delay(fastest.name())
@@ -126,7 +124,7 @@ impl Handler {
             self.name(),
         );
 
-        fastest.clone()
+        Some(fastest.clone())
     }
 }
 
@@ -146,7 +144,13 @@ impl OutboundHandler for Handler {
 
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
-        self.opts.udp || self.fastest(false).await.support_udp().await
+        if !self.opts.udp {
+            return false;
+        }
+        match self.fastest(false).await {
+            Some(fastest) => fastest.support_udp().await,
+            None => false,
+        }
     }
 
     /// connect to remote target via TCP
@@ -155,7 +159,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let fastest = self.fastest(false).await;
+        let fastest = self.fastest(false).await.ok_or_else(|| {
+            io::Error::other(format!("no proxy found for {}", self.name()))
+        })?;
         let s = fastest.connect_stream(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
@@ -169,7 +175,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let fastest = self.fastest(false).await;
+        let fastest = self.fastest(false).await.ok_or_else(|| {
+            io::Error::other(format!("no proxy found for {}", self.name()))
+        })?;
         let d = fastest.connect_datagram(sess, resolver).await?;
 
         d.append_to_chain(self.name()).await;
@@ -178,7 +186,10 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_connector(&self) -> ConnectorType {
-        self.fastest(false).await.support_connector().await
+        match self.fastest(false).await {
+            Some(fastest) => fastest.support_connector().await,
+            None => ConnectorType::Tcp,
+        }
     }
 
     async fn connect_stream_with_connector(
@@ -190,6 +201,9 @@ impl OutboundHandler for Handler {
         let s = self
             .fastest(true)
             .await
+            .ok_or_else(|| {
+                io::Error::other(format!("no proxy found for {}", self.name()))
+            })?
             .connect_stream_with_connector(sess, resolver, connector)
             .await?;
 
@@ -205,6 +219,9 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedDatagram> {
         self.fastest(true)
             .await
+            .ok_or_else(|| {
+                io::Error::other(format!("no proxy found for {}", self.name()))
+            })?
             .connect_datagram_with_connector(sess, resolver, connector)
             .await
     }
@@ -221,7 +238,7 @@ impl GroupProxyAPIResponse for Handler {
     }
 
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
-        Some(self.fastest(false).await)
+        self.fastest(false).await
     }
 
     fn get_latency_test_url(&self) -> Option<String> {
@@ -230,5 +247,39 @@ impl GroupProxyAPIResponse for Handler {
 
     fn icon(&self) -> Option<String> {
         self.opts.common_opts.icon.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::{
+        app::remote_content_manager::ProxyManager,
+        proxy::{
+            group::GroupProxyAPIResponse, mocks::MockDummyProxyProvider,
+            utils::test_utils::noop::NoopResolver,
+        },
+    };
+
+    #[tokio::test]
+    async fn test_empty_provider_returns_none_active_proxy() {
+        let mut provider = MockDummyProxyProvider::new();
+        provider.expect_name().return_const("provider1".to_owned());
+        provider.expect_proxies().returning(Vec::new);
+
+        let proxy_manager = ProxyManager::new(Arc::new(NoopResolver), None);
+        let handler = super::Handler::new(
+            super::HandlerOptions {
+                name: "test".to_owned(),
+                udp: true,
+                ..Default::default()
+            },
+            0,
+            vec![Arc::new(provider)],
+            proxy_manager,
+        );
+
+        assert!(handler.get_active_proxy().await.is_none());
     }
 }
