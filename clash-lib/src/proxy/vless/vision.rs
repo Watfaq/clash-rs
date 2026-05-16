@@ -23,6 +23,24 @@ const CMD_PADDING_DIRECT: u8 = 0x02; // last Vision frame, enter splice mode
 /// TLS ApplicationData record type; triggers the direct-mode transition.
 const TLS_APPLICATION_DATA: u8 = 0x17;
 
+/// State machine for the server-side Vision read path.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReadState {
+    /// Still receiving Vision-framed data.
+    Framed,
+    /// Server sent `CMD_PADDING_END` (0x01): Vision framing done, stay in TLS.
+    End,
+    /// Server sent `CMD_PADDING_DIRECT` (0x02): Vision framing done, bypass
+    /// Reality TLS (XTLS-splice).
+    Direct,
+}
+
+impl ReadState {
+    fn is_done(self) -> bool {
+        matches!(self, ReadState::End | ReadState::Direct)
+    }
+}
+
 /// Wraps a VLESS stream with Vision framing (xtls-rprx-vision flow).
 ///
 /// ## Wire format (Xray-core `XtlsPadding`)
@@ -68,15 +86,13 @@ pub struct VisionStream {
     decoded: BytesMut,
     /// Raw bytes from `inner` that have not yet been Vision-decoded.
     raw: BytesMut,
-    /// True once the server has switched to XTLS-splice (raw) mode.
-    read_direct: bool,
+    /// Current Vision read state (framed / end / direct-splice).
+    read_state: ReadState,
 
     // --- XTLS-splice signals (optional, only used with Reality transport) ---
     /// Set when CMD_DIRECT received from server → underlying TLS must switch
     /// to raw reads.
     read_splice_flag: Option<Arc<AtomicBool>>,
-    /// True once server has requested XTLS splice via CMD_DIRECT.
-    read_splice: bool,
     /// Set when CMD_DIRECT sent to server → underlying TLS must switch to raw
     /// writes.
     write_splice_flag: Option<Arc<AtomicBool>>,
@@ -111,9 +127,8 @@ impl VisionStream {
             server_uuid_consumed: false,
             decoded: BytesMut::new(),
             raw: BytesMut::new(),
-            read_direct: false,
+            read_state: ReadState::Framed,
             read_splice_flag,
-            read_splice: false,
             write_splice_flag,
         })
     }
@@ -180,7 +195,7 @@ impl AsyncRead for VisionStream {
             }
 
             // 2. Direct/splice mode: raw passthrough.
-            if this.read_direct {
+            if this.read_state.is_done() {
                 return Pin::new(&mut this.inner).poll_read(cx, buf);
             }
 
@@ -188,19 +203,18 @@ impl AsyncRead for VisionStream {
             let changed = decode_vision_frames(
                 &mut this.raw,
                 &mut this.decoded,
-                &mut this.read_direct,
-                &mut this.read_splice,
+                &mut this.read_state,
                 &mut this.server_uuid_consumed,
             );
 
             // Signal the underlying SplicableTlsStream to bypass TLS.
-            if this.read_splice
+            if this.read_state == ReadState::Direct
                 && let Some(flag) = &this.read_splice_flag
             {
                 flag.store(true, Ordering::Release);
             }
 
-            if changed || this.read_direct {
+            if changed || this.read_state.is_done() {
                 continue;
             }
 
@@ -232,12 +246,11 @@ impl AsyncRead for VisionStream {
 
 /// Drain Vision frames from `raw` into `decoded`.
 ///
-/// Returns `true` if any content bytes were produced or `read_direct` was set.
+/// Returns `true` if any content bytes were produced or `read_state` changed.
 fn decode_vision_frames(
     raw: &mut BytesMut,
     decoded: &mut BytesMut,
-    read_direct: &mut bool,
-    read_splice: &mut bool,
+    read_state: &mut ReadState,
     server_uuid_consumed: &mut bool,
 ) -> bool {
     let before = decoded.len();
@@ -269,19 +282,22 @@ fn decode_vision_frames(
         raw.advance(content_len);
         raw.advance(padding_len);
 
-        // CMD_PADDING_END (0x01): server finished Vision framing, but do not
-        // splice Reality-TLS.
-        // CMD_PADDING_DIRECT (0x02): server requests XTLS splice.
-        if command == CMD_PADDING_DIRECT || command == CMD_PADDING_END {
-            *read_direct = true;
-            *read_splice = command == CMD_PADDING_DIRECT;
+        // CMD_PADDING_END (0x01): Vision framing done, stay in TLS.
+        // CMD_PADDING_DIRECT (0x02): Vision framing done, enter XTLS-splice.
+        if command == CMD_PADDING_END {
+            *read_state = ReadState::End;
+            decoded.extend_from_slice(raw);
+            raw.clear();
+            break;
+        } else if command == CMD_PADDING_DIRECT {
+            *read_state = ReadState::Direct;
             decoded.extend_from_slice(raw);
             raw.clear();
             break;
         }
     }
 
-    *read_direct || decoded.len() > before
+    read_state.is_done() || decoded.len() > before
 }
 
 // ---------------------------------------------------------------------------
