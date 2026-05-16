@@ -424,6 +424,14 @@ impl EnhancedResolver {
             && let Some(lru) = &self.lru_cache
             && !(q.query_type() == rr::RecordType::TXT
                 && q.name().to_ascii().starts_with("_acme-challenge."))
+            && !matches!(
+                msg.metadata.response_code,
+                op::ResponseCode::NXDomain | op::ResponseCode::ServFail
+            )
+            && {
+                let ips = EnhancedResolver::ip_list_of_message(msg);
+                ips.is_empty() || ips.iter().any(|ip| !ip.is_unspecified())
+            }
         {
             lru.insert(q.clone(), Ok(msg.clone()), Instant::now());
         }
