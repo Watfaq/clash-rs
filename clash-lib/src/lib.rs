@@ -713,6 +713,7 @@ mod tests {
                 cwd: None,
                 rt: None,
                 log_file: None,
+                config_path: None,
             })
             .unwrap()
         });
