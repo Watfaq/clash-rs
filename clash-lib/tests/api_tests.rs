@@ -167,6 +167,65 @@ async fn test_get_set_allow_lan() {
     // _clash will be dropped here, automatically cleaning up
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn test_config_reload_rejects_empty_or_directory_path_without_panicking() {
+    let (_clash, api_port) = start_unique_client();
+    let configs_url = format!("http://127.0.0.1:{}/configs", api_port);
+
+    let reload_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body("{\"path\":\"\"}".into())
+        .expect("Failed to build PUT /configs request");
+
+    let reload_res =
+        send_http_request::<String>(configs_url.parse().unwrap(), reload_req)
+            .await
+            .expect("Failed to send PUT /configs request");
+    assert_eq!(
+        reload_res.status(),
+        http::StatusCode::BAD_REQUEST,
+        "PUT /configs with empty path should be rejected"
+    );
+
+    let reload_dir_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body("{\"path\":\".\"}".into())
+        .expect("Failed to build PUT /configs request for directory path");
+
+    let reload_dir_res =
+        send_http_request::<String>(configs_url.parse().unwrap(), reload_dir_req)
+            .await
+            .expect("Failed to send PUT /configs request for directory path");
+    assert_eq!(
+        reload_dir_res.status(),
+        http::StatusCode::BAD_REQUEST,
+        "PUT /configs with directory path should be rejected"
+    );
+
+    // Ensure API is still alive after the rejected reload request.
+    let get_req = hyper::Request::builder()
+        .uri(&configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build GET /configs request");
+
+    let get_res = send_http_request(configs_url.parse().unwrap(), get_req)
+        .await
+        .expect("Failed to send GET /configs request");
+    assert_eq!(
+        get_res.status(),
+        http::StatusCode::OK,
+        "GET /configs should still succeed after invalid reload request"
+    );
+}
+
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 async fn test_connections_returns_proxy_chain_names() {

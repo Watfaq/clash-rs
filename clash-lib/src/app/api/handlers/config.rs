@@ -161,10 +161,14 @@ async fn update_configs(
         (_, Some(payload)) => {
             let cfg = crate::Config::Str(payload);
             match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    StatusCode::NO_CONTENT.into_response()
-                }
+                Ok(_) => match wait.await {
+                    Ok(_) => StatusCode::NO_CONTENT.into_response(),
+                    Err(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "config reload did not complete",
+                    )
+                        .into_response(),
+                },
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "could not signal config reload",
@@ -186,13 +190,24 @@ async fn update_configs(
                 )
                     .into_response();
             }
+            if PathBuf::from(&path).is_dir() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("config path {path} is a directory"),
+                )
+                    .into_response();
+            }
 
             let cfg: crate::Config = crate::Config::File(path);
             match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    StatusCode::NO_CONTENT.into_response()
-                }
+                Ok(_) => match wait.await {
+                    Ok(_) => StatusCode::NO_CONTENT.into_response(),
+                    Err(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "config reload did not complete",
+                    )
+                        .into_response(),
+                },
 
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
