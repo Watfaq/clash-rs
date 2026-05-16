@@ -75,6 +75,8 @@ pub struct VisionStream {
     /// Set when CMD_DIRECT received from server → underlying TLS must switch
     /// to raw reads.
     read_splice_flag: Option<Arc<AtomicBool>>,
+    /// True once server has requested XTLS splice via CMD_DIRECT.
+    read_splice: bool,
     /// Set when CMD_DIRECT sent to server → underlying TLS must switch to raw
     /// writes.
     write_splice_flag: Option<Arc<AtomicBool>>,
@@ -111,6 +113,7 @@ impl VisionStream {
             raw: BytesMut::new(),
             read_direct: false,
             read_splice_flag,
+            read_splice: false,
             write_splice_flag,
         })
     }
@@ -186,11 +189,12 @@ impl AsyncRead for VisionStream {
                 &mut this.raw,
                 &mut this.decoded,
                 &mut this.read_direct,
+                &mut this.read_splice,
                 &mut this.server_uuid_consumed,
             );
 
             // Signal the underlying SplicableTlsStream to bypass TLS.
-            if this.read_direct
+            if this.read_splice
                 && let Some(flag) = &this.read_splice_flag
             {
                 flag.store(true, Ordering::Release);
@@ -233,6 +237,7 @@ fn decode_vision_frames(
     raw: &mut BytesMut,
     decoded: &mut BytesMut,
     read_direct: &mut bool,
+    read_splice: &mut bool,
     server_uuid_consumed: &mut bool,
 ) -> bool {
     let before = decoded.len();
@@ -264,10 +269,12 @@ fn decode_vision_frames(
         raw.advance(content_len);
         raw.advance(padding_len);
 
-        // CMD_PADDING_END (0x01) or CMD_PADDING_DIRECT (0x02): server has
-        // finished sending Vision frames.  Remaining raw bytes are direct.
+        // CMD_PADDING_END (0x01): server finished Vision framing, but do not
+        // splice Reality-TLS.
+        // CMD_PADDING_DIRECT (0x02): server requests XTLS splice.
         if command == CMD_PADDING_DIRECT || command == CMD_PADDING_END {
             *read_direct = true;
+            *read_splice = command == CMD_PADDING_DIRECT;
             decoded.extend_from_slice(raw);
             raw.clear();
             break;
@@ -370,6 +377,27 @@ mod tests {
             VisionStream::new(Box::new(client), TEST_UUID_STR.to_owned(), None)
                 .unwrap(),
             server,
+        )
+    }
+
+    fn make_vision_pair_with_splice_flags()
+    -> (VisionStream, tokio::io::DuplexStream, Arc<AtomicBool>) {
+        let (client, server) = tokio::io::duplex(65536);
+        let read_flag = Arc::new(AtomicBool::new(false));
+        let write_flag = Arc::new(AtomicBool::new(false));
+        let opts = VisionOptions {
+            read_flag: Arc::clone(&read_flag),
+            write_flag,
+        };
+        (
+            VisionStream::new(
+                Box::new(client),
+                TEST_UUID_STR.to_owned(),
+                Some(opts),
+            )
+            .unwrap(),
+            server,
+            read_flag,
         )
     }
 
@@ -579,6 +607,49 @@ mod tests {
         let mut expected = content.to_vec();
         expected.extend_from_slice(raw_after);
         assert_eq!(out, expected);
+    }
+
+    #[tokio::test]
+    async fn test_read_cmd_end_does_not_trigger_splice_flag() {
+        let (mut vs, mut server, read_flag) = make_vision_pair_with_splice_flags();
+
+        let content = b"end-frame-content";
+        server
+            .write_all(&server_first_frame(&TEST_UUID, CMD_PADDING_END, content, 0))
+            .await
+            .unwrap();
+
+        let mut out = vec![0u8; 64];
+        let n = vs.read(&mut out).await.unwrap();
+        assert_eq!(&out[..n], content);
+        assert!(
+            !read_flag.load(Ordering::Acquire),
+            "CMD_PADDING_END must not enable XTLS splice"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_read_cmd_direct_triggers_splice_flag() {
+        let (mut vs, mut server, read_flag) = make_vision_pair_with_splice_flags();
+
+        let content = b"direct-frame-content";
+        server
+            .write_all(&server_first_frame(
+                &TEST_UUID,
+                CMD_PADDING_DIRECT,
+                content,
+                0,
+            ))
+            .await
+            .unwrap();
+
+        let mut out = vec![0u8; 64];
+        let n = vs.read(&mut out).await.unwrap();
+        assert_eq!(&out[..n], content);
+        assert!(
+            read_flag.load(Ordering::Acquire),
+            "CMD_PADDING_DIRECT must enable XTLS splice"
+        );
     }
 
     #[tokio::test]
