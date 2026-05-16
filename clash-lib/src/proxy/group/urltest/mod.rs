@@ -144,8 +144,8 @@ impl OutboundHandler for Handler {
 
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
-        if !self.opts.udp {
-            return false;
+        if self.opts.udp {
+            return true;
         }
         match self.fastest(false).await {
             Some(fastest) => fastest.support_udp().await,
