@@ -84,6 +84,10 @@ pub struct Options {
     pub cwd: Option<String>,
     pub rt: Option<TokioRuntime>,
     pub log_file: Option<String>,
+    /// The original config file path, used to support "reload current config"
+    /// from the dashboard. Set this when starting from a file; leave `None`
+    /// for string/inline configs (e.g. FFI).
+    pub config_path: Option<String>,
 }
 
 pub enum TokioRuntime {
@@ -119,6 +123,9 @@ pub struct GlobalState {
     dns_listener: ArcRunner,
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
+    /// Path to the config file used at startup. Used by the dashboard "Reload"
+    /// button which sends an empty path to mean "reload current config".
+    pub config_path: Option<String>,
 }
 
 pub fn start_scaffold(opts: Options) -> Result<()> {
@@ -130,6 +137,13 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
             .enable_all()
             .build()?,
     };
+    let config_path = opts.config_path.or_else(|| {
+        if let Config::File(ref p) = opts.config {
+            Some(p.clone())
+        } else {
+            None
+        }
+    });
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
     let (log_tx, _) = broadcast::channel(100);
@@ -149,7 +163,7 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
         token_guard.push(shutdown_token.clone());
     }
     rt.block_on(async {
-        match start(config, cwd, log_tx, shutdown_token).await {
+        match start(config, cwd, config_path, log_tx, shutdown_token).await {
             Err(e) => {
                 eprintln!("start error: {e}");
                 Err(e)
@@ -169,6 +183,13 @@ pub fn start_scaffold_instance(
     std::thread::JoinHandle<()>,
     tokio_util::sync::CancellationToken,
 )> {
+    let config_path = opts.config_path.or_else(|| {
+        if let Config::File(ref p) = opts.config {
+            Some(p.clone())
+        } else {
+            None
+        }
+    });
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
     let rt_kind = opts.rt.unwrap_or(TokioRuntime::MultiThread);
@@ -189,7 +210,9 @@ pub fn start_scaffold_instance(
 
         let (log_tx, _) = tokio::sync::broadcast::channel(100);
 
-        if let Err(e) = rt.block_on(start(config, cwd, log_tx, token_clone)) {
+        if let Err(e) =
+            rt.block_on(start(config, cwd, config_path, log_tx, token_clone))
+        {
             eprintln!("Clash instance error: {}", e);
         }
     });
@@ -232,6 +255,7 @@ pub fn setup_default_crypto_provider() {
 pub async fn start(
     config: InternalConfig,
     cwd: String,
+    config_path: Option<String>,
     log_tx: broadcast::Sender<LogEvent>,
     shutdown_token: tokio_util::sync::CancellationToken,
 ) -> Result<()> {
@@ -254,6 +278,7 @@ pub async fn start(
         dns_listener: components.dns_listener.clone(),
         reload_tx,
         cwd: cwd.to_string_lossy().to_string(),
+        config_path,
     }));
 
     let mut api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
@@ -308,7 +333,7 @@ pub async fn start(
             let new_components =
                 create_components(cwd_clone.clone(), config).await?;
 
-            done.send(()).unwrap();
+            let _ = done.send(());
 
             components.stop_all();
             new_components.start_all();

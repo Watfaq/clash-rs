@@ -36,6 +36,7 @@ async fn integration_test() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         })
         .expect("Failed to start server");
     });
@@ -46,6 +47,7 @@ async fn integration_test() {
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         })
         .expect("Failed to start client");
     });
@@ -141,6 +143,7 @@ async fn integration_test_anytls() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![8902, 9092],
     )
@@ -152,6 +155,7 @@ async fn integration_test_anytls() {
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![8998, 9095],
     )
@@ -226,6 +230,7 @@ async fn integration_test_anytls_udp() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![8902, 9092],
     )
@@ -237,6 +242,7 @@ async fn integration_test_anytls_udp() {
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![8998, 9095],
     )
@@ -321,6 +327,7 @@ fn start_direct_udp_clash() {
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         })
         .expect("Failed to start direct-UDP clash instance");
     });

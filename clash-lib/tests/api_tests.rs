@@ -26,6 +26,7 @@ fn start_unique_client() -> (ClashInstance, u16) {
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -76,6 +77,7 @@ async fn test_config_reload_via_payload() {
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -259,6 +261,7 @@ async fn test_connections_returns_proxy_chain_names() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![server_base, server_base + 1],
     )
@@ -271,6 +274,7 @@ async fn test_connections_returns_proxy_chain_names() {
             cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         (client_base..client_base + CLIENT_PORT_BLOCK).collect(),
     )
@@ -670,6 +674,7 @@ async fn test_user_stats_endpoint_empty_on_no_traffic() {
             cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
+            config_path: None,
         },
         vec![server_base, server_base + 1],
     )
