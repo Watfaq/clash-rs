@@ -618,16 +618,19 @@ async fn create_components(
     // engine to select the appropriate proxy.
     if respect_rules {
         debug!("registering RULES outbound handler for DNS respect-rules");
-        let rules_handler = Arc::new(
-            proxy::RulesOutboundHandler::new(
-                outbound_manager.clone(),
-                router.clone(),
-            ),
-        );
-        outbound_registry
-            .write()
-            .await
-            .insert(crate::app::dns::config::RESPECT_RULES.to_string(), rules_handler);
+        let rules_key = crate::app::dns::config::RESPECT_RULES.to_string();
+        let mut registry = outbound_registry.write().await;
+        if registry.contains_key(&rules_key) {
+            return Err(crate::Error::InvalidConfig(format!(
+                "outbound registry already contains a handler for '{}', cannot register DNS respect-rules handler",
+                rules_key,
+            )));
+        }
+        let rules_handler = Arc::new(proxy::RulesOutboundHandler::new(
+            outbound_manager.clone(),
+            router.clone(),
+        ));
+        registry.insert(rules_key, rules_handler);
     }
 
     let statistics_manager = StatisticsManager::new();

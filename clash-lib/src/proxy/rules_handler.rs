@@ -55,17 +55,11 @@ impl RulesOutboundHandler {
                         Some(SocksAddr::Ip(addr))
                     }
                     Ok(None) => {
-                        warn!(
-                            "rules-handler: failed to resolve domain \
-                             {domain}"
-                        );
+                        warn!("rules-handler: failed to resolve domain {domain}");
                         None
                     }
                     Err(e) => {
-                        warn!(
-                            "rules-handler: DNS resolve error for \
-                             {domain}: {e}"
-                        );
+                        warn!("rules-handler: DNS resolve error for {domain}: {e}");
                         None
                     }
                 }
@@ -82,8 +76,8 @@ impl RulesOutboundHandler {
             Some(h) => Some(h),
             None => {
                 warn!(
-                    "rules-handler: outbound '{name}' not found, falling \
-                     back to DIRECT"
+                    "rules-handler: outbound '{name}' not found, falling back to \
+                     DIRECT"
                 );
                 self.outbound_manager.get_outbound(PROXY_DIRECT).await
             }
@@ -97,13 +91,12 @@ impl RulesOutboundHandler {
         sess: &Session,
         resolver: &ThreadSafeDNSResolver,
     ) -> String {
-        let dest = match Self::resolve_dest(resolver, &sess.destination).await
-        {
+        let dest = match Self::resolve_dest(resolver, &sess.destination).await {
             Some(d) => d,
             None => {
                 debug!(
-                    "rules-handler: could not resolve destination {}, \
-                     falling back to DIRECT",
+                    "rules-handler: could not resolve destination {}, falling back \
+                     to DIRECT",
                     sess.destination
                 );
                 return PROXY_DIRECT.to_string();
@@ -112,8 +105,7 @@ impl RulesOutboundHandler {
 
         let mut route_sess = sess.clone();
         route_sess.destination = dest;
-        let (outbound_name, _) =
-            self.router.match_route(&mut route_sess).await;
+        let (outbound_name, _) = self.router.match_route(&mut route_sess).await;
         outbound_name.to_string()
     }
 }
