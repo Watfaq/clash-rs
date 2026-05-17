@@ -1,7 +1,7 @@
 use rustls::{
     RootCertStore,
     client::{WebPkiServerVerifier, danger::ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
+    pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime},
 };
 use tracing::warn;
 
@@ -13,6 +13,70 @@ pub static GLOBAL_ROOT_STORE: LazyLock<Arc<RootCertStore>> =
 fn global_root_store() -> Arc<RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
     Arc::new(root_store)
+}
+
+/// Load a PEM certificate chain and private key from either inline PEM strings
+/// or file paths. A string containing `-----BEGIN` is treated as inline PEM;
+/// otherwise it is interpreted as a file path.
+///
+/// Returns `(cert_chain, private_key)` for use with rustls client
+/// authentication (mTLS).
+pub fn load_client_cert_and_key(
+    cert: &str,
+    key: &str,
+) -> std::io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+    let cert_pem = if cert.contains("-----BEGIN") {
+        cert.to_owned()
+    } else {
+        std::fs::read_to_string(cert).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("failed to read client certificate '{cert}': {e}"),
+            )
+        })?
+    };
+
+    let key_pem = if key.contains("-----BEGIN") {
+        key.to_owned()
+    } else {
+        std::fs::read_to_string(key).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("failed to read client private key '{key}': {e}"),
+            )
+        })?
+    };
+
+    let certs: Vec<CertificateDer<'static>> =
+        rustls_pemfile::certs(&mut cert_pem.as_bytes())
+            .filter_map(|r| {
+                r.map_err(|e| warn!("failed to parse client certificate entry: {e}"))
+                    .ok()
+            })
+            .collect();
+
+    if certs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "no valid certificates found in client certificate PEM",
+        ));
+    }
+
+    let private_key = rustls_pemfile::private_key(&mut key_pem.as_bytes())
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("failed to parse client private key: {e}"),
+            )
+        })?
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "no private key found in client private key PEM",
+            )
+        })?;
+
+    Ok((certs, private_key))
 }
 
 #[derive(Debug)]

@@ -547,12 +547,17 @@ mod tests {
             password: "secret".to_owned(),
             udp,
             tls: if with_tls {
-                Some(Box::new(TlsClient::new(
-                    true,
-                    "example.org".to_owned(),
-                    None,
-                    None,
-                )))
+                Some(Box::new(
+                    TlsClient::new(
+                        true,
+                        "example.org".to_owned(),
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .expect("failed to create TLS client"),
+                ))
             } else {
                 None
             },
@@ -871,7 +876,10 @@ mod tests {
             "example.org".to_owned(),
             Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
             None,
-        );
+            None,
+            None,
+        )
+        .expect("failed to create TLS client");
 
         let runner = get_runner(host_port).await?;
 

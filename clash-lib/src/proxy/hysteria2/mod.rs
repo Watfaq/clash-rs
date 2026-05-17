@@ -84,6 +84,10 @@ pub struct HystOption {
     pub ca_str: Option<String>,
     #[allow(dead_code)]
     pub cwnd: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    pub tls_key: Option<String>,
 }
 
 enum CcRx {
@@ -132,10 +136,66 @@ impl Handler {
         }
         let verify =
             DefaultTlsVerifier::new(opts.fingerprint.clone(), opts.skip_cert_verify);
-        let mut tls_config = RustlsClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verify))
-            .with_no_client_auth();
+        let mut tls_config =
+            match (opts.tls_cert.as_deref(), opts.tls_key.as_deref()) {
+                (Some(cert), Some(key)) => {
+                    match crate::common::tls::load_client_cert_and_key(cert, key) {
+                        Ok((certs, private_key)) => {
+                            match RustlsClientConfig::builder()
+                                .dangerous()
+                                .with_custom_certificate_verifier(Arc::new(verify))
+                                .with_client_auth_cert(certs, private_key)
+                            {
+                                Ok(cfg) => cfg,
+                                Err(e) => {
+                                    warn!(
+                                        "hysteria2 mTLS cert error: {e}, falling \
+                                         back to no client auth"
+                                    );
+                                    RustlsClientConfig::builder()
+                                        .dangerous()
+                                        .with_custom_certificate_verifier(Arc::new(
+                                            DefaultTlsVerifier::new(
+                                                opts.fingerprint.clone(),
+                                                opts.skip_cert_verify,
+                                            ),
+                                        ))
+                                        .with_no_client_auth()
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(
+                                "hysteria2 failed to load mTLS cert/key: {e}, \
+                                 falling back to no client auth"
+                            );
+                            RustlsClientConfig::builder()
+                                .dangerous()
+                                .with_custom_certificate_verifier(Arc::new(
+                                    DefaultTlsVerifier::new(
+                                        opts.fingerprint.clone(),
+                                        opts.skip_cert_verify,
+                                    ),
+                                ))
+                                .with_no_client_auth()
+                        }
+                    }
+                }
+                (None, None) => RustlsClientConfig::builder()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(verify))
+                    .with_no_client_auth(),
+                _ => {
+                    warn!(
+                        "hysteria2: tls-cert and tls-key must both be set or both \
+                         omitted; ignoring mTLS configuration"
+                    );
+                    RustlsClientConfig::builder()
+                        .dangerous()
+                        .with_custom_certificate_verifier(Arc::new(verify))
+                        .with_no_client_auth()
+                }
+            };
 
         // should set alpn_protocol `h3` default
         tls_config.alpn_protocols = if opts.alpn.is_empty() {
