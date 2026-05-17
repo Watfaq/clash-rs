@@ -114,7 +114,9 @@ impl TryFrom<&OutboundVmess> for Handler {
                         })
                         .transpose()?,
                     None,
-                );
+                    s.tls_cert.as_deref(),
+                    s.tls_key.as_deref(),
+                )?;
                 Some(Box::new(client))
             } else {
                 None

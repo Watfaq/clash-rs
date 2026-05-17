@@ -65,7 +65,9 @@ impl TryFrom<&OutboundAnytls> for Handler {
                         .clone()
                         .or(Some(DEFAULT_ALPN.map(str::to_owned).to_vec())),
                     None,
-                );
+                    s.tls_cert.as_deref(),
+                    s.tls_key.as_deref(),
+                )?;
                 Some(Box::new(client))
             },
             transport: None,
