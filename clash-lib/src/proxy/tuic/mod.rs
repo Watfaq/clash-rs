@@ -514,6 +514,8 @@ ip_mode = "auto"
             gc_lifetime: Duration::from_millis(15000),
             send_window: 8 * 1024 * 1024 * 2,
             receive_window: VarInt::from_u64(8 * 1024 * 1024)?,
+            tls_cert: None,
+            tls_key: None,
         })
     }
 
