@@ -13,7 +13,7 @@ use crate::{
         net::OutboundInterface,
     },
     common::errors::new_io_error,
-    proxy::{AnyOutboundHandler, datagram::UdpPacket, utils::FALLBACK_DIRECT},
+    proxy::{AnyOutboundHandler, datagram::UdpPacket},
     session::{Network, Session, Type},
 };
 use futures::{SinkExt, StreamExt};
@@ -84,7 +84,7 @@ impl DnsRuntimeProvider {
         let (name, _) = router.match_route(&mut sess).await;
         mgr.get_outbound(name)
             .await
-            .unwrap_or_else(|| FALLBACK_DIRECT.clone())
+            .unwrap_or_else(|| self.outbound.clone())
     }
 }
 
