@@ -19,9 +19,10 @@ fn global_root_store() -> Arc<RootCertStore> {
 /// or file paths. A string containing `-----BEGIN` is treated as inline PEM;
 /// otherwise it is interpreted as a file path.
 ///
-/// Returns `(cert_chain, private_key)` for use with rustls client
-/// authentication (mTLS).
-pub fn load_client_cert_and_key(
+/// Returns `(cert_chain, private_key)` suitable for both rustls client auth
+/// (mTLS, via `with_client_auth_cert`) and rustls server config
+/// (`with_single_cert`).
+pub fn load_cert_and_key(
     cert: &str,
     key: &str,
 ) -> std::io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
@@ -31,7 +32,7 @@ pub fn load_client_cert_and_key(
         std::fs::read_to_string(cert).map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("failed to read client certificate '{cert}': {e}"),
+                format!("failed to read certificate '{cert}': {e}"),
             )
         })?
     };
@@ -42,7 +43,7 @@ pub fn load_client_cert_and_key(
         std::fs::read_to_string(key).map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("failed to read client private key '{key}': {e}"),
+                format!("failed to read private key '{key}': {e}"),
             )
         })?
     };
@@ -50,7 +51,7 @@ pub fn load_client_cert_and_key(
     let certs: Vec<CertificateDer<'static>> =
         rustls_pemfile::certs(&mut cert_pem.as_bytes())
             .filter_map(|r| {
-                r.map_err(|e| warn!("failed to parse client certificate entry: {e}"))
+                r.map_err(|e| warn!("failed to parse certificate entry: {e}"))
                     .ok()
             })
             .collect();
@@ -58,7 +59,7 @@ pub fn load_client_cert_and_key(
     if certs.is_empty() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "no valid certificates found in client certificate PEM",
+            "no valid certificates found in PEM",
         ));
     }
 
@@ -66,13 +67,13 @@ pub fn load_client_cert_and_key(
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("failed to parse client private key: {e}"),
+                format!("failed to parse private key: {e}"),
             )
         })?
         .ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "no private key found in client private key PEM",
+                "no private key found in PEM",
             )
         })?;
 
@@ -93,7 +94,7 @@ pub fn build_tls_client_config(
 ) -> std::io::Result<rustls::ClientConfig> {
     match (tls_cert, tls_key) {
         (Some(cert), Some(key)) => {
-            let (certs, private_key) = load_client_cert_and_key(cert, key)?;
+            let (certs, private_key) = load_cert_and_key(cert, key)?;
             rustls::ClientConfig::builder()
                 .dangerous()
                 .with_custom_certificate_verifier(verifier)
