@@ -500,11 +500,22 @@ async fn create_components(
         .as_ref()
         .map(|_| Arc::new(OnceLock::new()));
 
+    // When `dns.respect-rules` is true, share a `RuleDispatch` between the
+    // resolver and the (later-built) router + outbound manager. The DNS
+    // runtime provider consults the OnceLocks at dial time and falls back to
+    // DIRECT until they are populated.
+    let rule_dispatch: Option<Arc<dns::RuleDispatch>> = if config.dns.respect_rules {
+        Some(dns::RuleDispatch::new())
+    } else {
+        None
+    };
+
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
         pending_country_mmdb.clone(),
         outbound_registry.clone(),
+        rule_dispatch.clone(),
     )
     .await;
 
@@ -530,6 +541,15 @@ async fn create_components(
         )
         .await?,
     );
+
+    if let Some(rd) = &rule_dispatch
+        && rd.outbound_manager.set(outbound_manager.clone()).is_err()
+    {
+        warn!(
+            "RuleDispatch outbound_manager OnceLock was already set — this is \
+             unexpected and indicates a double-initialization bug"
+        );
+    }
 
     debug!("initializing mmdb");
     let country_mmdb = if let Some(ref mmdb_file) = country_mmdb_file {
@@ -609,6 +629,15 @@ async fn create_components(
         )
         .await,
     );
+
+    if let Some(rd) = &rule_dispatch
+        && rd.router.set(router.clone()).is_err()
+    {
+        warn!(
+            "RuleDispatch router OnceLock was already set — this is unexpected and \
+             indicates a double-initialization bug"
+        );
+    }
 
     let statistics_manager = StatisticsManager::new();
 

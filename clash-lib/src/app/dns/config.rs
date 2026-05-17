@@ -68,6 +68,7 @@ pub struct Config {
     pub nameserver_policy: HashMap<String, NameServer>,
     pub edns_client_subnet: Option<EdnsClientSubnet>,
     pub fw_mark: Option<u32>,
+    pub respect_rules: bool,
 }
 
 impl Config {
@@ -454,6 +455,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             },
             nameserver_policy,
             edns_client_subnet,
+            respect_rules: dc.respect_rules,
         })
     }
 }
