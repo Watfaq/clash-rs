@@ -1,5 +1,5 @@
 use crate::{Error, common::utils::default_bool_true, config::utils};
-use serde::{Deserialize, de::value::MapDeserializer};
+use serde::{de::value::MapDeserializer, Deserialize, Deserializer};
 use serde_yaml::Value;
 #[cfg(feature = "shadowquic")]
 use shadowquic::config::CongestionControl as SQCongestionControl;
@@ -240,10 +240,70 @@ pub struct GrpcOpt {
     pub grpc_service_name: Option<String>,
 }
 
+fn deserialize_short_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct ShortIdVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for ShortIdVisitor {
+        type Value = String;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "a hex string, null, or an empty sequence for reality short-id"
+            )
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(v.to_owned())
+        }
+
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(v)
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(String::new())
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(String::new())
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            if let Some(first) = seq.next_element::<String>()? {
+                Ok(first)
+            } else {
+                Ok(String::new())
+            }
+        }
+    }
+
+    deserializer.deserialize_any(ShortIdVisitor)
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct RealityOpt {
     pub public_key: String,
+    #[serde(deserialize_with = "deserialize_short_id", default)]
     pub short_id: String,
 }
 
