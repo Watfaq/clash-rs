@@ -1,5 +1,5 @@
 use crate::{Error, common::utils::default_bool_true, config::utils};
-use serde::{de::value::MapDeserializer, Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::value::MapDeserializer};
 use serde_yaml::Value;
 #[cfg(feature = "shadowquic")]
 use shadowquic::config::CongestionControl as SQCongestionControl;
@@ -289,6 +289,11 @@ where
             A: serde::de::SeqAccess<'de>,
         {
             if let Some(first) = seq.next_element::<String>()? {
+                if seq.next_element::<String>()?.is_some() {
+                    return Err(serde::de::Error::custom(
+                        "reality short-id expects a single value, got a sequence",
+                    ));
+                }
                 Ok(first)
             } else {
                 Ok(String::new())
