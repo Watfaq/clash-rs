@@ -129,7 +129,7 @@ impl TryFrom<OutboundHysteria2> for Handler {
             tls_key: value.tls_key,
         };
 
-        Ok(Handler::new(opts))
+        Ok(Handler::new(opts)?)
     }
 }
 

@@ -130,7 +130,7 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> Self {
+    pub fn new(opts: HystOption) -> std::io::Result<Self> {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
@@ -139,61 +139,31 @@ impl Handler {
         let mut tls_config =
             match (opts.tls_cert.as_deref(), opts.tls_key.as_deref()) {
                 (Some(cert), Some(key)) => {
-                    match crate::common::tls::load_client_cert_and_key(cert, key) {
-                        Ok((certs, private_key)) => {
-                            match RustlsClientConfig::builder()
-                                .dangerous()
-                                .with_custom_certificate_verifier(Arc::new(verify))
-                                .with_client_auth_cert(certs, private_key)
-                            {
-                                Ok(cfg) => cfg,
-                                Err(e) => {
-                                    warn!(
-                                        "hysteria2 mTLS cert error: {e}, falling \
-                                         back to no client auth"
-                                    );
-                                    RustlsClientConfig::builder()
-                                        .dangerous()
-                                        .with_custom_certificate_verifier(Arc::new(
-                                            DefaultTlsVerifier::new(
-                                                opts.fingerprint.clone(),
-                                                opts.skip_cert_verify,
-                                            ),
-                                        ))
-                                        .with_no_client_auth()
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!(
-                                "hysteria2 failed to load mTLS cert/key: {e}, \
-                                 falling back to no client auth"
-                            );
-                            RustlsClientConfig::builder()
-                                .dangerous()
-                                .with_custom_certificate_verifier(Arc::new(
-                                    DefaultTlsVerifier::new(
-                                        opts.fingerprint.clone(),
-                                        opts.skip_cert_verify,
-                                    ),
-                                ))
-                                .with_no_client_auth()
-                        }
-                    }
+                    let (certs, private_key) =
+                        crate::common::tls::load_client_cert_and_key(cert, key)?;
+                    RustlsClientConfig::builder()
+                        .dangerous()
+                        .with_custom_certificate_verifier(Arc::new(verify))
+                        .with_client_auth_cert(certs, private_key)
+                        .map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!(
+                                    "hysteria2 invalid mTLS client cert/key: {e}"
+                                ),
+                            )
+                        })?
                 }
                 (None, None) => RustlsClientConfig::builder()
                     .dangerous()
                     .with_custom_certificate_verifier(Arc::new(verify))
                     .with_no_client_auth(),
                 _ => {
-                    warn!(
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
                         "hysteria2: tls-cert and tls-key must both be set or both \
-                         omitted; ignoring mTLS configuration"
-                    );
-                    RustlsClientConfig::builder()
-                        .dangerous()
-                        .with_custom_certificate_verifier(Arc::new(verify))
-                        .with_no_client_auth()
+                         omitted",
+                    ));
                 }
             };
 
@@ -221,7 +191,7 @@ impl Handler {
         client_config.transport_config(Arc::new(transport));
         let ep_config = quinn::EndpointConfig::default();
 
-        Self {
+        Ok(Self {
             opts,
             ep_config,
             client_config,
@@ -229,7 +199,7 @@ impl Handler {
             conn: Mutex::new(None),
             guard: Mutex::new(None),
             support_udp: RwLock::new(true),
-        }
+        })
     }
 
     // connect and auth
@@ -861,9 +831,13 @@ mod tests {
             cwnd: None,
             udp_mtu: None,
             disable_mtu_discovery: false,
+            tls_cert: None,
+            tls_key: None,
         };
 
-        let handler = Arc::new(Handler::new(opts));
+        let handler = Arc::new(
+            Handler::new(opts).expect("failed to create hysteria2 handler"),
+        );
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
