@@ -22,7 +22,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     session::{Session, SocksAddr},
 };
 use anyhow::anyhow;
@@ -36,7 +36,6 @@ use quinn::{
     ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
 };
 use quinn_proto::TransportConfig;
-use rustls::ClientConfig as RustlsClientConfig;
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -134,38 +133,16 @@ impl Handler {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
-        let verify =
-            DefaultTlsVerifier::new(opts.fingerprint.clone(), opts.skip_cert_verify);
-        let mut tls_config =
-            match (opts.tls_cert.as_deref(), opts.tls_key.as_deref()) {
-                (Some(cert), Some(key)) => {
-                    let (certs, private_key) =
-                        crate::common::tls::load_client_cert_and_key(cert, key)?;
-                    RustlsClientConfig::builder()
-                        .dangerous()
-                        .with_custom_certificate_verifier(Arc::new(verify))
-                        .with_client_auth_cert(certs, private_key)
-                        .map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!(
-                                    "hysteria2 invalid mTLS client cert/key: {e}"
-                                ),
-                            )
-                        })?
-                }
-                (None, None) => RustlsClientConfig::builder()
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(verify))
-                    .with_no_client_auth(),
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "hysteria2: tls-cert and tls-key must both be set or both \
-                         omitted",
-                    ));
-                }
-            };
+        let verify = Arc::new(DefaultTlsVerifier::new(
+            opts.fingerprint.clone(),
+            opts.skip_cert_verify,
+        ));
+        let mut tls_config = build_tls_client_config(
+            verify,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| std::io::Error::new(e.kind(), format!("hysteria2 TLS: {e}")))?;
 
         // should set alpn_protocol `h3` default
         tls_config.alpn_protocols = if opts.alpn.is_empty() {

@@ -79,6 +79,43 @@ pub fn load_client_cert_and_key(
     Ok((certs, private_key))
 }
 
+/// Build a `rustls` [`ClientConfig`] with a custom certificate verifier and
+/// optional mTLS client certificate.
+///
+/// When `tls_cert` and `tls_key` are both `Some`, mutual TLS (mTLS) is
+/// enabled by presenting the client certificate during the TLS handshake.
+/// Both must be either `None` (no client auth) or `Some` (mTLS); mixing
+/// them returns an [`io::Error`].
+pub fn build_tls_client_config(
+    verifier: Arc<dyn ServerCertVerifier>,
+    tls_cert: Option<&str>,
+    tls_key: Option<&str>,
+) -> std::io::Result<rustls::ClientConfig> {
+    match (tls_cert, tls_key) {
+        (Some(cert), Some(key)) => {
+            let (certs, private_key) = load_client_cert_and_key(cert, key)?;
+            rustls::ClientConfig::builder()
+                .dangerous()
+                .with_custom_certificate_verifier(verifier)
+                .with_client_auth_cert(certs, private_key)
+                .map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("invalid mTLS client cert/key: {e}"),
+                    )
+                })
+        }
+        (None, None) => Ok(rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(verifier)
+            .with_no_client_auth()),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "tls-cert and tls-key must both be set or both omitted",
+        )),
+    }
+}
+
 #[derive(Debug)]
 pub struct DefaultTlsVerifier {
     fingerprint: Option<String>,

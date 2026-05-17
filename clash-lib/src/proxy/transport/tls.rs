@@ -6,7 +6,7 @@ use super::Transport;
 use crate::{
     common::{
         errors::map_io_error,
-        tls::{DefaultTlsVerifier, GLOBAL_ROOT_STORE, load_client_cert_and_key},
+        tls::{DefaultTlsVerifier, build_tls_client_config},
     },
     proxy::AnyStream,
 };
@@ -65,39 +65,14 @@ impl Client {
         tls_cert: Option<&str>,
         tls_key: Option<&str>,
     ) -> io::Result<Self> {
-        let mut tls_config = match (tls_cert, tls_key) {
-            (Some(cert), Some(key)) => {
-                let (certs, private_key) = load_client_cert_and_key(cert, key)?;
-                rustls::ClientConfig::builder()
-                    .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                    .with_client_auth_cert(certs, private_key)
-                    .map_err(|e| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("invalid mTLS client cert/key: {e}"),
-                        )
-                    })?
-            }
-            (None, None) => rustls::ClientConfig::builder()
-                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                .with_no_client_auth(),
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "tls-cert and tls-key must both be set or both omitted",
-                ));
-            }
-        };
+        let verifier = Arc::new(DefaultTlsVerifier::new(None, skip_cert_verify));
+        let mut tls_config = build_tls_client_config(verifier, tls_cert, tls_key)?;
 
         tls_config.alpn_protocols = alpn
             .unwrap_or_default()
             .into_iter()
             .map(|x| x.as_bytes().to_vec())
             .collect();
-
-        tls_config.dangerous().set_certificate_verifier(Arc::new(
-            DefaultTlsVerifier::new(None, skip_cert_verify),
-        ));
 
         if std::env::var("SSLKEYLOGFILE").is_ok() {
             tls_config.key_log = Arc::new(rustls::KeyLogFile::new());

@@ -4,7 +4,7 @@ mod handle_task;
 pub(crate) mod types;
 
 use crate::{
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
 };
 use anyhow::Result;
@@ -205,34 +205,14 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<TuicEndpoint> {
-        let verifier = DefaultTlsVerifier::new(None, opts.skip_cert_verify);
-        let mut crypto = match (opts.tls_cert.as_deref(), opts.tls_key.as_deref()) {
-            (Some(cert), Some(key)) => {
-                let (certs, private_key) =
-                    crate::common::tls::load_client_cert_and_key(cert, key)
-                        .map_err(|e| anyhow::anyhow!("tuic mTLS: {e}"))?;
-                rustls::client::ClientConfig::builder_with_protocol_versions(&[
-                    &rustls::version::TLS13,
-                ])
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(verifier))
-                .with_client_auth_cert(certs, private_key)
-                .map_err(|e| anyhow::anyhow!("tuic mTLS cert error: {e}"))?
-            }
-            (None, None) => {
-                rustls::client::ClientConfig::builder_with_protocol_versions(&[
-                    &rustls::version::TLS13,
-                ])
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(verifier))
-                .with_no_client_auth()
-            }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "tuic: tls-cert and tls-key must both be set or both omitted"
-                ));
-            }
-        };
+        let verifier =
+            Arc::new(DefaultTlsVerifier::new(None, opts.skip_cert_verify));
+        let mut crypto = build_tls_client_config(
+            verifier,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| anyhow::anyhow!("tuic TLS: {e}"))?;
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
