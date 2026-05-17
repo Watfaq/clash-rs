@@ -107,6 +107,7 @@ impl DhcpClient {
                 direct_only_registry(),
                 None,
                 self.fw_mark,
+                None,
             )
             .await;
         }

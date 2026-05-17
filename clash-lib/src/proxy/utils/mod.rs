@@ -10,6 +10,7 @@ mod socket_helpers;
 
 pub use proxy_connector::*;
 pub use shared_handler::{
-    OutboundHandlerRegistry, SharedOutboundHandler, direct_only_registry,
+    FALLBACK_DIRECT, OutboundHandlerRegistry, SharedOutboundHandler,
+    direct_only_registry,
 };
 pub use socket_helpers::*;

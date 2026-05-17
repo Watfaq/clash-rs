@@ -22,7 +22,7 @@ pub type OutboundHandlerRegistry = Arc<RwLock<HashMap<String, AnyOutboundHandler
 /// A globally-shared DIRECT handler used as the fallback when a named proxy
 /// cannot be found in the registry.  Avoids allocating a new `Handler` on
 /// every lookup miss.
-pub(crate) static FALLBACK_DIRECT: std::sync::LazyLock<AnyOutboundHandler> =
+pub static FALLBACK_DIRECT: std::sync::LazyLock<AnyOutboundHandler> =
     std::sync::LazyLock::new(|| {
         Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler
     });
