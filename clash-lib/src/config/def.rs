@@ -582,6 +582,11 @@ pub struct DNS {
     pub nameserver_policy: HashMap<String, String>,
     /// Configure EDNS Client Subnet information to send with upstream queries
     pub edns_client_subnet: Option<EdnsClientSubnet>,
+    /// Whether DNS server connections follow routing rules
+    /// When true, nameserver/fallback/nameserver-policy connections
+    /// will be routed through the rule engine instead of connecting directly.
+    /// Requires proxy-server-nameserver to be non-empty.
+    pub respect_rules: bool,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]

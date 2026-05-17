@@ -5,7 +5,7 @@ use serde_yaml::Value;
 use shadowquic::config::CongestionControl as SQCongestionControl;
 use std::{
     collections::HashMap,
-    fmt::{Display, Formatter},
+    fmt::{self, Display, Formatter},
 };
 use uuid::Uuid;
 

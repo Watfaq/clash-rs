@@ -500,6 +500,8 @@ async fn create_components(
         .as_ref()
         .map(|_| Arc::new(OnceLock::new()));
 
+    let respect_rules = config.dns.respect_rules;
+
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
@@ -609,6 +611,24 @@ async fn create_components(
         )
         .await,
     );
+
+    // Register the special RULES outbound handler for DNS respect-rules.
+    // When respect-rules is enabled in the DNS config, DNS nameserver
+    // connections are routed through this handler, which uses the rule
+    // engine to select the appropriate proxy.
+    if respect_rules {
+        debug!("registering RULES outbound handler for DNS respect-rules");
+        let rules_handler = Arc::new(
+            proxy::RulesOutboundHandler::new(
+                outbound_manager.clone(),
+                router.clone(),
+            ),
+        );
+        outbound_registry
+            .write()
+            .await
+            .insert(crate::app::dns::config::RESPECT_RULES.to_string(), rules_handler);
+    }
 
     let statistics_manager = StatisticsManager::new();
 

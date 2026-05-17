@@ -17,6 +17,10 @@ use tracing::warn;
 use url::Url;
 pub use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
+/// Special proxy name that signals DNS connections should be routed
+/// through the rule engine, used when `respect-rules` is enabled.
+pub const RESPECT_RULES: &str = "RULES";
+
 #[derive(Clone, Debug)]
 pub struct NameServer {
     pub net: DNSNetMode,
@@ -68,10 +72,11 @@ pub struct Config {
     pub nameserver_policy: HashMap<String, NameServer>,
     pub edns_client_subnet: Option<EdnsClientSubnet>,
     pub fw_mark: Option<u32>,
+    pub respect_rules: bool,
 }
 
 impl Config {
-    pub fn parse_nameserver(servers: &[String]) -> Result<Vec<NameServer>, Error> {
+    pub fn parse_nameserver(servers: &[String], respect_rules: bool) -> Result<Vec<NameServer>, Error> {
         let mut nameservers = vec![];
 
         for (i, server) in servers.iter().enumerate() {
@@ -117,7 +122,12 @@ impl Config {
             };
 
             let iface = Self::parse_outbound_interface(&url);
-            let proxy = Self::parse_outbound_proxy(&url);
+            let mut proxy = Self::parse_outbound_proxy(&url);
+
+            if respect_rules && proxy.is_none() {
+                proxy = Some(RESPECT_RULES.to_string());
+            }
+
             let net: &str;
             let port: u16;
 
@@ -181,11 +191,12 @@ impl Config {
 
     pub fn parse_nameserver_policy(
         policy_map: &HashMap<String, String>,
+        respect_rules: bool,
     ) -> Result<HashMap<String, NameServer>, Error> {
         let mut policy = HashMap::new();
 
         for (domain, server) in policy_map {
-            let nameservers = Config::parse_nameserver(&[server.to_owned()])?;
+            let nameservers = Config::parse_nameserver(&[server.to_owned()], respect_rules)?;
 
             let (_, valid) = trie::valid_and_split_domain(domain);
             if !valid {
@@ -293,10 +304,16 @@ impl TryFrom<&crate::config::def::Config> for Config {
             )));
         }
 
-        let nameservers = Config::parse_nameserver(&dc.nameserver)?;
-        let fallback = Config::parse_nameserver(&dc.fallback)?;
+        if dc.respect_rules && dc.proxy_server_nameserver.is_empty() {
+            return Err(Error::InvalidConfig(String::from(
+                "if respect-rules is turned on, proxy-server-nameserver cannot be empty",
+            )));
+        }
+
+        let nameservers = Config::parse_nameserver(&dc.nameserver, dc.respect_rules)?;
+        let fallback = Config::parse_nameserver(&dc.fallback, dc.respect_rules)?;
         let nameserver_policy =
-            Config::parse_nameserver_policy(&dc.nameserver_policy)?;
+            Config::parse_nameserver_policy(&dc.nameserver_policy, dc.respect_rules)?;
 
         if dc.default_nameserver.is_empty() {
             return Err(Error::InvalidConfig(String::from(
@@ -304,7 +321,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             )));
         }
 
-        let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
+        let default_nameserver = Config::parse_nameserver(&dc.default_nameserver, false)?;
 
         for ns in &default_nameserver {
             if let url::Host::Domain(_) = ns.host {
@@ -318,7 +335,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
         // `default-nameserver` at client-construction time, mirroring how
         // `nameserver` resolves its own DoH/DoT hosts.
         let proxy_server_nameserver = if !dc.proxy_server_nameserver.is_empty() {
-            let ns = Config::parse_nameserver(&dc.proxy_server_nameserver)?;
+            let ns = Config::parse_nameserver(&dc.proxy_server_nameserver, false)?;
             if ns.is_empty() {
                 return Err(Error::InvalidConfig(String::from(
                     "proxy-server-nameserver has no usable entries (all skipped)",
@@ -454,6 +471,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             },
             nameserver_policy,
             edns_client_subnet,
+            respect_rules: dc.respect_rules,
         })
     }
 }
@@ -513,7 +531,7 @@ mod tests {
     #[test]
     fn parse_nameserver_ipv6_without_scheme() {
         let servers = vec!["2400:3200::1".to_string()];
-        let ns = Config::parse_nameserver(&servers).expect("parse failed");
+        let ns = Config::parse_nameserver(&servers, false).expect("parse failed");
         assert_eq!(ns.len(), 1);
         assert_eq!(ns[0].host.to_string(), "[2400:3200::1]");
         assert_eq!(ns[0].port, 53);
@@ -526,7 +544,7 @@ mod tests {
     #[test]
     fn parse_nameserver_ipv6_with_brackets_and_port() {
         let servers = vec!["[2400:3200::1]:5353".to_string()];
-        let ns = Config::parse_nameserver(&servers).expect("parse failed");
+        let ns = Config::parse_nameserver(&servers, false).expect("parse failed");
         assert_eq!(ns.len(), 1);
         assert_eq!(ns[0].host.to_string(), "[2400:3200::1]");
         assert_eq!(ns[0].port, 5353);
@@ -534,5 +552,57 @@ mod tests {
         let _sock: std::net::SocketAddr = format!("{}:{}", ns[0].host, ns[0].port)
             .parse()
             .expect("address should parse to SocketAddr");
+    }
+
+    #[test]
+    fn respect_rules_sets_proxy_to_rules() {
+        let servers = vec!["8.8.8.8".to_string()];
+        let ns = Config::parse_nameserver(&servers, true)
+            .expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0].proxy, Some(RESPECT_RULES.to_string()));
+    }
+
+    #[test]
+    fn respect_rules_false_keeps_proxy_none() {
+        let servers = vec!["8.8.8.8".to_string()];
+        let ns = Config::parse_nameserver(&servers, false)
+            .expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0].proxy, None);
+    }
+
+    #[test]
+    fn respect_rules_preserves_explicit_proxy() {
+        let servers = vec!["8.8.8.8#MyProxyGroup".to_string()];
+        let ns = Config::parse_nameserver(&servers, true)
+            .expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0].proxy, Some("MyProxyGroup".to_string()));
+    }
+
+    #[test]
+    fn respect_rules_preserves_explicit_interface() {
+        let servers = vec!["8.8.8.8#interface=en0".to_string()];
+        let ns = Config::parse_nameserver(&servers, true)
+            .expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        // interface is set but proxy is not, so respect-rules should still apply
+        assert_eq!(ns[0].proxy, Some(RESPECT_RULES.to_string()));
+    }
+
+    #[test]
+    fn respect_rules_multiple_servers() {
+        let servers = vec![
+            "8.8.8.8".to_string(),
+            "1.1.1.1#MyProxy".to_string(),
+            "tls://dns.google:853".to_string(),
+        ];
+        let ns = Config::parse_nameserver(&servers, true)
+            .expect("parse failed");
+        assert_eq!(ns.len(), 3);
+        assert_eq!(ns[0].proxy, Some(RESPECT_RULES.to_string()));
+        assert_eq!(ns[1].proxy, Some("MyProxy".to_string()));
+        assert_eq!(ns[2].proxy, Some(RESPECT_RULES.to_string()));
     }
 }

@@ -65,6 +65,9 @@ pub mod wg;
 pub mod group;
 pub use group::{fallback, loadbalance, relay, selector, urltest};
 
+mod rules_handler;
+pub use rules_handler::RulesOutboundHandler;
+
 mod common;
 pub mod inbound;
 mod options;
