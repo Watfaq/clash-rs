@@ -1,6 +1,7 @@
 use std::{
     io,
     net::SocketAddr,
+    sync::Arc,
     task::{Context, Poll, ready},
     time::Duration,
 };
@@ -8,7 +9,7 @@ use std::{
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
+        dns::{RuleDispatch, ThreadSafeDNSResolver},
         net::OutboundInterface,
     },
     common::errors::new_io_error,
@@ -30,6 +31,7 @@ pub struct DnsRuntimeProvider {
     dns_resolver: ThreadSafeDNSResolver,
     iface: Option<OutboundInterface>,
     so_mark: Option<u32>,
+    rule_dispatch: Option<Arc<RuleDispatch>>,
 }
 
 impl DnsRuntimeProvider {
@@ -38,6 +40,7 @@ impl DnsRuntimeProvider {
         dns_resolver: ThreadSafeDNSResolver,
         iface: Option<OutboundInterface>,
         so_mark: Option<u32>,
+        rule_dispatch: Option<Arc<RuleDispatch>>,
     ) -> Self {
         Self {
             handle: TokioHandle::default(),
@@ -45,6 +48,7 @@ impl DnsRuntimeProvider {
             dns_resolver,
             iface,
             so_mark,
+            rule_dispatch,
         }
     }
 
@@ -59,7 +63,28 @@ impl DnsRuntimeProvider {
         let proxy = Arc::new(direct::Handler::new(PROXY_DIRECT));
         // SystemResolver::new us trivial,it always return Ok
         let dns_resolver = Arc::new(dns::SystemResolver::new(false).unwrap());
-        Self::new(proxy, dns_resolver, iface, so_mark)
+        Self::new(proxy, dns_resolver, iface, so_mark, None)
+    }
+
+    /// Pick the outbound handler for an upstream DNS dial. When
+    /// `rule_dispatch` is set and both of its `OnceLock`s are populated, this
+    /// asks the rule engine which outbound to use for `sess` (whose
+    /// destination is always an IP — see `connect_tcp` / `bind_udp` — so
+    /// `Router::match_route` never re-enters DNS). Otherwise, falls back to
+    /// the static `outbound` (DIRECT or `#proxy=...`).
+    async fn pick_outbound(&self, sess: &Session) -> AnyOutboundHandler {
+        let Some(rd) = &self.rule_dispatch else {
+            return self.outbound.clone();
+        };
+        let (Some(router), Some(mgr)) = (rd.router.get(), rd.outbound_manager.get())
+        else {
+            return self.outbound.clone();
+        };
+        let mut sess = sess.clone();
+        let (name, _) = router.match_route(&mut sess).await;
+        mgr.get_outbound(name)
+            .await
+            .unwrap_or_else(|| self.outbound.clone())
     }
 }
 
@@ -87,7 +112,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
             "[::]:0".parse().unwrap()
         };
 
-        let outbound = self.outbound.clone();
+        let provider = self.clone();
         let dns = self.dns_resolver.clone();
         let sess = Session {
             source: src,
@@ -99,6 +124,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
             ..Default::default()
         };
         Box::pin(async move {
+            let outbound = provider.pick_outbound(&sess).await;
             let stream = outbound.connect_stream(&sess, dns);
             stream.await.map(AsyncIoTokioAsStd)
         })
@@ -116,7 +142,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
             "[::]:0".parse().unwrap()
         };
 
-        let outbound = self.outbound.clone();
+        let provider = self.clone();
         let dns = self.dns_resolver.clone();
         let sess = Session {
             source: src,
@@ -129,6 +155,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
         };
 
         Box::pin(async move {
+            let outbound = provider.pick_outbound(&sess).await;
             outbound
                 .connect_datagram(&sess, dns)
                 .await

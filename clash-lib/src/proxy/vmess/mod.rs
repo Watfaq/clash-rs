@@ -371,12 +371,10 @@ mod tests {
 }"#;
 
     fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
-        Some(Box::new(TlsClient::new(
-            true,
-            "example.org".to_owned(),
-            alpn,
-            None,
-        )))
+        Some(Box::new(
+            TlsClient::new(true, "example.org".to_owned(), alpn, None, None, None)
+                .expect("failed to create TLS client"),
+        ))
     }
 
     async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {

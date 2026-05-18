@@ -360,8 +360,15 @@ mod tests {
             0,
             "".to_owned(),
         );
-        let tls =
-            transport::TlsClient::new(true, "example.org".to_owned(), None, None);
+        let tls = transport::TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("failed to create TLS client");
 
         let container = get_ws_runner(host_port).await?;
 
@@ -421,7 +428,10 @@ mod tests {
             "example.org".to_owned(),
             Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
             None,
-        );
+            None,
+            None,
+        )
+        .expect("failed to create TLS client");
 
         let runner = get_grpc_runner(host_port).await?;
 

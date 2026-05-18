@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
-use tracing::warn;
+
+use crate::common::tls::load_cert_and_key;
 
 /// Build a TLS acceptor from PEM certificate and private key.
 /// Strings containing `-----BEGIN` are treated as inline PEM; otherwise
@@ -13,61 +14,7 @@ pub(crate) fn build_tls_acceptor(
     private_key: Option<&str>,
 ) -> std::io::Result<TlsAcceptor> {
     let (certs, key) = match (certificate, private_key) {
-        (Some(cert), Some(key)) => {
-            let cert_pem = if cert.contains("-----BEGIN") {
-                cert.to_owned()
-            } else {
-                std::fs::read_to_string(cert).map_err(|e| {
-                    std::io::Error::new(
-                        e.kind(),
-                        format!("failed to read anytls certificate '{cert}': {e}"),
-                    )
-                })?
-            };
-            let key_pem = if key.contains("-----BEGIN") {
-                key.to_owned()
-            } else {
-                std::fs::read_to_string(key).map_err(|e| {
-                    std::io::Error::new(
-                        e.kind(),
-                        format!("failed to read anytls private key '{key}': {e}"),
-                    )
-                })?
-            };
-
-            let certs: Vec<rustls::pki_types::CertificateDer<'static>> =
-                rustls_pemfile::certs(&mut cert_pem.as_bytes())
-                    .filter_map(|r| {
-                        r.map_err(|e| {
-                            warn!("failed to parse anytls certificate: {e}")
-                        })
-                        .ok()
-                    })
-                    .collect();
-
-            if certs.is_empty() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "no valid certificates found in anytls certificate PEM",
-                ));
-            }
-
-            let key = rustls_pemfile::private_key(&mut key_pem.as_bytes())
-                .map_err(|e| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        format!("failed to parse anytls private key: {e}"),
-                    )
-                })?
-                .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "no private key found in anytls private key PEM",
-                    )
-                })?;
-
-            (certs, key)
-        }
+        (Some(cert), Some(key)) => load_cert_and_key(cert, key)?,
         (None, None) => {
             let rcgen::CertifiedKey { cert, signing_key } =
                 rcgen::generate_simple_self_signed(vec!["localhost".to_string()])

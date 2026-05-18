@@ -22,7 +22,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     session::{Session, SocksAddr},
 };
 use anyhow::anyhow;
@@ -36,7 +36,6 @@ use quinn::{
     ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
 };
 use quinn_proto::TransportConfig;
-use rustls::ClientConfig as RustlsClientConfig;
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -84,6 +83,10 @@ pub struct HystOption {
     pub ca_str: Option<String>,
     #[allow(dead_code)]
     pub cwnd: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    pub tls_key: Option<String>,
 }
 
 enum CcRx {
@@ -126,16 +129,20 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> Self {
+    pub fn new(opts: HystOption) -> std::io::Result<Self> {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
-        let verify =
-            DefaultTlsVerifier::new(opts.fingerprint.clone(), opts.skip_cert_verify);
-        let mut tls_config = RustlsClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verify))
-            .with_no_client_auth();
+        let verify = Arc::new(DefaultTlsVerifier::new(
+            opts.fingerprint.clone(),
+            opts.skip_cert_verify,
+        ));
+        let mut tls_config = build_tls_client_config(
+            verify,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| std::io::Error::new(e.kind(), format!("hysteria2 TLS: {e}")))?;
 
         // should set alpn_protocol `h3` default
         tls_config.alpn_protocols = if opts.alpn.is_empty() {
@@ -161,7 +168,7 @@ impl Handler {
         client_config.transport_config(Arc::new(transport));
         let ep_config = quinn::EndpointConfig::default();
 
-        Self {
+        Ok(Self {
             opts,
             ep_config,
             client_config,
@@ -169,7 +176,7 @@ impl Handler {
             conn: Mutex::new(None),
             guard: Mutex::new(None),
             support_udp: RwLock::new(true),
-        }
+        })
     }
 
     // connect and auth
@@ -801,9 +808,13 @@ mod tests {
             cwnd: None,
             udp_mtu: None,
             disable_mtu_discovery: false,
+            tls_cert: None,
+            tls_key: None,
         };
 
-        let handler = Arc::new(Handler::new(opts));
+        let handler = Arc::new(
+            Handler::new(opts).expect("failed to create hysteria2 handler"),
+        );
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;

@@ -6,21 +6,36 @@ use super::Transport;
 use crate::{
     common::{
         errors::map_io_error,
-        tls::{DefaultTlsVerifier, GLOBAL_ROOT_STORE},
+        tls::{DefaultTlsVerifier, build_tls_client_config},
     },
     proxy::AnyStream,
 };
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 pub struct TLSOptions {
     pub skip_cert_verify: bool,
     pub sni: String,
     pub alpn: Option<Vec<String>>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls_key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls_cert`.
+    pub tls_key: Option<String>,
 }
 
-impl From<TLSOptions> for Client {
-    fn from(opt: TLSOptions) -> Self {
-        Self::new(opt.skip_cert_verify, opt.sni, opt.alpn, None)
+impl TryFrom<TLSOptions> for Client {
+    type Error = io::Error;
+
+    fn try_from(opt: TLSOptions) -> Result<Self, Self::Error> {
+        Client::new(
+            opt.skip_cert_verify,
+            opt.sni,
+            opt.alpn,
+            None,
+            opt.tls_cert.as_deref(),
+            opt.tls_key.as_deref(),
+        )
     }
 }
 
@@ -36,24 +51,28 @@ pub struct Client {
 }
 
 impl Client {
+    /// Create a new TLS client.
+    ///
+    /// When `tls_cert` and `tls_key` are both `Some`, mutual TLS (mTLS) is
+    /// enabled: the client will present the given certificate to the server.
+    /// Both must be either `None` (no client auth) or `Some` (mTLS); mixing
+    /// them returns an error.
     pub fn new(
         skip_cert_verify: bool,
         sni: String,
         alpn: Option<Vec<String>>,
         expected_alpn: Option<String>,
-    ) -> Self {
-        let mut tls_config = rustls::ClientConfig::builder()
-            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-            .with_no_client_auth();
+        tls_cert: Option<&str>,
+        tls_key: Option<&str>,
+    ) -> io::Result<Self> {
+        let verifier = Arc::new(DefaultTlsVerifier::new(None, skip_cert_verify));
+        let mut tls_config = build_tls_client_config(verifier, tls_cert, tls_key)?;
+
         tls_config.alpn_protocols = alpn
             .unwrap_or_default()
             .into_iter()
             .map(|x| x.as_bytes().to_vec())
             .collect();
-
-        tls_config.dangerous().set_certificate_verifier(Arc::new(
-            DefaultTlsVerifier::new(None, skip_cert_verify),
-        ));
 
         if std::env::var("SSLKEYLOGFILE").is_ok() {
             tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
@@ -61,11 +80,11 @@ impl Client {
 
         let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
 
-        Self {
+        Ok(Self {
             sni,
             expected_alpn,
             connector,
-        }
+        })
     }
 }
 
