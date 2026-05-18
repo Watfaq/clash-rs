@@ -9,32 +9,25 @@ use std::{
 
 use async_trait::async_trait;
 
-use hickory_client::{
-    client,
-    proto::{
-        DnsHandle, ProtoError,
-        h2::HttpsClientStreamBuilder,
-        rustls::tls_client_connect,
-        tcp::TcpClientStream,
-        udp::UdpClientStream,
-        xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
-    },
+use hickory_net::{
+    DnsHandle, client, h2::HttpsClientStream, tcp::TcpClientStream,
+    tls::tls_client_connect, udp::UdpClientStream, xfer::FirstAnswer,
 };
 use hickory_proto::{
-    op::Message,
+    op::{self, DnsRequest, DnsRequestOptions, Message},
     rr::{
         RecordType,
         rdata::opt::{ClientSubnet, EdnsCode, EdnsOption},
     },
 };
-use rustls::ClientConfig;
+use rustls::{ClientConfig, pki_types::ServerName};
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, instrument, trace, warn};
 
 use crate::{
     Error,
     app::{
-        dns::{self},
+        dns::{self, RuleDispatch},
         net::OutboundInterface,
     },
     common::tls::{self, GLOBAL_ROOT_STORE},
@@ -87,6 +80,7 @@ mod tests {
             net: DNSNetMode::Udp,
             iface: None,
             ecs,
+            rule_dispatch: None,
         }
     }
 
@@ -200,6 +194,12 @@ pub struct Opts {
     pub proxy: Arc<dyn OutboundHandler>,
     pub ecs: Option<EdnsClientSubnet>,
     pub fw_mark: Option<u32>,
+    /// When set, upstream dials consult the rule engine (see
+    /// `DnsRuntimeProvider::pick_outbound`). Only populated for `nameserver`,
+    /// `fallback`, and `nameserver-policy` clients when `dns.respect-rules`
+    /// is true; bootstrap clients (`default-nameserver`,
+    /// `proxy-server-nameserver`) leave this `None`.
+    pub rule_dispatch: Option<Arc<RuleDispatch>>,
 }
 
 type FwMark = Option<u32>;
@@ -273,8 +273,8 @@ impl Display for DnsConfig {
 }
 
 struct Inner {
-    c: Option<client::Client>,
-    bg_handle: Option<JoinHandle<Result<(), ProtoError>>>,
+    c: Option<client::Client<DnsRuntimeProvider>>,
+    bg_handle: Option<JoinHandle<()>>,
 }
 
 /// DnsClient
@@ -290,6 +290,55 @@ pub struct DnsClient {
     net: DNSNetMode,
     iface: Option<OutboundInterface>,
     ecs: Option<EdnsClientSubnet>,
+    rule_dispatch: Option<Arc<RuleDispatch>>,
+}
+
+impl DnsClient {
+    /// Rebuild the DNS stream with retries, waiting between attempts.
+    /// Observed on iOS: EADDRNOTAVAIL during network transitions can break
+    /// DNS client connections; retrying gives the OS time to settle.
+    async fn rebuild_with_retries(
+        &self,
+    ) -> anyhow::Result<(client::Client<DnsRuntimeProvider>, JoinHandle<()>)> {
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(200);
+
+        for attempt in 0..=MAX_RETRIES {
+            match dns_stream_builder(&self.cfg, self.rule_dispatch.clone()).await {
+                Ok(result) => {
+                    if attempt > 0 {
+                        info!(
+                            "{}: dns client rebuild succeeded on attempt {}/{}",
+                            self.id(),
+                            attempt + 1,
+                            MAX_RETRIES + 1
+                        );
+                    }
+                    return Ok(result);
+                }
+                Err(e) if attempt < MAX_RETRIES => {
+                    warn!(
+                        "{}: dns client rebuild attempt {}/{} failed: {e:#}, \
+                         retrying in {}ms",
+                        self.id(),
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        RETRY_DELAY.as_millis()
+                    );
+                    tokio::time::sleep(RETRY_DELAY).await;
+                }
+                Err(e) => {
+                    warn!(
+                        "{}: dns client rebuild failed after {} attempts: {e:#}",
+                        self.id(),
+                        MAX_RETRIES + 1
+                    );
+                    return Err(e.into());
+                }
+            }
+        }
+        unreachable!()
+    }
 }
 
 impl DnsClient {
@@ -364,6 +413,7 @@ impl DnsClient {
                     net: opts.net,
                     iface: opts.iface,
                     ecs: opts.ecs.clone(),
+                    rule_dispatch: opts.rule_dispatch.clone(),
                 }))
             }
             DNSNetMode::Tcp => {
@@ -386,6 +436,7 @@ impl DnsClient {
                     net: opts.net,
                     iface: opts.iface,
                     ecs: opts.ecs.clone(),
+                    rule_dispatch: opts.rule_dispatch.clone(),
                 }))
             }
             DNSNetMode::DoT => {
@@ -408,6 +459,7 @@ impl DnsClient {
                     net: opts.net,
                     iface: opts.iface,
                     ecs: opts.ecs.clone(),
+                    rule_dispatch: opts.rule_dispatch.clone(),
                 }))
             }
             DNSNetMode::DoH => {
@@ -431,6 +483,7 @@ impl DnsClient {
                     net: opts.net,
                     iface: opts.iface,
                     ecs: opts.ecs.clone(),
+                    rule_dispatch: opts.rule_dispatch.clone(),
                 }))
             }
             DNSNetMode::Dhcp => unreachable!("."),
@@ -526,7 +579,7 @@ impl Client for DnsClient {
                             "dns client background task is finished, likely \
                              connection closed, restarting a new one"
                         );
-                        let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                        let (client, bg) = self.rebuild_with_retries().await?;
                         inner.c.replace(client);
                         inner.bg_handle.replace(bg);
                     } else {
@@ -539,7 +592,7 @@ impl Client for DnsClient {
                 _ => {
                     // initializing client
                     info!("initializing dns client: {}", &self.cfg);
-                    let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                    let (client, bg) = self.rebuild_with_retries().await?;
                     inner.c.replace(client);
                     inner.bg_handle.replace(bg);
                 }
@@ -549,20 +602,9 @@ impl Client for DnsClient {
         let mut outbound = msg.clone();
         self.apply_edns_client_subnet(&mut outbound);
 
-        // TODO: remove this encode/decode roundtrip once hickory-client 0.26.0
-        // stable is published. Currently hickory-client is pinned to 0.25.x
-        // which internally uses hickory-proto 0.25.x, while the rest of the
-        // stack uses hickory-proto 0.26.x. The two Message types are
-        // incompatible at the Rust type level, so we serialize to wire bytes
-        // and reparse to cross the version boundary.
-        let bytes = outbound
-            .to_vec()
-            .map_err(|e| Error::DNSError(e.to_string()))?;
-        let msg_025 = hickory_client::proto::op::Message::from_vec(&bytes)
-            .map_err(|e| Error::DNSError(e.to_string()))?;
-        let mut req = DnsRequest::new(msg_025, DnsRequestOptions::default());
-        if req.id() == 0 {
-            req.set_id(rand::random::<u16>());
+        let mut req = DnsRequest::new(outbound, DnsRequestOptions::default());
+        if req.metadata.id == 0 {
+            req.metadata.id = rand::random::<u16>();
         }
         self.inner
             .read()
@@ -574,19 +616,14 @@ impl Client for DnsClient {
             .first_answer()
             .await
             .map_err(|x| Error::DNSError(x.to_string()).into())
-            .and_then(|x: hickory_client::proto::xfer::DnsResponse| {
-                // TODO: same version-boundary workaround as above — remove
-                // once hickory-client 0.26.0 stable ships.
-                let bytes = x.into_buffer();
-                hickory_proto::op::Message::from_vec(&bytes)
-                    .map_err(|e| Error::DNSError(e.to_string()).into())
-            })
+            .map(|x: op::DnsResponse| x.into_message())
     }
 }
 
 async fn dns_stream_builder(
     cfg: &DnsConfig,
-) -> Result<(client::Client, JoinHandle<Result<(), ProtoError>>), Error> {
+    rule_dispatch: Option<Arc<RuleDispatch>>,
+) -> Result<(client::Client<DnsRuntimeProvider>, JoinHandle<()>), Error> {
     let dns_resolver = Arc::new(dns::SystemResolver::new(false)?);
     match cfg {
         DnsConfig::Udp(addr, iface, proxy, fw_mark) => {
@@ -597,18 +634,17 @@ async fn dns_stream_builder(
                     dns_resolver,
                     iface.clone(),
                     *fw_mark,
+                    rule_dispatch.clone(),
                 ),
             )
             .with_timeout(Some(Duration::from_secs(5)))
             .build();
 
-            client::Client::connect(stream)
-                .await
-                .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+            let (x, y) = client::Client::<DnsRuntimeProvider>::from_sender(stream);
+            Ok((x, tokio::spawn(y)))
         }
         DnsConfig::Tcp(addr, iface, proxy, fw_mark) => {
-            let (stream, sender) = TcpClientStream::new(
+            let (stream_future, sender) = TcpClientStream::new(
                 *addr,
                 None,
                 Some(Duration::from_secs(5)),
@@ -617,13 +653,15 @@ async fn dns_stream_builder(
                     dns_resolver,
                     iface.clone(),
                     *fw_mark,
+                    rule_dispatch.clone(),
                 ),
             );
 
-            client::Client::new(stream, sender, None)
+            let stream = stream_future
                 .await
-                .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+                .map_err(|x| Error::DNSError(x.to_string()))?;
+            let (x, y) = client::Client::<DnsRuntimeProvider>::new(stream, sender);
+            Ok((x, tokio::spawn(y)))
         }
         DnsConfig::Tls(addr, host, iface, proxy, fw_mark) => {
             let mut tls_config = ClientConfig::builder()
@@ -634,27 +672,31 @@ async fn dns_stream_builder(
             let addr = *addr;
             let host = host.clone();
             let iface = iface.clone();
-            let (stream, sender) = tls_client_connect(
+
+            let server_name = ServerName::try_from(host.to_string())
+                .map_err(|e| Error::DNSError(e.to_string()))?;
+            let (stream_future, sender) = tls_client_connect(
                 addr,
-                host.to_string(),
+                server_name,
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
                     *fw_mark,
+                    rule_dispatch.clone(),
                 ),
             );
 
-            client::Client::with_timeout(
+            let stream = stream_future
+                .await
+                .map_err(|x| Error::DNSError(x.to_string()))?;
+            let (x, y) = client::Client::<DnsRuntimeProvider>::with_timeout(
                 stream,
                 sender,
                 Duration::from_secs(5),
-                None,
-            )
-            .await
-            .map(|(x, y)| (x, tokio::spawn(y)))
-            .map_err(|x| Error::DNSError(x.to_string()))
+            );
+            Ok((x, tokio::spawn(y)))
         }
         DnsConfig::Https(addr, host, iface, proxy, fw_mark) => {
             let mut tls_config = ClientConfig::builder()
@@ -672,21 +714,22 @@ async fn dns_stream_builder(
                     tls::NoHostnameTlsVerifier::new(),
                 ));
             }
-            let stream = HttpsClientStreamBuilder::with_client_config(
+            let stream = HttpsClientStream::builder(
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
                     *fw_mark,
+                    rule_dispatch.clone(),
                 ),
             )
-            .build(*addr, host.to_string(), "/dns-query".to_string());
+            .build(*addr, host.to_string().into(), "/dns-query".into())
+            .await
+            .map_err(|x| Error::DNSError(x.to_string()))?;
 
-            client::Client::connect(stream)
-                .await
-                .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+            let (x, y) = client::Client::<DnsRuntimeProvider>::from_sender(stream);
+            Ok((x, tokio::spawn(y)))
         }
     }
 }

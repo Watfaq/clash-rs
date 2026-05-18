@@ -155,29 +155,20 @@ async fn update_configs(
     State(state): State<ConfigState>,
     Json(req): Json<UpdateConfigRequest>,
 ) -> impl IntoResponse {
-    let (done, wait) = tokio::sync::oneshot::channel();
-    let g = state.global_state.lock().await;
-    match (req.path, req.payload) {
-        (_, Some(payload)) => {
-            let cfg = crate::Config::Str(payload);
-            match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    StatusCode::NO_CONTENT.into_response()
-                }
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "could not signal config reload",
-                )
-                    .into_response(),
-            }
-        }
-        (Some(mut path), None) => {
+    // Extract only what we need, then drop the lock before the async reload.
+    let (reload_tx, cwd, config_path) = {
+        let g = state.global_state.lock().await;
+        (g.reload_tx.clone(), g.cwd.clone(), g.config_path.clone())
+    };
+
+    let cfg = match (req.path.as_deref(), req.payload) {
+        (_, Some(payload)) => crate::Config::Str(payload),
+
+        // Non-empty explicit path: validate and reload from that file.
+        (Some(p), None) if !p.is_empty() => {
+            let mut path = p.to_string();
             if !PathBuf::from(&path).is_absolute() {
-                path = PathBuf::from(g.cwd.clone())
-                    .join(path)
-                    .to_string_lossy()
-                    .to_string();
+                path = PathBuf::from(&cwd).join(path).to_string_lossy().to_string();
             }
             if !PathBuf::from(&path).exists() {
                 return (
@@ -186,24 +177,41 @@ async fn update_configs(
                 )
                     .into_response();
             }
-
-            let cfg: crate::Config = crate::Config::File(path);
-            match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    StatusCode::NO_CONTENT.into_response()
-                }
-
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "could not signal config reload",
+            if PathBuf::from(&path).is_dir() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("config path {path} is a directory"),
                 )
-                    .into_response(),
+                    .into_response();
             }
+            crate::Config::File(path)
         }
-        (None, None) => {
-            (StatusCode::BAD_REQUEST, "no path or payload provided").into_response()
-        }
+
+        // Empty path or no path: reload from the startup config file.
+        _ => match config_path {
+            Some(p) => crate::Config::File(p),
+            None => {
+                return (StatusCode::BAD_REQUEST, "no path or payload provided")
+                    .into_response();
+            }
+        },
+    };
+
+    let (done, wait) = tokio::sync::oneshot::channel();
+    match reload_tx.send((cfg, done)).await {
+        Ok(_) => match wait.await {
+            Ok(_) => StatusCode::NO_CONTENT.into_response(),
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config reload did not complete",
+            )
+                .into_response(),
+        },
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "could not signal config reload",
+        )
+            .into_response(),
     }
 }
 

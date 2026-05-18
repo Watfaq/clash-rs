@@ -4,7 +4,7 @@ use crate::{
     common::trie,
     config::def::DNSMode,
     dns::{
-        ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
+        ClashResolver, Config, ResolverKind, RuleDispatch, ThreadSafeDNSClient,
         fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
         filters::{
             DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
@@ -78,6 +78,7 @@ impl EnhancedResolver {
                 )),
                 None,
                 None,
+                None,
             )
             .await,
             fallback: None,
@@ -100,6 +101,7 @@ impl EnhancedResolver {
         store: ThreadSafeCacheFile,
         mmdb: Option<PendingMmdb>,
         outbounds: crate::proxy::utils::OutboundHandlerRegistry,
+        rule_dispatch: Option<Arc<RuleDispatch>>,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
 
@@ -112,6 +114,9 @@ impl EnhancedResolver {
                 Arc::new(RwLock::new(std::collections::HashMap::new())),
                 edns_client_subnet.clone(),
                 cfg.fw_mark,
+                // default-nameserver is the bootstrap path used to resolve
+                // DoH/DoT hostnames — it MUST NOT go through the rule engine.
+                None,
             )
             .await,
             fallback: None,
@@ -136,6 +141,9 @@ impl EnhancedResolver {
                     Arc::new(RwLock::new(std::collections::HashMap::new())),
                     edns_client_subnet.clone(),
                     cfg.fw_mark,
+                    // proxy-server-nameserver resolves the proxies themselves;
+                    // routing it through rules would create a bootstrap cycle.
+                    None,
                 )
                 .await;
                 if clients.is_empty() {
@@ -181,6 +189,7 @@ impl EnhancedResolver {
                 outbounds.clone(),
                 edns_client_subnet.clone(),
                 cfg.fw_mark,
+                rule_dispatch.clone(),
             )
             .await,
             hosts: cfg.hosts,
@@ -192,6 +201,7 @@ impl EnhancedResolver {
                         outbounds.clone(),
                         edns_client_subnet.clone(),
                         cfg.fw_mark,
+                        rule_dispatch.clone(),
                     )
                     .await,
                 )
@@ -246,6 +256,7 @@ impl EnhancedResolver {
                                 outbounds.clone(),
                                 edns_client_subnet.clone(),
                                 cfg.fw_mark,
+                                rule_dispatch.clone(),
                             )
                             .await,
                         ),
@@ -424,6 +435,14 @@ impl EnhancedResolver {
             && let Some(lru) = &self.lru_cache
             && !(q.query_type() == rr::RecordType::TXT
                 && q.name().to_ascii().starts_with("_acme-challenge."))
+            && !matches!(
+                msg.metadata.response_code,
+                op::ResponseCode::NXDomain | op::ResponseCode::ServFail
+            )
+            && {
+                let ips = EnhancedResolver::ip_list_of_message(msg);
+                ips.is_empty() || ips.iter().any(|ip| !ip.is_unspecified())
+            }
         {
             lru.insert(q.clone(), Ok(msg.clone()), Instant::now());
         }
@@ -736,14 +755,11 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::{
-        client,
-        proto::{
-            udp::UdpClientStream,
-            xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
-        },
+    use hickory_net::{DnsHandle, client, udp::UdpClientStream, xfer::FirstAnswer};
+    use hickory_proto::{
+        op::{self, DnsRequest, DnsRequestOptions},
+        rr,
     };
-    use hickory_proto::{op, rr};
     use std::{net::Ipv4Addr, sync::Arc, time::Instant};
 
     use crate::{
@@ -860,10 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
-        // Use hickory_client::proto (0.25) types throughout so DnsRequest::new
-        // gets a compatible Message. TODO: remove shadowing once hickory-client
-        // 0.26.0 stable ships and aligns with hickory-proto 0.26.
-        use hickory_client::proto::{op, rr};
+        use hickory_net::proto::{op, rr};
 
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
@@ -871,25 +884,24 @@ mod tests {
             .unwrap();
         assert_eq!(name.to_string(), "some_domain.understore.");
 
-        let mut m = op::Message::new();
+        let mut m = op::Message::query();
         let mut q = op::Query::new();
 
         q.set_name(name);
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
-        m.set_recursion_desired(true);
+        m.metadata.recursion_desired = true;
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
             DnsRuntimeProvider::new_direct(None, None),
         )
         .build();
-        let (client, bg) = client::Client::connect(stream).await.unwrap();
-
+        let (client, bg) = client::Client::<DnsRuntimeProvider>::from_sender(stream);
         tokio::spawn(bg);
 
         let mut req = DnsRequest::new(m, DnsRequestOptions::default());
-        req.set_id(rand::random::<u16>());
+        req.metadata.id = rand::random::<u16>();
         let res = client.send(req).first_answer().await;
         assert!(res.is_ok());
     }
@@ -906,6 +918,7 @@ mod tests {
             proxy: get_default_outbound(),
             ecs: None,
             fw_mark: None,
+            rule_dispatch: None,
         })
         .await
         .expect("build client");
@@ -925,6 +938,7 @@ mod tests {
             proxy: get_default_outbound(),
             ecs: None,
             fw_mark: None,
+            rule_dispatch: None,
         })
         .await
         .expect("build client");
@@ -944,6 +958,7 @@ mod tests {
             proxy: get_default_outbound(),
             ecs: None,
             fw_mark: None,
+            rule_dispatch: None,
         })
         .await
         .expect("build client");
@@ -965,6 +980,7 @@ mod tests {
             proxy: get_default_outbound(),
             ecs: None,
             fw_mark: None,
+            rule_dispatch: None,
         })
         .await
         .expect("build client");
@@ -984,6 +1000,7 @@ mod tests {
             proxy: get_default_outbound(),
             ecs: None,
             fw_mark: None,
+            rule_dispatch: None,
         })
         .await
         .expect("build client");
@@ -1080,6 +1097,7 @@ mod tests {
             cache_store,
             None,
             Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            None,
         )
         .await;
 
@@ -1135,6 +1153,7 @@ mod tests {
             cache_store,
             None,
             Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            None,
         )
         .await;
 
@@ -1229,7 +1248,7 @@ mod tests {
         ]);
 
         let resolver =
-            EnhancedResolver::new(config, cache_store, None, outbounds).await;
+            EnhancedResolver::new(config, cache_store, None, outbounds, None).await;
 
         assert!(resolver.proxy_resolver.is_some());
         let domains = resolver.proxy_server_domains.as_ref().expect(
@@ -1256,7 +1275,7 @@ mod tests {
         let outbounds = make_outbound_registry(&[("cf-proxy", "one.one.one.one")]);
 
         let resolver =
-            EnhancedResolver::new(config, cache_store, None, outbounds).await;
+            EnhancedResolver::new(config, cache_store, None, outbounds, None).await;
 
         // Sanity: the trie was built
         assert!(resolver.proxy_server_domains.is_some());

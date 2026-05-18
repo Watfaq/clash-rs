@@ -153,6 +153,7 @@ export function Settings() {
         </div>
         <div className="text-[12px] mt-2 px-1" style={{ color: 'var(--color-text-secondary)' }}>
           When served from the clash-rs binary, defaults to the current origin.
+          {' '}Secret is saved in this browser on this device.
         </div>
       </div>
 

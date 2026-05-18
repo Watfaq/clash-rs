@@ -4,7 +4,7 @@ mod handle_task;
 pub(crate) mod types;
 
 use crate::{
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
 };
 use anyhow::Result;
@@ -86,6 +86,10 @@ pub struct HandlerOptions {
     pub max_udp_relay_packet_size: u64,
     pub ip: Option<String>,
     pub sni: Option<String>,
+    /// File path or inline PEM client certificate for mTLS.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    pub tls_key: Option<String>,
 }
 
 pub struct Handler {
@@ -201,14 +205,14 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<TuicEndpoint> {
-        let verifier = DefaultTlsVerifier::new(None, opts.skip_cert_verify);
-        let mut crypto =
-            rustls::client::ClientConfig::builder_with_protocol_versions(&[
-                &rustls::version::TLS13,
-            ])
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verifier))
-            .with_no_client_auth();
+        let verifier =
+            Arc::new(DefaultTlsVerifier::new(None, opts.skip_cert_verify));
+        let mut crypto = build_tls_client_config(
+            verifier,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| anyhow::anyhow!("tuic TLS: {e}"))?;
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
@@ -510,6 +514,8 @@ ip_mode = "auto"
             gc_lifetime: Duration::from_millis(15000),
             send_window: 8 * 1024 * 1024 * 2,
             receive_window: VarInt::from_u64(8 * 1024 * 1024)?,
+            tls_cert: None,
+            tls_key: None,
         })
     }
 

@@ -765,9 +765,6 @@ name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "bitvec"
@@ -1294,21 +1291,21 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clash-doc"
-version = "0.10.3"
+version = "0.10.6"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-ffi"
-version = "0.10.3"
+version = "0.10.6"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-lib"
-version = "0.10.3"
+version = "0.10.6"
 dependencies = [
  "aead 0.5.2",
  "aes 0.9.0",
@@ -1347,11 +1344,11 @@ dependencies = [
  "futures",
  "generic-array 1.4.1",
  "h2",
- "h3 0.0.8",
- "h3-quinn 0.0.10",
+ "h3",
+ "h3-quinn",
  "hex",
- "hickory-client",
- "hickory-proto 0.26.1",
+ "hickory-net",
+ "hickory-proto",
  "hickory-resolver",
  "hmac 0.13.0",
  "http",
@@ -1401,11 +1398,11 @@ dependencies = [
  "sha2 0.11.0",
  "shadowquic",
  "shadowsocks",
- "smoltcp 0.12.0 (git+https://github.com/smoltcp-rs/smoltcp.git?rev=ac32e64)",
+ "smoltcp 0.13.1",
  "sock2proc",
  "socket2 0.6.3",
  "ssh-key",
- "sysinfo 0.39.2",
+ "sysinfo 0.39.1",
  "tailscale",
  "tar",
  "tempfile",
@@ -1416,7 +1413,6 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",
- "tokio-watfaq-rustls",
  "tor-rtcompat",
  "totp-rs",
  "tower",
@@ -1436,7 +1432,6 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-netstack",
- "watfaq-rustls",
  "webpki-roots",
  "windows 0.62.2",
  "zip",
@@ -1445,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "clash-rs"
-version = "0.10.3"
+version = "0.10.6"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -2342,11 +2337,10 @@ dependencies = [
 [[package]]
 name = "dhcproto"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "425ab19f6a915beac79cac8ec2810c1311b502ae14d7f294682081cf5ae4c5bb"
+source = "git+https://github.com/bluecatengineering/dhcproto?rev=eece41c9a13b0e4912fb9a8f08401ab01b4123d4#eece41c9a13b0e4912fb9a8f08401ab01b4123d4"
 dependencies = [
  "dhcproto-macros",
- "hickory-proto 0.25.2",
+ "hickory-proto",
  "ipnet",
  "rand 0.9.4",
  "thiserror 2.0.18",
@@ -2355,8 +2349,7 @@ dependencies = [
 [[package]]
 name = "dhcproto-macros"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3944d18b1889ce23702b0ea0230e87033cf5b4659e233419b5c00da3983a387b"
+source = "git+https://github.com/bluecatengineering/dhcproto?rev=eece41c9a13b0e4912fb9a8f08401ab01b4123d4#eece41c9a13b0e4912fb9a8f08401ab01b4123d4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2652,12 +2645,6 @@ checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
 dependencies = [
  "encoding_rs",
 ]
-
-[[package]]
-name = "endian-type"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
 
 [[package]]
 name = "enum-as-inner"
@@ -3372,20 +3359,6 @@ dependencies = [
 
 [[package]]
 name = "h3"
-version = "0.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dfb059a4f28a66f186ed16ad912d142f490676acba59353831d7cb45a96b0d3"
-dependencies = [
- "bytes",
- "fastrand",
- "futures-util",
- "http",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
-name = "h3"
 version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10872b55cfb02a821b69dc7cf8dc6a71d6af25eb9a79662bec4a9d016056b3be"
@@ -3400,27 +3373,13 @@ dependencies = [
 
 [[package]]
 name = "h3-quinn"
-version = "0.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d482318ae94198fc8e3cbb0b7ba3099c865d744e6ec7c62039ca7b6b6c66fbf"
-dependencies = [
- "bytes",
- "futures",
- "h3 0.0.7",
- "quinn 0.11.9",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "h3-quinn"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b2e732c8d91a74731663ac8479ab505042fbf547b9a207213ab7fbcbfc4f8b4"
 dependencies = [
  "bytes",
  "futures",
- "h3 0.0.8",
+ "h3",
  "quinn 0.11.9",
  "tokio",
  "tokio-util",
@@ -3569,25 +3528,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e712f64ec3850b98572bffac52e2c6f282b29fe6c5fa6d42334b30be438d95c1"
 
 [[package]]
-name = "hickory-client"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c466cd63a4217d5b2b8e32f23f58312741ce96e3c84bf7438677d2baff0fc555"
-dependencies = [
- "cfg-if",
- "data-encoding",
- "futures-channel",
- "futures-util",
- "hickory-proto 0.25.2",
- "once_cell",
- "radix_trie",
- "rand 0.9.4",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hickory-net"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3601,9 +3541,9 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2",
- "h3 0.0.8",
- "h3-quinn 0.0.10",
- "hickory-proto 0.26.1",
+ "h3",
+ "h3-quinn",
+ "hickory-proto",
  "http",
  "idna",
  "ipnet",
@@ -3611,40 +3551,6 @@ dependencies = [
  "pin-project-lite",
  "quinn 0.11.9",
  "rand 0.10.1",
- "rustls",
- "thiserror 2.0.18",
- "tinyvec",
- "tokio",
- "tokio-rustls",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "hickory-proto"
-version = "0.25.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
-dependencies = [
- "async-trait",
- "bytes",
- "cfg-if",
- "data-encoding",
- "enum-as-inner",
- "futures-channel",
- "futures-io",
- "futures-util",
- "h2",
- "h3 0.0.7",
- "h3-quinn 0.0.9",
- "http",
- "idna",
- "ipnet",
- "once_cell",
- "pin-project-lite",
- "quinn 0.11.9",
- "rand 0.9.4",
- "ring",
  "rustls",
  "thiserror 2.0.18",
  "tinyvec",
@@ -3688,7 +3594,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "ipconfig",
  "ipnet",
  "jni",
@@ -3721,10 +3627,10 @@ dependencies = [
  "data-encoding",
  "futures-util",
  "h2",
- "h3 0.0.8",
- "h3-quinn 0.0.10",
+ "h3",
+ "h3-quinn",
  "hickory-net",
- "hickory-proto 0.26.1",
+ "hickory-proto",
  "hickory-resolver",
  "http",
  "ipnet",
@@ -4378,6 +4284,7 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de99ad8adc878ee0e68509ad256152ce23b8bbe45f5539d04e179630aca40a9"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "derive_more",
  "enum-assoc",
@@ -5188,7 +5095,7 @@ dependencies = [
  "etherparse 0.16.0",
  "futures",
  "rand 0.8.6",
- "smoltcp 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smoltcp 0.12.0",
  "spin 0.9.8",
  "tokio",
  "tokio-util",
@@ -5205,15 +5112,6 @@ dependencies = [
  "libc",
  "thiserror 2.0.18",
  "winapi",
-]
-
-[[package]]
-name = "nibble_vec"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
-dependencies = [
- "smallvec",
 ]
 
 [[package]]
@@ -5333,7 +5231,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42b8cfee0e339a0337359f3c88165702ac6e600dc01c0cc9579a92d62b08477a"
 dependencies = [
  "bitflags 2.11.1",
- "serde",
 ]
 
 [[package]]
@@ -6757,6 +6654,7 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e3f04d716273d25e4923541e625e0084256f72cad7e2e7e50a0e0926aa739f"
 dependencies = [
+ "aws-lc-rs",
  "bytes",
  "getrandom 0.3.4",
  "lru-slab",
@@ -6848,16 +6746,6 @@ name = "radium"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
-
-[[package]]
-name = "radix_trie"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c069c179fcdc6a2fe24d8d18305cf085fdbd4f922c041943e203685d6a1c58fd"
-dependencies = [
- "endian-type",
- "nibble_vec",
-]
 
 [[package]]
 name = "rand"
@@ -6991,6 +6879,7 @@ version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57f6d249aad744e274e682777a50283a225a32705394ee6d5fcc01efa25e4055"
 dependencies = [
+ "aws-lc-rs",
  "pem",
  "ring",
  "rustls-pki-types",
@@ -7529,16 +7418,16 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.40"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
+source = "git+https://github.com/Watfaq/rustls.git?branch=watfaq%2F0.23.40#e6e8e7e1a0d65f2f273eb7b5b6179896536ac174"
 dependencies = [
  "aws-lc-rs",
  "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "subtle",
+ "x25519-dalek 2.0.1",
  "zeroize",
 ]
 
@@ -7549,10 +7438,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68483c81131e4f08f8d565632f8b9fec9f71e86f422648175ba03bbd84ea8228"
 dependencies = [
  "aes-gcm 0.10.3",
+ "aws-lc-rs",
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "subtle",
  "zeroize",
 ]
@@ -7602,7 +7492,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
@@ -7614,18 +7504,6 @@ name = "rustls-platform-verifier-android"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
-dependencies = [
- "aws-lc-rs",
- "ring",
- "rustls-pki-types",
- "untrusted 0.9.0",
-]
 
 [[package]]
 name = "rustls-webpki"
@@ -8263,26 +8141,25 @@ dependencies = [
 
 [[package]]
 name = "shadowquic"
-version = "0.3.4"
-source = "git+https://github.com/spongebob888/shadowquic.git?rev=277f47a59607a91d11bcb4ae98309a320617d4b2#277f47a59607a91d11bcb4ae98309a320617d4b2"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e233defda06e8a512ced38c3d3c206af6ffaf73b6fdc60b92fc1b58a32c8d41e"
 dependencies = [
  "anyhow",
- "arc-swap",
  "async-trait",
+ "aws-lc-rs",
  "brutal-core",
  "bytes",
  "clap",
  "educe 0.6.0",
  "iroh-quinn",
  "iroh-quinn-proto",
- "notify",
  "quinn-jls",
  "quinn-proto-jls",
  "rcgen",
  "ring",
  "rustls",
  "rustls-jls",
- "rustls-native-certs",
  "sendfd",
  "serde",
  "serde-saphyr",
@@ -8300,7 +8177,8 @@ dependencies = [
 [[package]]
 name = "shadowquic-macros"
 version = "0.3.4"
-source = "git+https://github.com/spongebob888/shadowquic.git?rev=277f47a59607a91d11bcb4ae98309a320617d4b2#277f47a59607a91d11bcb4ae98309a320617d4b2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7983a5c6234960c92a6f9919f0445df0b4c925934c7b87c07a8e8b7fde15c70c"
 dependencies = [
  "crabtime",
  "proc-macro2",
@@ -8525,20 +8403,6 @@ dependencies = [
 
 [[package]]
 name = "smoltcp"
-version = "0.12.0"
-source = "git+https://github.com/smoltcp-rs/smoltcp.git?rev=ac32e64#ac32e643a4b7e09161193071526b3ca5a0deedb5"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "cfg-if",
- "defmt 0.3.100",
- "heapless 0.8.0",
- "log",
- "managed",
-]
-
-[[package]]
-name = "smoltcp"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f73d40463bba65efc9adc6370b56df76d563cc46e2482bba58351b4afb7535e"
@@ -8548,6 +8412,7 @@ dependencies = [
  "cfg-if",
  "defmt 0.3.100",
  "heapless 0.9.3",
+ "log",
  "managed",
 ]
 
@@ -8914,9 +8779,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.39.2"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14311e7e9a03114cd4b65eedd54e8fed2945e17f08586ae97ef53bc0669f9581"
+checksum = "a4deba334e1190ba7cb498327affa11e5ece10d26a30ab2f27fcf09504b8d8b6"
 dependencies = [
  "libc",
  "memchr",
@@ -9215,8 +9080,7 @@ dependencies = [
 [[package]]
 name = "tokio-rustls"
 version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?branch=watfaq%2F0.26.4#b26e3e2b7a0161d505fd12d6e545b16463f1a45f"
 dependencies = [
  "rustls",
  "tokio",
@@ -9287,16 +9151,6 @@ dependencies = [
  "pin-project-lite",
  "slab",
  "tokio",
-]
-
-[[package]]
-name = "tokio-watfaq-rustls"
-version = "0.26.0"
-source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8#cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8"
-dependencies = [
- "rustls-pki-types",
- "tokio",
- "watfaq-rustls",
 ]
 
 [[package]]
@@ -10381,7 +10235,7 @@ dependencies = [
  "pin-project",
  "rustls",
  "rustls-pki-types",
- "rustls-webpki 0.103.13",
+ "rustls-webpki",
  "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
@@ -11661,14 +11515,14 @@ dependencies = [
 
 [[package]]
 name = "watfaq-dns"
-version = "0.10.3"
+version = "0.10.6"
 dependencies = [
  "anyhow",
  "async-trait",
  "env_logger",
  "futures",
- "hickory-client",
- "hickory-proto 0.26.1",
+ "hickory-net",
+ "hickory-proto",
  "hickory-server",
  "mockall",
  "rustls",
@@ -11682,7 +11536,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "env_logger",
@@ -11694,28 +11548,12 @@ dependencies = [
  "netstack-lwip",
  "netstack-smoltcp",
  "rand 0.10.1",
- "smoltcp 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smoltcp 0.13.1",
  "socket2 0.6.3",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "tun-rs",
-]
-
-[[package]]
-name = "watfaq-rustls"
-version = "0.23.21"
-source = "git+https://github.com/Watfaq/rustls.git?rev=c3ab043d673029d245fd618b9bc86fd6a6109bae#c3ab043d673029d245fd618b9bc86fd6a6109bae"
-dependencies = [
- "aws-lc-rs",
- "log",
- "once_cell",
- "ring",
- "rustls-pki-types",
- "rustls-webpki 0.102.8",
- "subtle",
- "x25519-dalek 2.0.1",
- "zeroize",
 ]
 
 [[package]]
@@ -12351,6 +12189,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d43b0f71ce057da06bc0851b23ee24f3f86190b07203dd8f567d0b706a185202"
 dependencies = [
  "asn1-rs",
+ "aws-lc-rs",
  "data-encoding",
  "der-parser",
  "lazy_static",
