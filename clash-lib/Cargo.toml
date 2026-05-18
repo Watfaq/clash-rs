@@ -16,7 +16,7 @@ aws-lc-rs = [
     "russh/aws-lc-rs",
     "boringtun/aws-lc-rs",
     "hickory-client/https-aws-lc-rs",
-    "tuic-quinn?/rustls-aws-lc-rs",
+
 ]
 ring = [
     "rustls/ring",
@@ -26,12 +26,12 @@ ring = [
     "russh/ring",
     "boringtun/ring",
     "hickory-client/https-ring",
-    "tuic-quinn?/rustls-ring",
+
 ]
 
 # Protos
 shadowsocks = ["dep:shadowsocks", "dep:blake3"]
-tuic = ["dep:tuic-core", "dep:register-count", "dep:tuic-quinn"]
+tuic = ["dep:tuic-core", "dep:register-count"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
@@ -184,10 +184,8 @@ tor-rtcompat = { version = "0.42", optional = true, default-features = false, fe
 
 
 # tuic
-tuic-core= { tag = "v1.8.1", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
+tuic-core= { branch = "build/tuic", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
-# tuic-quinn gives tuic-specific quinn fork with rustls support (same fork as tuic-core uses internally)
-tuic-quinn = { package = "quinn", branch = "bbrv3", git = "https://github.com/Tipuch/quinn.git", optional = true, default-features = false, features = ["runtime-tokio"] }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
 

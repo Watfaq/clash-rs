@@ -4,7 +4,7 @@ use bytes::Bytes;
 use std::{sync::Arc, time::Duration};
 use tuic_core::{
     Address,
-    quinn::{Connect, Packet, quinn::ZeroRttAccepted},
+    quinn::{Connect, Packet, ZeroRttAccepted},
 };
 
 use super::types::{TuicConnection, UdpRelayMode};
