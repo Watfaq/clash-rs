@@ -11147,7 +11147,7 @@ dependencies = [
 [[package]]
 name = "tuic-core"
 version = "1.8.1"
-source = "git+https://github.com/Itsusinn/tuic.git?branch=build%2Ftuic#562ea5706d28529e8db74128bb4a23edfe9c0ffa"
+source = "git+https://github.com/Itsusinn/tuic.git?branch=build%2Ftuic#2e58dae059b9f6e5324e9abc14dbb2b609ff95d4"
 dependencies = [
  "bytes",
  "eyre",
