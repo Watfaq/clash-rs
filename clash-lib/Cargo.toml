@@ -182,7 +182,7 @@ tor-rtcompat = { version = "0.42", optional = true, default-features = false, fe
 
 
 # tuic
-tuic-core= { branch = "build/tuic", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
+tuic-core= { tag = "v1.8.4", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio"] }
