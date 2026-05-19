@@ -49,5 +49,3 @@ needless_collect = "deny"
 rustls = { git = "https://github.com/Watfaq/rustls.git", branch = "watfaq/0.23.40" }
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", branch = "watfaq/0.26.4" }
 
-[patch."https://github.com/Itsusinn/tuic.git"]
-tuic-core = { path = "/home/ihsin/.openclaw/workspace/Itsusinn/tuic/v1.8.2/tuic-core" }
