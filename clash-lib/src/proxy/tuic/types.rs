@@ -263,6 +263,7 @@ pub enum CongestionControl {
     NewReno,
     #[default]
     Bbr,
+    Bbr3,
 }
 impl From<&str> for CongestionControl {
     #[inline]
@@ -275,6 +276,8 @@ impl From<&str> for CongestionControl {
             Self::NewReno
         } else if s.eq_ignore_ascii_case("bbr") {
             Self::Bbr
+        } else if s.eq_ignore_ascii_case("bbr3") {
+            Self::Bbr3
         } else {
             tracing::warn!(
                 "Unknown congestion controller {s}. Use default controller"

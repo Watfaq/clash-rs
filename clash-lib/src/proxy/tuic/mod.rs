@@ -14,7 +14,7 @@ use tracing::debug;
 use tuic_core::quinn::{
     ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint, EndpointConfig,
     TokioRuntime, TransportConfig as QuinnTransportConfig, VarInt,
-    congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
+    bbr::BbrConfig, congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
     crypto::rustls::QuicClientConfig,
 };
 
@@ -235,6 +235,8 @@ impl Handler {
             CongestionControl::NewReno => transport_config
                 .congestion_controller_factory(Arc::new(NewRenoConfig::default())),
             CongestionControl::Bbr => transport_config
+                .congestion_controller_factory(Arc::new(BbrConfig::default())),
+            CongestionControl::Bbr3 => transport_config
                 .congestion_controller_factory(Arc::new(Bbr3Config::default())),
         };
 
