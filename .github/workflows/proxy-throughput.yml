@@ -37,7 +37,7 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Cache Rust dependencies
-        uses: Itsusinn/rust-cache@master
+        uses: Itsusinn/rust-cache@92e40e4
         with:
           key: throughput-${{ runner.os }}
 
