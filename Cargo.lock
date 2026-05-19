@@ -2876,19 +2876,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
-name = "fastbloom"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef975e30683b2d965054bb0a836f8973857c4ebf6acf274fe46617cd285060d8"
-dependencies = [
- "foldhash 0.2.0",
- "libm",
- "portable-atomic",
- "rand 0.9.4",
- "siphasher",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6565,22 +6552,11 @@ dependencies = [
  "quinn-proto 0.12.0",
  "quinn-udp 0.6.1",
  "rustc-hash 2.1.2",
- "rustls",
  "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "web-time",
-]
-
-[[package]]
-name = "quinn-congestions"
-version = "0.1.0"
-source = "git+https://github.com/proxy-rs/quinn-congestions.git#2bdc356f57a7fc3ae1a49ab963a221f42d61012f"
-dependencies = [
- "quinn 0.12.0",
- "quinn-proto 0.12.0",
- "rand 0.9.4",
 ]
 
 [[package]]
@@ -6631,16 +6607,13 @@ version = "0.12.0"
 source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#ce60e5b5c115db2a6053f4e0ca7fc52103cb76b9"
 dependencies = [
  "bytes",
- "fastbloom",
  "getrandom 0.3.4",
  "lru-slab",
  "rand 0.9.4",
  "rand_pcg",
  "ring",
  "rustc-hash 2.1.2",
- "rustls",
  "rustls-pki-types",
- "rustls-platform-verifier",
  "slab",
  "thiserror 2.0.18",
  "tinyvec",
@@ -11000,8 +10973,7 @@ dependencies = [
 
 [[package]]
 name = "tuic-core"
-version = "1.8.1"
-source = "git+https://github.com/Itsusinn/tuic.git?branch=build%2Ftuic#2e58dae059b9f6e5324e9abc14dbb2b609ff95d4"
+version = "1.8.2"
 dependencies = [
  "bytes",
  "eyre",
@@ -11009,7 +10981,6 @@ dependencies = [
  "parking_lot",
  "peekable",
  "quinn 0.12.0",
- "quinn-congestions",
  "register-count",
  "serde",
  "thiserror 2.0.18",
