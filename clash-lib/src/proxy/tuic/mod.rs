@@ -14,7 +14,8 @@ use tracing::debug;
 use tuic_core::quinn::{
     ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint, EndpointConfig,
     TokioRuntime, TransportConfig as QuinnTransportConfig, VarInt,
-    bbr::BbrConfig, congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
+    bbr::BbrConfig,
+    congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
     crypto::rustls::QuicClientConfig,
 };
 
