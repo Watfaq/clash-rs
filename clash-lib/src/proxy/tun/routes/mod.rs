@@ -104,12 +104,6 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
                             .map_err(|e| {
                                 tracing::error!("failed to set dns due to:{}", e)
                             });
-                        let name_server_v6 =
-                            vec!["2606:4700:4700::1111".parse().unwrap()];
-                        let _ = windows::set_dns_v6(&tun_iface, &name_server_v6)
-                            .map_err(|e| {
-                                tracing::error!("failed to set dns due to:{}", e)
-                            });
                     }
                 }
                 #[cfg(target_os = "macos")]
