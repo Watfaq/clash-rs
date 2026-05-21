@@ -524,20 +524,11 @@ impl FromStr for Config {
     }
 }
 
-/// DNS listen configuration for DoH (DNS over HTTPS).
+/// DNS listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over
+/// HTTP/3). Both protocols share the same configuration fields.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct DohListenConfig {
-    pub addr: String,
-    pub ca_cert: Option<String>,
-    pub ca_key: Option<String>,
-    pub hostname: Option<String>,
-}
-
-/// DNS listen configuration for DoH3 (DNS over HTTP/3).
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub struct Doh3ListenConfig {
     pub addr: String,
     pub ca_cert: Option<String>,
     pub ca_key: Option<String>,
@@ -559,9 +550,13 @@ pub struct DotListenConfig {
 pub struct DnsMultipleListen {
     pub udp: Option<String>,
     pub tcp: Option<String>,
+    /// DNS over HTTPS listener config.
     pub doh: Option<DohListenConfig>,
+    /// DNS over TLS listener config.
     pub dot: Option<DotListenConfig>,
-    pub doh3: Option<Doh3ListenConfig>,
+    /// DNS over HTTP/3 listener config. Uses the same fields as
+    /// [`DohListenConfig`].
+    pub doh3: Option<DohListenConfig>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
