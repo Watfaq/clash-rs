@@ -160,7 +160,8 @@ listeners:
         )
         .unwrap();
 
-        // Any unknown type in the provider file now fails the whole load at parse time.
+        // Any unknown type in the provider file now fails the whole load at parse
+        // time.
         assert!(provider.initialize().await.is_err());
     }
 

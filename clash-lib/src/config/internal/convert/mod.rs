@@ -121,7 +121,8 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             .unwrap_or_default()
             .into_iter()
             .map(|(name, mut provider)| {
-                // `name` is `#[serde(skip)]` so it defaults to ""; populate from the map key.
+                // `name` is `#[serde(skip)]` so it defaults to ""; populate from the
+                // map key.
                 provider.set_name(name.clone());
                 (name, provider)
             })

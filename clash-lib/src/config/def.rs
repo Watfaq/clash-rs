@@ -589,7 +589,8 @@ pub struct DnsMultipleListenDef {
     pub doh: Option<DohListenDef>,
     /// DNS-over-TLS listener config.
     pub dot: Option<DotListenDef>,
-    /// DNS-over-HTTP/3 listener config. Uses the same fields as [`DohListenDef`].
+    /// DNS-over-HTTP/3 listener config. Uses the same fields as
+    /// [`DohListenDef`].
     pub doh3: Option<DohListenDef>,
 }
 
@@ -780,8 +781,8 @@ impl<'de> Deserialize<'de> for Port {
 /// Rule provider definition as specified in user config.
 ///
 /// The provider name is taken from the map key, not from within the body.
-/// Converted to the internal [`crate::config::internal::config::RuleProviderDef`]
-/// during config parsing.
+/// Converted to the internal
+/// [`crate::config::internal::config::RuleProviderDef`] during config parsing.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
@@ -824,7 +825,8 @@ pub struct HttpRuleProviderDef {
 pub struct FileRuleProviderDef {
     /// Path to the rule set file, relative to the working directory.
     pub path: String,
-    /// Polling interval in seconds to detect file changes. `None` disables polling.
+    /// Polling interval in seconds to detect file changes. `None` disables
+    /// polling.
     pub interval: Option<u64>,
     /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
@@ -842,7 +844,8 @@ pub struct FileRuleProviderDef {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct InlineRuleProviderDef {
-    /// Optional local cache path. Derived from the provider name's MD5 hash when absent.
+    /// Optional local cache path. Derived from the provider name's MD5 hash
+    /// when absent.
     pub path: Option<String>,
     /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
@@ -882,10 +885,13 @@ mod tests {
     /// parse time rather than silently passing and failing later at conversion.
     #[test]
     fn parse_rejects_unknown_proxy_type() {
-        let snell = "proxies:\n  - name: x\n    type: snell\n    server: s\n    port: 1\n    psk: p\n";
+        let snell = "proxies:\n  - name: x\n    type: snell\n    server: s\n    \
+                     port: 1\n    psk: p\n";
         assert!(snell.parse::<Config>().is_err(), "snell should be rejected");
 
-        let ssr = "proxies:\n  - name: x\n    type: ssr\n    server: s\n    port: 1\n    cipher: chacha20-ietf\n    password: p\n    obfs: plain\n    protocol: origin\n";
+        let ssr = "proxies:\n  - name: x\n    type: ssr\n    server: s\n    port: \
+                   1\n    cipher: chacha20-ietf\n    password: p\n    obfs: \
+                   plain\n    protocol: origin\n";
         assert!(ssr.parse::<Config>().is_err(), "ssr should be rejected");
     }
 
@@ -958,7 +964,10 @@ rule-providers:
         assert_eq!(providers.len(), 3);
         assert!(matches!(providers["http-rules"], RuleProviderDef::Http(_)));
         assert!(matches!(providers["file-rules"], RuleProviderDef::File(_)));
-        assert!(matches!(providers["inline-rules"], RuleProviderDef::Inline(_)));
+        assert!(matches!(
+            providers["inline-rules"],
+            RuleProviderDef::Inline(_)
+        ));
         if let RuleProviderDef::Http(h) = &providers["http-rules"] {
             assert_eq!(h.url, "https://example.com/rules.yaml");
             assert_eq!(h.interval, 3600);
@@ -1322,17 +1331,26 @@ rules:
         }
 
         // Verify all proxy group types parse
-        let groups = des.proxy_group.as_ref().expect("proxy-groups should be set");
+        let groups = des
+            .proxy_group
+            .as_ref()
+            .expect("proxy-groups should be set");
         assert!(
-            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Relay(_))),
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::Relay(_))),
             "relay group missing"
         );
         assert!(
-            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::UrlTest(_))),
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::UrlTest(_))),
             "url-test group missing"
         );
         assert!(
-            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Fallback(_))),
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::Fallback(_))),
             "fallback group missing"
         );
         assert!(
@@ -1342,11 +1360,15 @@ rules:
             "load-balance group missing"
         );
         assert!(
-            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Smart(_))),
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::Smart(_))),
             "smart group missing"
         );
         assert!(
-            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Select(_))),
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::Select(_))),
             "select group missing"
         );
 
