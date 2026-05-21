@@ -20,7 +20,7 @@ pub enum OutboundProxy {
 }
 
 impl OutboundProxy {
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             OutboundProxy::ProxyServer(s) => s.name().to_string(),
             OutboundProxy::ProxyGroup(g) => g.name().to_string(),
@@ -89,7 +89,7 @@ pub enum OutboundProxyProtocol {
 }
 
 impl OutboundProxyProtocol {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match &self {
             OutboundProxyProtocol::Direct(direct) => &direct.name,
             OutboundProxyProtocol::Reject(reject) => &reject.name,
@@ -713,6 +713,15 @@ pub struct OutboundGroupSelect {
 pub enum OutboundProxyProviderDef {
     Http(OutboundHttpProvider),
     File(OutboundFileProvider),
+}
+
+impl OutboundProxyProviderDef {
+    pub fn set_name(&mut self, name: String) {
+        match self {
+            OutboundProxyProviderDef::Http(p) => p.name = name,
+            OutboundProxyProviderDef::File(p) => p.name = name,
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

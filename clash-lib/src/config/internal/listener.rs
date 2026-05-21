@@ -324,6 +324,15 @@ pub enum InboundProviderDef {
     File(InboundFileProvider),
 }
 
+impl InboundProviderDef {
+    pub fn set_name(&mut self, name: String) {
+        match self {
+            InboundProviderDef::Http(p) => p.name = name,
+            InboundProviderDef::File(p) => p.name = name,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct InboundHttpProvider {
