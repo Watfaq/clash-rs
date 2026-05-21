@@ -25,8 +25,7 @@ mod tun;
 
 use super::{
     config::{self, Profile},
-    listener::InboundProviderDef,
-    proxy::{OutboundGroupProtocol, OutboundProxyProviderDef, map_serde_error},
+    proxy::{OutboundGroupProtocol, map_serde_error},
 };
 
 impl TryFrom<def::Config> for config::Config {
@@ -122,13 +121,8 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             .unwrap_or_default()
             .into_iter()
             .map(|(name, mut provider)| {
-                // The `name` field is `#[serde(skip)]` in the provider structs,
-                // so it defaults to "" during deserialization. Set it from the
-                // map key here.
-                match &mut provider {
-                    OutboundProxyProviderDef::Http(p) => p.name = name.clone(),
-                    OutboundProxyProviderDef::File(p) => p.name = name.clone(),
-                }
+                // `name` is `#[serde(skip)]` so it defaults to ""; populate from the map key.
+                provider.set_name(name.clone());
                 (name, provider)
             })
             .collect(),
@@ -139,11 +133,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             .unwrap_or_default()
             .into_iter()
             .map(|(name, mut provider)| {
-                // Same as proxy providers: name comes from the map key.
-                match &mut provider {
-                    InboundProviderDef::Http(p) => p.name = name.clone(),
-                    InboundProviderDef::File(p) => p.name = name.clone(),
-                }
+                provider.set_name(name.clone());
                 (name, provider)
             })
             .collect(),

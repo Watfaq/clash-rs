@@ -130,7 +130,7 @@ listeners:
     }
 
     #[tokio::test]
-    async fn test_invalid_entries_are_skipped() {
+    async fn test_invalid_entry_fails_provider_load() {
         let yaml = b"\
 listeners:
   - name: valid
@@ -160,9 +160,8 @@ listeners:
         )
         .unwrap();
 
-        let initial = provider.initialize().await.unwrap();
-        assert_eq!(initial.len(), 1);
-        assert_eq!(initial[0].common_opts().name, "valid");
+        // Any unknown type in the provider file now fails the whole load at parse time.
+        assert!(provider.initialize().await.is_err());
     }
 
     #[tokio::test]

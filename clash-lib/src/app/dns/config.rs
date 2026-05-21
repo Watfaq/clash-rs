@@ -365,16 +365,13 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 .as_deref()
                                 .map(parse_listen_addr)
                                 .transpose()?;
+                            // DoHConfig and DoH3Config have identical fields; helper avoids duplication.
+                            let map_doh_fields = |c: crate::config::def::DohListenDef| {
+                                parse_listen_addr(&c.addr).map(|addr| (addr, c.ca_cert, c.ca_key, c.hostname))
+                            };
                             let doh = m
                                 .doh
-                                .map(|c| -> Result<DoHConfig, Error> {
-                                    Ok(DoHConfig {
-                                        addr: parse_listen_addr(&c.addr)?,
-                                        ca_cert: c.ca_cert,
-                                        ca_key: c.ca_key,
-                                        hostname: c.hostname,
-                                    })
-                                })
+                                .map(|c| map_doh_fields(c).map(|(addr, ca_cert, ca_key, hostname)| DoHConfig { addr, ca_cert, ca_key, hostname }))
                                 .transpose()?;
                             let dot = m
                                 .dot
@@ -388,14 +385,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 .transpose()?;
                             let doh3 = m
                                 .doh3
-                                .map(|c| -> Result<DoH3Config, Error> {
-                                    Ok(DoH3Config {
-                                        addr: parse_listen_addr(&c.addr)?,
-                                        ca_cert: c.ca_cert,
-                                        ca_key: c.ca_key,
-                                        hostname: c.hostname,
-                                    })
-                                })
+                                .map(|c| map_doh_fields(c).map(|(addr, ca_cert, ca_key, hostname)| DoH3Config { addr, ca_cert, ca_key, hostname }))
                                 .transpose()?;
                             Ok(DNSListenAddr {
                                 udp,

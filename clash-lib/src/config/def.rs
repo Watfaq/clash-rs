@@ -486,9 +486,14 @@ pub struct Config {
     /// ```
     pub tun: Option<TunConfig>,
 
+    /// Explicit inbound listener definitions. Each entry must have a unique
+    /// `name` and `type` (`http`, `socks`, `mixed`, `tproxy`, `redir`,
+    /// `tunnel`, `shadowsocks`, `anytls`). Takes precedence over the
+    /// top-level port shortcuts when both are present.
     pub listeners: Option<Vec<InboundOpts>>,
 
     #[serde(rename = "inbound-providers")]
+    /// Remote or file-based inbound listener providers. Keyed by provider name.
     pub inbound_provider: Option<HashMap<String, InboundProviderDef>>,
 }
 
@@ -524,46 +529,75 @@ impl FromStr for Config {
     }
 }
 
-/// DNS listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over
-/// HTTP/3). Both protocols share the same configuration fields.
+/// Listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over HTTP/3).
+/// Both protocols share the same wire format. For DoH3, `hostname` acts as the
+/// QUIC SNI value presented to clients.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct DohListenConfig {
+pub struct DohListenDef {
+    /// Address to listen on, e.g. `127.0.0.1:53555`.
     pub addr: String,
+    /// Path to the PEM-encoded CA certificate used for TLS.
     pub ca_cert: Option<String>,
+    /// Path to the PEM-encoded CA private key used for TLS.
     pub ca_key: Option<String>,
+    /// TLS SNI hostname advertised to clients.
     pub hostname: Option<String>,
 }
 
-/// DNS listen configuration for DoT (DNS over TLS).
+/// Listen configuration for DoT (DNS over TLS).
+/// Unlike [`DohListenDef`], DoT does not expose a hostname/SNI override field.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub struct DotListenConfig {
+pub struct DotListenDef {
+    /// Address to listen on, e.g. `127.0.0.1:53554`.
     pub addr: String,
+    /// Path to the PEM-encoded CA certificate used for TLS.
     pub ca_cert: Option<String>,
+    /// Path to the PEM-encoded CA private key used for TLS.
     pub ca_key: Option<String>,
 }
 
-/// Multi-protocol DNS listen configuration.
+/// Multi-protocol DNS listener definition.
+///
+/// Used when `dns.listen` is a mapping rather than a plain UDP address string.
+/// All fields are optional; only configured protocols will be started.
+///
+/// # Example
+/// ```yaml
+/// dns:
+///   listen:
+///     udp: 127.0.0.1:53
+///     tcp: 127.0.0.1:53
+///     doh:
+///       addr: 127.0.0.1:443
+///       ca-cert: /path/to/cert.pem
+///       ca-key: /path/to/key.pem
+///     dot:
+///       addr: 127.0.0.1:853
+///       ca-cert: /path/to/cert.pem
+///       ca-key: /path/to/key.pem
+/// ```
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
-pub struct DnsMultipleListen {
+pub struct DnsMultipleListenDef {
+    /// Plain UDP listener address, e.g. `127.0.0.1:53`.
     pub udp: Option<String>,
+    /// TCP listener address, e.g. `127.0.0.1:53`.
     pub tcp: Option<String>,
-    /// DNS over HTTPS listener config.
-    pub doh: Option<DohListenConfig>,
-    /// DNS over TLS listener config.
-    pub dot: Option<DotListenConfig>,
-    /// DNS over HTTP/3 listener config. Uses the same fields as
-    /// [`DohListenConfig`].
-    pub doh3: Option<DohListenConfig>,
+    /// DNS-over-HTTPS listener config.
+    pub doh: Option<DohListenDef>,
+    /// DNS-over-TLS listener config.
+    pub dot: Option<DotListenDef>,
+    /// DNS-over-HTTP/3 listener config. Uses the same fields as [`DohListenDef`].
+    pub doh3: Option<DohListenDef>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum DNSListen {
     Udp(String),
-    Multiple(Box<DnsMultipleListen>),
+    Multiple(Box<DnsMultipleListenDef>),
 }
 
 /// DNS client/server settings
@@ -745,61 +779,84 @@ impl<'de> Deserialize<'de> for Port {
 
 /// Rule provider definition as specified in user config.
 ///
-/// The provider name comes from the map key, not from within the body.
+/// The provider name is taken from the map key, not from within the body.
+/// Converted to the internal [`crate::config::internal::config::RuleProviderDef`]
+/// during config parsing.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum RuleProviderDef {
-    Http(HttpRuleProvider),
-    File(FileRuleProvider),
-    Inline(InlineRuleProvider),
+    /// Fetch rules from a remote HTTP(S) URL and cache them locally.
+    Http(HttpRuleProviderDef),
+    /// Load rules from a local file path.
+    File(FileRuleProviderDef),
+    /// Embed rules directly in the config under a `payload` key.
+    Inline(InlineRuleProviderDef),
 }
 
-/// HTTP-based rule provider. The `path` field is optional: when absent, a
-/// cache path is automatically generated from the URL's MD5 hash during
-/// config conversion.
+/// HTTP-based rule provider fetched from a remote URL.
+///
+/// When `path` is absent, a local cache path is automatically derived from
+/// the MD5 hash of `url` during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub struct HttpRuleProvider {
+pub struct HttpRuleProviderDef {
+    /// Remote URL to fetch the rule set from.
     pub url: String,
-    /// Refresh interval in seconds. Defaults to `0` (no auto-refresh).
+    /// Refresh interval in seconds. `0` disables automatic refresh.
     #[serde(default)]
     pub interval: u64,
+    /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
-    /// Local cache path. When absent, derived from the URL's MD5 hash.
+    /// Local cache path for the downloaded rule set.
+    /// Derived from the URL's MD5 hash when absent.
     pub path: Option<String>,
+    /// Rule set file format. Defaults to `yaml` when absent.
     pub format: Option<RuleSetFormat>,
+    /// Inline rules embedded directly in the config (alias: `payload`).
     #[serde(alias = "payload")]
     pub inline_rules: Option<Vec<String>>,
 }
 
-/// File-based rule provider.
+/// File-based rule provider loaded from a local path.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub struct FileRuleProvider {
+pub struct FileRuleProviderDef {
+    /// Path to the rule set file, relative to the working directory.
     pub path: String,
+    /// Polling interval in seconds to detect file changes. `None` disables polling.
     pub interval: Option<u64>,
+    /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
+    /// Rule set file format. Defaults to `yaml` when absent.
     pub format: Option<RuleSetFormat>,
+    /// Inline rules embedded directly in the config (alias: `payload`).
     #[serde(alias = "payload")]
     pub inline_rules: Option<Vec<String>>,
 }
 
-/// Inline rule provider (rules specified directly in the config).
+/// Inline rule provider — rules written directly in the config file.
+///
+/// When `path` is absent, a cache path is derived from the MD5 hash of the
+/// provider name during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
-pub struct InlineRuleProvider {
-    /// Optional cache path. When absent, derived from the provider name's MD5
-    /// hash.
+pub struct InlineRuleProviderDef {
+    /// Optional local cache path. Derived from the provider name's MD5 hash when absent.
     pub path: Option<String>,
+    /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
+    /// The inline rules (alias: `payload`).
     #[serde(alias = "payload")]
     pub inline_rules: Vec<String>,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::config::def::Port;
+    use crate::config::{
+        def::Port,
+        internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
+    };
 
     use super::Config;
 
@@ -821,6 +878,96 @@ mod tests {
         assert_eq!(c.port, Some(Port(9090)));
     }
 
+    /// Verify that unknown proxy types (snell, ssr, bare http) now fail at YAML
+    /// parse time rather than silently passing and failing later at conversion.
+    #[test]
+    fn parse_rejects_unknown_proxy_type() {
+        let snell = "proxies:\n  - name: x\n    type: snell\n    server: s\n    port: 1\n    psk: p\n";
+        assert!(snell.parse::<Config>().is_err(), "snell should be rejected");
+
+        let ssr = "proxies:\n  - name: x\n    type: ssr\n    server: s\n    port: 1\n    cipher: chacha20-ietf\n    password: p\n    obfs: plain\n    protocol: origin\n";
+        assert!(ssr.parse::<Config>().is_err(), "ssr should be rejected");
+    }
+
+    /// Verify multi-protocol DNS listen config parses correctly.
+    #[test]
+    fn parse_dns_multiple_listen() {
+        let cfg = r#"
+dns:
+  enable: true
+  listen:
+    udp: 127.0.0.1:53
+    tcp: 127.0.0.1:53
+    doh:
+      addr: 127.0.0.1:443
+      ca-cert: cert.pem
+      ca-key: key.pem
+      hostname: dns.example.com
+    dot:
+      addr: 127.0.0.1:853
+      ca-cert: cert.pem
+      ca-key: key.pem
+    doh3:
+      addr: 127.0.0.1:8443
+      ca-cert: cert.pem
+      ca-key: key.pem
+  nameserver:
+    - 8.8.8.8
+"#;
+        use crate::config::def::DNSListen;
+        let c = cfg.parse::<Config>().expect("should parse");
+        let listen = c.dns.listen.expect("listen should be set");
+        if let DNSListen::Multiple(m) = listen {
+            assert_eq!(m.udp.as_deref(), Some("127.0.0.1:53"));
+            assert_eq!(m.tcp.as_deref(), Some("127.0.0.1:53"));
+            let doh = m.doh.as_ref().expect("doh should be set");
+            assert_eq!(doh.addr, "127.0.0.1:443");
+            assert_eq!(doh.hostname.as_deref(), Some("dns.example.com"));
+            let dot = m.dot.as_ref().expect("dot should be set");
+            assert_eq!(dot.addr, "127.0.0.1:853");
+            let doh3 = m.doh3.as_ref().expect("doh3 should be set");
+            assert_eq!(doh3.addr, "127.0.0.1:8443");
+        } else {
+            panic!("expected Multiple DNS listen");
+        }
+    }
+
+    /// Verify rule-providers with all three types parse correctly.
+    #[test]
+    fn parse_rule_providers() {
+        use crate::config::def::RuleProviderDef;
+        let cfg = r#"
+rule-providers:
+  http-rules:
+    type: http
+    url: "https://example.com/rules.yaml"
+    interval: 3600
+    behavior: domain
+  file-rules:
+    type: file
+    path: ./rules.yaml
+    behavior: ipcidr
+  inline-rules:
+    type: inline
+    behavior: classical
+    payload:
+      - "DOMAIN,example.com"
+"#;
+        let c = cfg.parse::<Config>().expect("should parse");
+        let providers = c.rule_provider.expect("rule_provider should be set");
+        assert_eq!(providers.len(), 3);
+        assert!(matches!(providers["http-rules"], RuleProviderDef::Http(_)));
+        assert!(matches!(providers["file-rules"], RuleProviderDef::File(_)));
+        assert!(matches!(providers["inline-rules"], RuleProviderDef::Inline(_)));
+        if let RuleProviderDef::Http(h) = &providers["http-rules"] {
+            assert_eq!(h.url, "https://example.com/rules.yaml");
+            assert_eq!(h.interval, 3600);
+        }
+        if let RuleProviderDef::Inline(i) = &providers["inline-rules"] {
+            assert_eq!(i.inline_rules.len(), 1);
+        }
+    }
+
     #[test]
     fn parse_example() {
         let example_cfg = r###"
@@ -830,22 +977,6 @@ port: 7890
 # Port of SOCKS5 proxy server on the local end
 socks-port: 7891
 
-# Transparent proxy server port for Linux and macOS (Redirect TCP and TProxy UDP)
-# redir-port: 7892
-
-# Transparent proxy server port for Linux (TProxy TCP and TProxy UDP)
-# tproxy-port: 7893
-
-# HTTP(S) and SOCKS4(A)/SOCKS5 server on the same port
-# mixed-port: 7890
-
-# authentication of local SOCKS5/HTTP(S) server
-# authentication:
-#  - "user1:pass1"
-#  - "user2:pass2"
-
-# Set to true to allow connections to the local-end server from
-# other LAN IP addresses
 allow-lan: false
 
 tun:
@@ -853,134 +984,38 @@ tun:
   stack: system
   device-id: dev://clash0
 
-# This is only applicable when `allow-lan` is `true`
-# '*': bind all IP addresses
-# 192.168.122.11: bind a single IPv4 address
-# "[aaaa::a8aa:ff:fe09:57d8]": bind a single IPv6 address
 bind-address: '*'
-
-# Clash router working mode
-# rule: rule-based packet routing
-# global: all packets will be forwarded to a single endpoint
-# direct: directly forward the packets to the Internet
 mode: rule
-
-# Clash by default prints logs to STDOUT
-# info / warning / error / debug / silent
 log-level: info
-
-# When set to false, resolver won't translate hostnames to IPv6 addresses
 ipv6: false
-
-# RESTful web API listening address
 external-controller: 127.0.0.1:9090
-
-# A relative path to the configuration directory or an absolute path to a
-# directory in which you put some static web resource. Clash core will then
-# serve it at `http://{{external-controller}}/ui`.
 external-ui: folder
-
-# Secret for the RESTful API (optional)
-# Authenticate by spedifying HTTP header `Authorization: Bearer ${secret}`
-# ALWAYS set a secret if RESTful API is listening on 0.0.0.0
-# secret: ""
-
-# Outbound interface name
 interface-name: en0
-
-# fwmark on Linux only
 routing-mark: 6666
 
-# Static hosts for DNS server and connection establishment (like /etc/hosts)
-#
-# Wildcard hostnames are supported (e.g. *.clash.dev, *.foo.*.example.com)
-# Non-wildcard domain names have a higher priority than wildcard domain names
-# e.g. foo.example.com > *.example.com > .example.com
-# P.S. +.foo.com equals to .foo.com and foo.com
-hosts:
-  # '*.clash.dev': 127.0.0.1
-  # '.dev': 127.0.0.1
-  # 'alpha.clash.dev': '::1'
+hosts: {}
 
 profile:
-  # Store the `select` results in $HOME/.config/clash/.cache
-  # set false If you don't want this behavior
-  # when two different configurations have groups with the same name, the selected values are shared
   store-selected: false
-
-  # persistence fakeip
   store-fake-ip: true
 
-# DNS server settings
-# This section is optional. When not present, the DNS server will be disabled.
 dns:
   enable: false
   listen: 0.0.0.0:53
-  # ipv6: false # when the false, response to AAAA questions will be empty
-
-  # These nameservers are used to resolve the DNS nameserver hostnames below.
-  # Specify IP addresses only
   default-nameserver:
     - 114.114.114.114
     - 8.8.8.8
-  enhanced-mode: fake-ip # or redir-host (not recommended)
-  fake-ip-range: 198.18.0.1/16 # Fake IP addresses pool CIDR
-  # use-hosts: true # lookup hosts and return IP record
-
-  # Hostnames in this list will not be resolved with fake IPs
-  # i.e. questions to these domain names will always be answered with their
-  # real IP addresses
-  # fake-ip-filter:
-  #   - '*.lan'
-  #   - localhost.ptlogin2.qq.com
-
-  # Supports UDP, TCP, DoT, DoH. You can specify the port to connect to.
-  # All DNS questions are sent directly to the nameserver, without proxies
-  # involved. Clash answers the DNS question with the first result gathered.
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
   nameserver:
-    - 114.114.114.114 # default value
-    - 8.8.8.8 # default value
-    - tls://dns.rubyfish.cn:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
-    - dhcp://en0 # dns from dhcp
-    # - '8.8.8.8#en0'
-
-  # When `fallback` is present, the DNS server will send concurrent requests
-  # to the servers in this section along with servers in `nameservers`.
-  # The answers from fallback servers are used when the GEOIP country
-  # is not `CN`.
-  # fallback:
-  #   - tcp://1.1.1.1
-  #   - 'tcp://1.1.1.1#en0'
-
-  # If IP addresses resolved with servers in `nameservers` are in the specified
-  # subnets below, they are considered invalid and results from `fallback`
-  # servers are used instead.
-  #
-  # IP address resolved with servers in `nameserver` is used when
-  # `fallback-filter.geoip` is true and when GEOIP of the IP address is `CN`.
-  #
-  # If `fallback-filter.geoip` is false, results from `nameserver` nameservers
-  # are always used if not match `fallback-filter.ipcidr`.
-  #
-  # This is a countermeasure against DNS pollution attacks.
-  # fallback-filter:
-  #   geoip: true
-  #   geoip-code: CN
-  #   ipcidr:
-  #     - 240.0.0.0/4
-  #   domain:
-  #     - '+.google.com'
-  #     - '+.facebook.com'
-  #     - '+.youtube.com'
-
-  # Lookup domains via specific nameservers
-  # nameserver-policy:
-  #   'www.baidu.com': '114.114.114.114'
-  #   '+.internal.crop.com': '10.0.0.1'
+    - 114.114.114.114
+    - 8.8.8.8
+    - tls://dns.rubyfish.cn:853
+    - https://1.1.1.1/dns-query
+    - dhcp://en0
 
 proxies:
-  # Shadowsocks
+  # Shadowsocks (feature-gated)
   - name: "ss1"
     type: ss
     server: server
@@ -1058,6 +1093,9 @@ proxies:
     type: socks5
     server: server
     port: 443
+    username: user
+    password: pass
+    udp: true
 
   # Trojan
   - name: "trojan"
@@ -1065,6 +1103,10 @@ proxies:
     server: server
     port: 443
     password: yourpsk
+    alpn:
+      - h2
+      - http/1.1
+    skip-cert-verify: true
 
   - name: trojan-grpc
     server: server
@@ -1085,6 +1127,41 @@ proxies:
     network: ws
     sni: example.com
     udp: true
+    ws-opts:
+      path: /path
+      headers:
+        Host: example.com
+
+  # vless
+  - name: "vless"
+    type: vless
+    server: server
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000000
+    tls: true
+    skip-cert-verify: true
+    network: ws
+    ws-opts:
+      path: /vless
+
+  # anytls
+  - name: "anytls"
+    type: anytls
+    server: server
+    port: 443
+    password: "anytls-password"
+    sni: example.com
+    skip-cert-verify: true
+
+  # hysteria2
+  - name: "hy2"
+    type: hysteria2
+    server: server
+    port: 443
+    password: "hy2-password"
+    skip-cert-verify: true
+    up: 100
+    down: 200
 
 proxy-groups:
   - name: "relay"
@@ -1102,6 +1179,8 @@ proxy-groups:
       - vmess
     url: 'http://www.gstatic.com/generate_204'
     interval: 300
+    tolerance: 150
+    lazy: true
 
   - name: "fallback-auto"
     type: fallback
@@ -1120,6 +1199,14 @@ proxy-groups:
       - vmess
     url: 'http://www.gstatic.com/generate_204'
     interval: 300
+    strategy: round-robin
+
+  - name: "smart"
+    type: smart
+    proxies:
+      - vmess
+      - ss1
+    url: http://www.gstatic.com/generate_204
 
   - name: Proxy
     type: select
@@ -1177,14 +1264,47 @@ rules:
             serde_yaml::from_str(example_cfg).expect("should parse yaml");
         assert_eq!(des.port.expect("invalid port"), Port(7890));
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
-        // 11 proxies: 3 ss + 4 vmess + 1 socks5 + 3 trojan
-        assert_eq!(des.proxy.as_ref().map(|v| v.len()).unwrap_or(0), 11);
 
-        // Verify ss3 (index 2) has the correct name and plugin-opts
+        let proxies = des.proxy.as_ref().expect("proxies should be set");
+        // 3 ss entries only counted when the shadowsocks feature is enabled
+        #[cfg(feature = "shadowsocks")]
+        assert_eq!(proxies.len(), 14);
+        #[cfg(not(feature = "shadowsocks"))]
+        assert_eq!(proxies.len(), 11);
+
+        // vless parses with correct name
+        let vless = proxies
+            .iter()
+            .find(|p| matches!(p, OutboundProxyProtocol::Vless(_)))
+            .expect("vless proxy should be present");
+        if let OutboundProxyProtocol::Vless(v) = vless {
+            assert_eq!(v.common_opts.name, "vless");
+            assert_eq!(v.tls, Some(true));
+        }
+
+        // anytls parses with correct name and password
+        let anytls = proxies
+            .iter()
+            .find(|p| matches!(p, OutboundProxyProtocol::Anytls(_)))
+            .expect("anytls proxy should be present");
+        if let OutboundProxyProtocol::Anytls(a) = anytls {
+            assert_eq!(a.common_opts.name, "anytls");
+            assert_eq!(a.password, "anytls-password");
+        }
+
+        // hysteria2 parses with correct name and password
+        let hy2 = proxies
+            .iter()
+            .find(|p| matches!(p, OutboundProxyProtocol::Hysteria2(_)))
+            .expect("hysteria2 proxy should be present");
+        if let OutboundProxyProtocol::Hysteria2(h) = hy2 {
+            assert_eq!(h.name, "hy2");
+            assert_eq!(h.password, "hy2-password");
+        }
+
         #[cfg(feature = "shadowsocks")]
         {
-            use crate::config::internal::proxy::OutboundProxyProtocol;
-            let proxy2 = &des.proxy.as_ref().unwrap()[2];
+            let proxy2 = &proxies[2];
             if let OutboundProxyProtocol::Ss(ss) = proxy2 {
                 assert_eq!(ss.common_opts.name, "ss3");
                 assert_eq!(
@@ -1199,6 +1319,142 @@ rules:
             } else {
                 panic!("expected Ss proxy at index 2");
             }
+        }
+
+        // Verify all proxy group types parse
+        let groups = des.proxy_group.as_ref().expect("proxy-groups should be set");
+        assert!(
+            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Relay(_))),
+            "relay group missing"
+        );
+        assert!(
+            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::UrlTest(_))),
+            "url-test group missing"
+        );
+        assert!(
+            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Fallback(_))),
+            "fallback group missing"
+        );
+        assert!(
+            groups
+                .iter()
+                .any(|g| matches!(g, OutboundGroupProtocol::LoadBalance(_))),
+            "load-balance group missing"
+        );
+        assert!(
+            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Smart(_))),
+            "smart group missing"
+        );
+        assert!(
+            groups.iter().any(|g| matches!(g, OutboundGroupProtocol::Select(_))),
+            "select group missing"
+        );
+
+        // Verify load-balance strategy field
+        let lb = groups
+            .iter()
+            .find(|g| matches!(g, OutboundGroupProtocol::LoadBalance(_)))
+            .unwrap();
+        if let OutboundGroupProtocol::LoadBalance(l) = lb {
+            use crate::config::internal::proxy::LoadBalanceStrategy;
+            assert!(matches!(l.strategy, Some(LoadBalanceStrategy::RoundRobin)));
+        }
+
+        // Verify url-test tolerance and lazy fields
+        let ut = groups
+            .iter()
+            .find(|g| matches!(g, OutboundGroupProtocol::UrlTest(_)))
+            .unwrap();
+        if let OutboundGroupProtocol::UrlTest(u) = ut {
+            assert_eq!(u.tolerance, Some(150));
+            assert_eq!(u.lazy, Some(true));
+        }
+
+        // Verify proxy providers
+        let providers = des.proxy_provider.expect("proxy-providers should be set");
+        assert_eq!(providers.len(), 2);
+        assert!(providers.contains_key("provider1"));
+        assert!(providers.contains_key("test"));
+    }
+
+    /// Feature-gated tests for TUIC proxy type parsing.
+    #[cfg(feature = "tuic")]
+    #[test]
+    fn parse_tuic_proxy() {
+        let cfg = r#"
+proxies:
+  - name: "tuic"
+    type: tuic
+    server: server
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000000
+    password: "tuic-password"
+    alpn:
+      - h3
+    skip-cert-verify: true
+    udp-relay-mode: native
+    congestion-controller: bbr
+"#;
+        let c = cfg.parse::<Config>().expect("should parse tuic");
+        let proxies = c.proxy.unwrap();
+        assert_eq!(proxies.len(), 1);
+        if let OutboundProxyProtocol::Tuic(t) = &proxies[0] {
+            assert_eq!(t.common_opts.name, "tuic");
+            assert_eq!(t.password, "tuic-password");
+            assert_eq!(t.udp_relay_mode.as_deref(), Some("native"));
+        } else {
+            panic!("expected tuic proxy");
+        }
+    }
+
+    /// Feature-gated tests for WireGuard proxy type parsing.
+    #[cfg(feature = "wireguard")]
+    #[test]
+    fn parse_wireguard_proxy() {
+        let cfg = r#"
+proxies:
+  - name: "wg"
+    type: wireguard
+    server: server
+    port: 51820
+    private-key: "base64privatekey"
+    public-key: "base64publickey"
+    ip: 10.0.0.2
+    dns:
+      - 1.1.1.1
+"#;
+        let c = cfg.parse::<Config>().expect("should parse wireguard");
+        let proxies = c.proxy.unwrap();
+        assert_eq!(proxies.len(), 1);
+        if let OutboundProxyProtocol::Wireguard(w) = &proxies[0] {
+            assert_eq!(w.common_opts.name, "wg");
+            assert_eq!(w.ip, "10.0.0.2");
+        } else {
+            panic!("expected wireguard proxy");
+        }
+    }
+
+    /// Feature-gated tests for SSH proxy type parsing.
+    #[cfg(feature = "ssh")]
+    #[test]
+    fn parse_ssh_proxy() {
+        let cfg = r#"
+proxies:
+  - name: "ssh"
+    type: ssh
+    server: server
+    port: 22
+    username: user
+    password: "ssh-pass"
+"#;
+        let c = cfg.parse::<Config>().expect("should parse ssh");
+        let proxies = c.proxy.unwrap();
+        assert_eq!(proxies.len(), 1);
+        if let OutboundProxyProtocol::Ssh(s) = &proxies[0] {
+            assert_eq!(s.common_opts.name, "ssh");
+            assert_eq!(s.username, "user");
+        } else {
+            panic!("expected ssh proxy");
         }
     }
 }
