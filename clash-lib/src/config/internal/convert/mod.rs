@@ -13,7 +13,7 @@ use crate::{
             proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT},
             rule::RuleType,
         },
-        proxy::{OutboundDirect, OutboundReject},
+        proxy::{OutboundDirect, OutboundProxyProtocol, OutboundReject},
     },
 };
 
@@ -26,10 +26,7 @@ mod tun;
 use super::{
     config::{self, Profile},
     listener::InboundProviderDef,
-    proxy::{
-        OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
-        map_serde_error,
-    },
+    proxy::{OutboundGroupProtocol, OutboundProxyProviderDef, map_serde_error},
 };
 
 impl TryFrom<def::Config> for config::Config {
@@ -105,17 +102,15 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                     )),
                 ),
             ]),
-            |mut rv, x| {
-                let proxy =
-                    OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
-                let name = proxy.name();
+            |mut rv, protocol| {
+                let name = protocol.name().to_owned();
                 if rv.contains_key(name.as_str()) {
                     return Err(Error::InvalidConfig(format!(
                         "duplicated proxy name: {name}"
                     )));
                 }
                 proxy_names.push(name.clone());
-                rv.insert(name, proxy);
+                rv.insert(name, OutboundProxy::ProxyServer(protocol));
                 Ok(rv)
             },
         )?,
@@ -124,51 +119,34 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
         proxy_providers: c
             .proxy_provider
             .take()
-            .map(|m| {
-                m.into_iter()
-                    .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                        body.insert(
-                            "name".to_owned(),
-                            serde_yaml::Value::String(name.clone()),
-                        );
-                        let provider = OutboundProxyProviderDef::try_from(body)
-                            .map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "invalid proxy provider {name}: {x}"
-                                ))
-                            })?;
-                        rv.insert(name, provider);
-                        Ok::<
-                            HashMap<std::string::String, OutboundProxyProviderDef>,
-                            Error,
-                        >(rv)
-                    })
-                    .expect("proxy provider parse error")
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, mut provider)| {
+                // The `name` field is `#[serde(skip)]` in the provider structs,
+                // so it defaults to "" during deserialization. Set it from the
+                // map key here.
+                match &mut provider {
+                    OutboundProxyProviderDef::Http(p) => p.name = name.clone(),
+                    OutboundProxyProviderDef::File(p) => p.name = name.clone(),
+                }
+                (name, provider)
             })
-            .unwrap_or_default(),
+            .collect(),
         listeners: listener::convert(c.listeners.take(), &c)?,
         inbound_providers: c
             .inbound_provider
             .take()
-            .map(|m| {
-                m.into_iter()
-                    .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                        body.insert(
-                            "name".to_owned(),
-                            serde_yaml::Value::String(name.clone()),
-                        );
-                        let provider =
-                            InboundProviderDef::try_from(body).map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "invalid inbound provider {name}: {x}"
-                                ))
-                            })?;
-                        rv.insert(name, provider);
-                        Ok::<HashMap<String, InboundProviderDef>, Error>(rv)
-                    })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, mut provider)| {
+                // Same as proxy providers: name comes from the map key.
+                match &mut provider {
+                    InboundProviderDef::Http(p) => p.name = name.clone(),
+                    InboundProviderDef::File(p) => p.name = name.clone(),
+                }
+                (name, provider)
             })
-            .transpose()?
-            .unwrap_or_default(),
+            .collect(),
     }
     .validate()
 }

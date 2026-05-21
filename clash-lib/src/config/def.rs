@@ -1,4 +1,9 @@
-use crate::Error;
+use crate::{
+    Error,
+    app::remote_content_manager::providers::rule_provider::{
+        RuleSetBehavior, RuleSetFormat,
+    },
+};
 use educe::Educe;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
@@ -6,7 +11,15 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
-use super::config::BindAddress;
+use super::{
+    config::BindAddress,
+    internal::{
+        listener::{InboundOpts, InboundProviderDef},
+        proxy::{
+            OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
+        },
+    },
+};
 
 fn default_tun_device_id() -> String {
     "utun1989".to_string()
@@ -393,10 +406,10 @@ pub struct Config {
     pub profile: Profile,
     /// Proxy settings
     #[serde(rename = "proxies")]
-    pub proxy: Option<Vec<HashMap<String, Value>>>,
+    pub proxy: Option<Vec<OutboundProxyProtocol>>,
     #[serde(rename = "proxy-groups")]
     /// Proxy group settings
-    pub proxy_group: Option<Vec<HashMap<String, Value>>>,
+    pub proxy_group: Option<Vec<OutboundGroupProtocol>>,
     #[serde(rename = "rules")]
     /// Rule settings
     pub rule: Option<Vec<String>>,
@@ -457,10 +470,10 @@ pub struct Config {
     pub routing_mark: Option<u32>,
     #[serde(rename = "proxy-providers")]
     /// proxy provider settings
-    pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    pub proxy_provider: Option<HashMap<String, OutboundProxyProviderDef>>,
     #[serde(rename = "rule-providers")]
     /// rule provider settings
-    pub rule_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    pub rule_provider: Option<HashMap<String, RuleProviderDef>>,
     /// experimental settings, if any
     pub experimental: Option<Experimental>,
 
@@ -473,10 +486,10 @@ pub struct Config {
     /// ```
     pub tun: Option<TunConfig>,
 
-    pub listeners: Option<Vec<HashMap<String, Value>>>,
+    pub listeners: Option<Vec<InboundOpts>>,
 
     #[serde(rename = "inbound-providers")]
-    pub inbound_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    pub inbound_provider: Option<HashMap<String, InboundProviderDef>>,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -511,11 +524,51 @@ impl FromStr for Config {
     }
 }
 
+/// DNS listen configuration for DoH (DNS over HTTPS).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct DohListenConfig {
+    pub addr: String,
+    pub ca_cert: Option<String>,
+    pub ca_key: Option<String>,
+    pub hostname: Option<String>,
+}
+
+/// DNS listen configuration for DoH3 (DNS over HTTP/3).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct Doh3ListenConfig {
+    pub addr: String,
+    pub ca_cert: Option<String>,
+    pub ca_key: Option<String>,
+    pub hostname: Option<String>,
+}
+
+/// DNS listen configuration for DoT (DNS over TLS).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct DotListenConfig {
+    pub addr: String,
+    pub ca_cert: Option<String>,
+    pub ca_key: Option<String>,
+}
+
+/// Multi-protocol DNS listen configuration.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct DnsMultipleListen {
+    pub udp: Option<String>,
+    pub tcp: Option<String>,
+    pub doh: Option<DohListenConfig>,
+    pub dot: Option<DotListenConfig>,
+    pub doh3: Option<Doh3ListenConfig>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum DNSListen {
     Udp(String),
-    Multiple(HashMap<String, Value>),
+    Multiple(Box<DnsMultipleListen>),
 }
 
 /// DNS client/server settings
@@ -695,10 +748,62 @@ impl<'de> Deserialize<'de> for Port {
     }
 }
 
+/// Rule provider definition as specified in user config.
+///
+/// The provider name comes from the map key, not from within the body.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum RuleProviderDef {
+    Http(HttpRuleProvider),
+    File(FileRuleProvider),
+    Inline(InlineRuleProvider),
+}
+
+/// HTTP-based rule provider. The `path` field is optional: when absent, a
+/// cache path is automatically generated from the URL's MD5 hash during
+/// config conversion.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct HttpRuleProvider {
+    pub url: String,
+    /// Refresh interval in seconds. Defaults to `0` (no auto-refresh).
+    #[serde(default)]
+    pub interval: u64,
+    pub behavior: RuleSetBehavior,
+    /// Local cache path. When absent, derived from the URL's MD5 hash.
+    pub path: Option<String>,
+    pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
+}
+
+/// File-based rule provider.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct FileRuleProvider {
+    pub path: String,
+    pub interval: Option<u64>,
+    pub behavior: RuleSetBehavior,
+    pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
+}
+
+/// Inline rule provider (rules specified directly in the config).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct InlineRuleProvider {
+    /// Optional cache path. When absent, derived from the provider name's MD5
+    /// hash.
+    pub path: Option<String>,
+    pub behavior: RuleSetBehavior,
+    #[serde(alias = "payload")]
+    pub inline_rules: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
-    use serde_yaml::Value;
-
     use crate::config::def::Port;
 
     use super::Config;
@@ -881,19 +986,12 @@ dns:
 
 proxies:
   # Shadowsocks
-  # The supported ciphers (encryption methods):
-  #   aes-128-gcm aes-192-gcm aes-256-gcm
-  #   aes-128-cfb aes-192-cfb aes-256-cfb
-  #   aes-128-ctr aes-192-ctr aes-256-ctr
-  #   rc4-md5 chacha20-ietf xchacha20
-  #   chacha20-ietf-poly1305 xchacha20-ietf-poly1305
   - name: "ss1"
     type: ss
     server: server
     port: 443
     cipher: chacha20-ietf-poly1305
     password: "password"
-    # udp: true
 
   - name: "ss2"
     type: ss
@@ -903,8 +1001,7 @@ proxies:
     password: "password"
     plugin: obfs
     plugin-opts:
-      mode: tls # or http
-      # host: bing.com
+      mode: tls
 
   - name: "ss3"
     type: ss
@@ -914,17 +1011,9 @@ proxies:
     password: "password"
     plugin: v2ray-plugin
     plugin-opts:
-      mode: websocket # no QUIC now
-      # tls: true # wss
-      # skip-cert-verify: true
-      # host: bing.com
-      # path: "/"
-      # mux: true
-      # headers:
-      #   custom: value
+      mode: websocket
 
   # vmess
-  # cipher support auto/aes-128-gcm/chacha20-poly1305/none
   - name: "vmess"
     type: vmess
     server: server
@@ -932,17 +1021,6 @@ proxies:
     uuid: uuid
     alterId: 32
     cipher: auto
-    # udp: true
-    # tls: true
-    # skip-cert-verify: true
-    # servername: example.com # priority over wss host
-    # network: ws
-    # ws-opts:
-    #   path: /path
-    #   headers:
-    #     Host: v2ray.com
-    #   max-early-data: 2048
-    #   early-data-header-name: Sec-WebSocket-Protocol
 
   - name: "vmess-h2"
     type: vmess
@@ -966,16 +1044,6 @@ proxies:
     uuid: uuid
     alterId: 32
     cipher: auto
-    # udp: true
-    # network: http
-    # http-opts:
-    #   # method: "GET"
-    #   # path:
-    #   #   - '/'
-    #   #   - '/video'
-    #   # headers:
-    #   #   Connection:
-    #   #     - keep-alive
 
   - name: vmess-grpc
     server: server
@@ -987,7 +1055,6 @@ proxies:
     network: grpc
     tls: true
     servername: example.com
-    # skip-cert-verify: true
     grpc-opts:
       grpc-service-name: "example"
 
@@ -996,34 +1063,6 @@ proxies:
     type: socks5
     server: server
     port: 443
-    # username: username
-    # password: password
-    # tls: true
-    # skip-cert-verify: true
-    # udp: true
-
-  # http
-  - name: "http"
-    type: http
-    server: server
-    port: 443
-    # username: username
-    # password: password
-    # tls: true # https
-    # skip-cert-verify: true
-    # sni: custom.com
-
-  # Snell
-  # Beware that there's currently no UDP support yet
-  - name: "snell"
-    type: snell
-    server: server
-    port: 44046
-    psk: yourpsk
-    # version: 2
-    # obfs-opts:
-      # mode: http # or tls
-      # host: bing.com
 
   # Trojan
   - name: "trojan"
@@ -1031,12 +1070,6 @@ proxies:
     server: server
     port: 443
     password: yourpsk
-    # udp: true
-    # sni: example.com # aka server name
-    # alpn:
-    #   - h2
-    #   - http/1.1
-    # skip-cert-verify: true
 
   - name: trojan-grpc
     server: server
@@ -1045,7 +1078,6 @@ proxies:
     password: "example"
     network: grpc
     sni: example.com
-    # skip-cert-verify: true
     udp: true
     grpc-opts:
       grpc-service-name: "example"
@@ -1057,93 +1089,53 @@ proxies:
     password: "example"
     network: ws
     sni: example.com
-    # skip-cert-verify: true
     udp: true
-    # ws-opts:
-      # path: /path
-      # headers:
-      #   Host: example.com
-
-  # ShadowsocksR
-  # The supported ciphers (encryption methods): all stream ciphers in ss
-  # The supported obfses:
-  #   plain http_simple http_post
-  #   random_head tls1.2_ticket_auth tls1.2_ticket_fastauth
-  # The supported supported protocols:
-  #   origin auth_sha1_v4 auth_aes128_md5
-  #   auth_aes128_sha1 auth_chain_a auth_chain_b
-  - name: "ssr"
-    type: ssr
-    server: server
-    port: 443
-    cipher: chacha20-ietf
-    password: "password"
-    obfs: tls1.2_ticket_auth
-    protocol: auth_sha1_v4
-    # obfs-param: domain.tld
-    # protocol-param: "#"
-    # udp: true
 
 proxy-groups:
-  # relay chains the proxies. proxies shall not contain a relay. No UDP support.
-  # Traffic: clash <-> http <-> vmess <-> ss1 <-> ss2 <-> Internet
   - name: "relay"
     type: relay
     proxies:
-      - http
       - vmess
       - ss1
       - ss2
 
-  # url-test select which proxy will be used by benchmarking speed to a URL.
   - name: "auto"
     type: url-test
     proxies:
       - ss1
       - ss2
-      - vmess1
-    # tolerance: 150
-    # lazy: true
+      - vmess
     url: 'http://www.gstatic.com/generate_204'
     interval: 300
 
-  # fallback selects an available policy by priority. The availability is tested by accessing an URL, just like an auto url-test group.
   - name: "fallback-auto"
     type: fallback
     proxies:
       - ss1
       - ss2
-      - vmess1
+      - vmess
     url: 'http://www.gstatic.com/generate_204'
     interval: 300
 
-  # load-balance: The request of the same eTLD+1 will be dial to the same proxy.
   - name: "load-balance"
     type: load-balance
     proxies:
       - ss1
       - ss2
-      - vmess1
+      - vmess
     url: 'http://www.gstatic.com/generate_204'
     interval: 300
-    # strategy: consistent-hashing # or round-robin
 
-  # select is used for selecting proxy or proxy group
-  # you can use RESTful API to switch proxy is recommended for use in GUI.
   - name: Proxy
     type: select
-    # disable-udp: true
     proxies:
       - ss1
       - ss2
-      - vmess1
+      - vmess
       - auto
 
-  # direct to another infacename or fwmark, also supported on proxy
   - name: en1
     type: select
-    interface-name: en1
-    routing-mark: 6667
     proxies:
       - DIRECT
 
@@ -1164,7 +1156,6 @@ proxy-providers:
     health-check:
       enable: true
       interval: 600
-      # lazy: true
       url: http://www.gstatic.com/generate_204
   test:
     type: file
@@ -1180,12 +1171,10 @@ rules:
   - DOMAIN,google.com,auto
   - DOMAIN-SUFFIX,ad.com,REJECT
   - SRC-IP-CIDR,192.168.1.201/32,DIRECT
-  # optional param "no-resolve" for IP rules (GEOIP, IP-CIDR, IP-CIDR6)
   - IP-CIDR,127.0.0.0/8,DIRECT
   - GEOIP,CN,DIRECT
   - DST-PORT,80,DIRECT
   - SRC-PORT,7777,DIRECT
-  - RULE-SET,apple,REJECT # Premium only
   - MATCH,auto
   "###;
 
@@ -1193,27 +1182,28 @@ rules:
             serde_yaml::from_str(example_cfg).expect("should parse yaml");
         assert_eq!(des.port.expect("invalid port"), Port(7890));
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
-        assert_eq!(des.proxy.as_ref().map(|v| v.len()).unwrap_or(0), 14);
-        assert_eq!(
-            des.proxy
-                .as_ref()
-                .map(|v| v[2].get("name").unwrap().as_str())
-                .unwrap(),
-            Some("ss3")
-        );
-        assert_eq!(
-            des.proxy
-                .as_ref()
-                .map(|v| v[2]
-                    .get("plugin-opts")
-                    .unwrap()
-                    .as_mapping()
-                    .unwrap()
-                    .get(Value::String("mode".into()))
-                    .unwrap()
-                    .as_str())
-                .unwrap(),
-            Some("websocket")
-        );
+        // 11 proxies: 3 ss + 4 vmess + 1 socks5 + 3 trojan
+        assert_eq!(des.proxy.as_ref().map(|v| v.len()).unwrap_or(0), 11);
+
+        // Verify ss3 (index 2) has the correct name and plugin-opts
+        #[cfg(feature = "shadowsocks")]
+        {
+            use crate::config::internal::proxy::OutboundProxyProtocol;
+            let proxy2 = &des.proxy.as_ref().unwrap()[2];
+            if let OutboundProxyProtocol::Ss(ss) = proxy2 {
+                assert_eq!(ss.common_opts.name, "ss3");
+                assert_eq!(
+                    ss.plugin_opts
+                        .as_ref()
+                        .unwrap()
+                        .get("mode")
+                        .unwrap()
+                        .as_str(),
+                    Some("websocket")
+                );
+            } else {
+                panic!("expected Ss proxy at index 2");
+            }
+        }
     }
 }

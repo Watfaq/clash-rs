@@ -6,9 +6,7 @@ use crate::{
 };
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::warn;
+use std::{sync::Arc, time::Duration};
 
 /// The YAML structure expected at the provider URL / file.
 ///
@@ -24,7 +22,7 @@ use tracing::warn;
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
-    listeners: Option<Vec<HashMap<String, Value>>>,
+    listeners: Option<Vec<InboundOpts>>,
 }
 
 type InboundUpdater =
@@ -52,18 +50,7 @@ impl InboundSetProvider {
                 serde_yaml::from_slice(input).map_err(|e| {
                     anyhow::anyhow!("inbound provider {n} parse error: {e}")
                 })?;
-            let opts = scheme
-                .listeners
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|m| {
-                    InboundOpts::try_from(m)
-                        .inspect_err(
-                            |e| warn!(provider = %n, "skipping inbound entry: {e}"),
-                        )
-                        .ok()
-                })
-                .collect();
+            let opts = scheme.listeners.unwrap_or_default();
             Ok(opts)
         });
 
