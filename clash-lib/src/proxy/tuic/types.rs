@@ -14,10 +14,8 @@ use std::{
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::debug;
 use tuic_core::quinn::{
-    Connection as InnerConnection,
-    quinn::{
-        Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
-    },
+    Connection as InnerConnection, Endpoint as QuinnEndpoint, QuinnConnection,
+    ZeroRttAccepted,
 };
 use uuid::Uuid;
 
@@ -265,6 +263,7 @@ pub enum CongestionControl {
     NewReno,
     #[default]
     Bbr,
+    Bbr3,
 }
 impl From<&str> for CongestionControl {
     #[inline]
@@ -277,6 +276,8 @@ impl From<&str> for CongestionControl {
             Self::NewReno
         } else if s.eq_ignore_ascii_case("bbr") {
             Self::Bbr
+        } else if s.eq_ignore_ascii_case("bbr3") {
+            Self::Bbr3
         } else {
             tracing::warn!(
                 "Unknown congestion controller {s}. Use default controller"

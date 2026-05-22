@@ -1,22 +1,16 @@
-use serde::{Deserialize, de::value::MapDeserializer};
-use serde_yaml::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use tracing::warn;
 
-use crate::{
-    Error,
-    config::{
-        config::BindAddress,
-        def::{self, Port},
-        listener::{CommonInboundOpts, InboundOpts},
-        proxy::map_serde_error,
-    },
+use crate::config::{
+    config::BindAddress,
+    def::{self, Port},
+    listener::{CommonInboundOpts, InboundOpts},
 };
 
-/// combines the top-level config and config.listeners to a set of inbound
+/// Combines the top-level config and config.listeners into a set of inbound
 /// options.
 pub(super) fn convert(
-    raw: Option<Vec<HashMap<String, Value>>>,
+    raw: Option<Vec<InboundOpts>>,
     c: &def::Config,
 ) -> Result<HashSet<InboundOpts>, crate::Error> {
     let http_port = c.port;
@@ -32,14 +26,8 @@ pub(super) fn convert(
         c.bind_address
     };
 
-    let inbounds = raw
-        .unwrap_or_default()
-        .into_iter()
-        .map(InboundOpts::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
-
     let mut all_inbounds = HashSet::new();
-    for inbound in inbounds {
+    for inbound in raw.unwrap_or_default() {
         if all_inbounds.contains(&inbound) {
             warn!("Duplicate inbound listener found: {:?}", inbound);
             continue;
@@ -119,21 +107,4 @@ pub(super) fn convert(
         warn!("Duplicate TPROXY inbound listener found: {}", tproxy_port);
     }
     Ok(all_inbounds)
-}
-
-impl TryFrom<HashMap<String, Value>> for InboundOpts {
-    type Error = crate::Error;
-
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        let name = mapping
-            .get("name")
-            .and_then(|x| x.as_str())
-            .filter(|v| !v.is_empty())
-            .ok_or(Error::InvalidConfig(
-                "missing field `name` in inbound listener".to_owned(),
-            ))?
-            .to_owned();
-        InboundOpts::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
-    }
 }

@@ -6,9 +6,7 @@ use crate::{
 };
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::warn;
+use std::{sync::Arc, time::Duration};
 
 /// The YAML structure expected at the provider URL / file.
 ///
@@ -24,7 +22,7 @@ use tracing::warn;
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
-    listeners: Option<Vec<HashMap<String, Value>>>,
+    listeners: Option<Vec<InboundOpts>>,
 }
 
 type InboundUpdater =
@@ -52,18 +50,7 @@ impl InboundSetProvider {
                 serde_yaml::from_slice(input).map_err(|e| {
                     anyhow::anyhow!("inbound provider {n} parse error: {e}")
                 })?;
-            let opts = scheme
-                .listeners
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|m| {
-                    InboundOpts::try_from(m)
-                        .inspect_err(
-                            |e| warn!(provider = %n, "skipping inbound entry: {e}"),
-                        )
-                        .ok()
-                })
-                .collect();
+            let opts = scheme.listeners.unwrap_or_default();
             Ok(opts)
         });
 
@@ -143,7 +130,7 @@ listeners:
     }
 
     #[tokio::test]
-    async fn test_invalid_entries_are_skipped() {
+    async fn test_invalid_entry_fails_provider_load() {
         let yaml = b"\
 listeners:
   - name: valid
@@ -173,9 +160,9 @@ listeners:
         )
         .unwrap();
 
-        let initial = provider.initialize().await.unwrap();
-        assert_eq!(initial.len(), 1);
-        assert_eq!(initial[0].common_opts().name, "valid");
+        // Any unknown type in the provider file now fails the whole load at parse
+        // time.
+        assert!(provider.initialize().await.is_err());
     }
 
     #[tokio::test]
