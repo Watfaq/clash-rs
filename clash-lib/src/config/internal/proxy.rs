@@ -986,3 +986,203 @@ mod anytls_tests {
         assert_eq!(config.min_idle_session, Some(2));
     }
 }
+
+#[cfg(test)]
+mod short_id_tests {
+    #[derive(serde::Deserialize, Debug)]
+    struct ShortIdWrapper {
+        #[serde(deserialize_with = "super::deserialize_short_id", default)]
+        short_id: String,
+    }
+
+    #[test]
+    fn deserialize_short_id_plain_string() {
+        let yaml = "short_id: abc123";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "abc123");
+    }
+
+    #[test]
+    fn deserialize_short_id_null() {
+        let yaml = "short_id: null";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    #[test]
+    fn deserialize_short_id_tilde_unit() {
+        let yaml = "short_id: ~";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    #[test]
+    fn deserialize_short_id_empty_string() {
+        let yaml = "short_id: \"\"";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    #[test]
+    fn deserialize_short_id_hex_string() {
+        let yaml = "short_id: 0123456789abcdef";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "0123456789abcdef");
+    }
+
+    #[test]
+    fn deserialize_short_id_empty_seq() {
+        let yaml = "short_id: []";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    #[test]
+    fn deserialize_short_id_single_value_seq() {
+        let yaml = "short_id: [\"abc\"]";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "abc");
+    }
+
+    #[test]
+    fn deserialize_short_id_single_empty_string_seq() {
+        let yaml = "short_id: [\"\"]";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    #[test]
+    fn deserialize_short_id_multi_value_seq_rejected() {
+        let yaml = "short_id: [\"a\", \"b\"]";
+        let err = serde_yaml::from_str::<ShortIdWrapper>(yaml)
+            .expect_err("should reject multi-value sequence");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("reality short-id expects a single value"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn deserialize_short_id_triple_seq_rejected() {
+        let yaml = "short_id: [\"a\", \"b\", \"c\"]";
+        let err = serde_yaml::from_str::<ShortIdWrapper>(yaml)
+            .expect_err("should reject triple-value sequence");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("reality short-id expects a single value"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn deserialize_short_id_missing_field() {
+        let yaml = "other: value";
+        let w: ShortIdWrapper = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(w.short_id, "");
+    }
+
+    // --- Integration tests: RealityOpt within OutboundVless ---
+
+    #[test]
+    fn vless_reality_opts_with_short_id_string() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+  reality-opts:
+    public-key: abc123
+    short-id: deadbeef
+"#;
+        let v: super::OutboundVless = serde_yaml::from_str(yaml).unwrap();
+        let reality = v.reality_opts.expect("reality_opts should be Some");
+        assert_eq!(reality.public_key, "abc123");
+        assert_eq!(reality.short_id, "deadbeef");
+    }
+
+    #[test]
+    fn vless_reality_opts_with_null_short_id() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+  reality-opts:
+    public-key: abc123
+    short-id: null
+"#;
+        let v: super::OutboundVless = serde_yaml::from_str(yaml).unwrap();
+        let reality = v.reality_opts.expect("reality_opts should be Some");
+        assert_eq!(reality.short_id, "");
+    }
+
+    #[test]
+    fn vless_reality_opts_with_seq_short_id() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+  reality-opts:
+    public-key: abc123
+    short-id: ["ff"]
+"#;
+        let v: super::OutboundVless = serde_yaml::from_str(yaml).unwrap();
+        let reality = v.reality_opts.expect("reality_opts should be Some");
+        assert_eq!(reality.short_id, "ff");
+    }
+
+    #[test]
+    fn vless_reality_opts_without_short_id() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+  reality-opts:
+    public-key: abc123
+"#;
+        let v: super::OutboundVless = serde_yaml::from_str(yaml).unwrap();
+        let reality = v.reality_opts.expect("reality_opts should be Some");
+        assert_eq!(reality.short_id, "");
+    }
+
+    #[test]
+    fn vless_without_reality_opts() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+"#;
+        let v: super::OutboundVless = serde_yaml::from_str(yaml).unwrap();
+        assert!(v.reality_opts.is_none());
+    }
+
+    #[test]
+    fn vless_reality_opts_multi_seq_rejected() {
+        let yaml = r#"
+  type: vless
+  name: test
+  server: example.com
+  port: 443
+  uuid: test-uuid
+  reality-opts:
+    public-key: abc123
+    short-id: ["a", "b"]
+"#;
+        let err = serde_yaml::from_str::<super::OutboundVless>(yaml)
+            .expect_err("should reject multi-value short-id sequence");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("reality short-id expects a single value"),
+            "unexpected error: {msg}"
+        );
+    }
+}
