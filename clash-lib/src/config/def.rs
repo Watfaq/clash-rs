@@ -363,7 +363,7 @@ impl Display for LogLevel {
 /// ...
 /// ```
 #[derive(Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 #[educe(Default)]
 pub struct Config {
     /// The HTTP proxy port
@@ -533,7 +533,7 @@ impl FromStr for Config {
 /// Both protocols share the same wire format. For DoH3, `hostname` acts as the
 /// QUIC SNI value presented to clients.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct DohListenDef {
     /// Address to listen on, e.g. `127.0.0.1:53555`.
     pub addr: String,
@@ -548,7 +548,7 @@ pub struct DohListenDef {
 /// Listen configuration for DoT (DNS over TLS).
 /// Unlike [`DohListenDef`], DoT does not expose a hostname/SNI override field.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct DotListenDef {
     /// Address to listen on, e.g. `127.0.0.1:53554`.
     pub addr: String,
@@ -579,7 +579,7 @@ pub struct DotListenDef {
 ///       ca-key: /path/to/key.pem
 /// ```
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct DnsMultipleListenDef {
     /// Plain UDP listener address, e.g. `127.0.0.1:53`.
     pub udp: Option<String>,
@@ -626,7 +626,7 @@ pub enum DNSListen {
 /// ```
 
 #[derive(Serialize, Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 #[educe(Default)]
 pub struct DNS {
     /// When disabled, system DNS config will be used
@@ -682,7 +682,7 @@ pub enum DNSMode {
 }
 
 #[derive(Serialize, Deserialize, Clone, Educe)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[educe(Default)]
 pub struct FallbackFilter {
     #[serde(rename = "geoip")]
@@ -699,7 +699,7 @@ pub struct FallbackFilter {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct EdnsClientSubnet {
     /// IPv4 subnet expressed in CIDR notation, e.g. `1.2.3.0/24`
     pub ipv4: Option<String>,
@@ -708,14 +708,16 @@ pub struct EdnsClientSubnet {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
+    #[serde(default)]
+    pub ignore_resolve_fail: bool,
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 #[serde(rename_all = "kebab-case")]
 pub struct Profile {
     /// Store the `select` results in $CWD/cache.db
@@ -800,7 +802,7 @@ pub enum RuleProviderDef {
 /// When `path` is absent, a local cache path is automatically derived from
 /// the MD5 hash of `url` during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct HttpRuleProviderDef {
     /// Remote URL to fetch the rule set from.
     pub url: String,
@@ -821,7 +823,7 @@ pub struct HttpRuleProviderDef {
 
 /// File-based rule provider loaded from a local path.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FileRuleProviderDef {
     /// Path to the rule set file, relative to the working directory.
     pub path: String,
@@ -842,7 +844,7 @@ pub struct FileRuleProviderDef {
 /// When `path` is absent, a cache path is derived from the MD5 hash of the
 /// provider name during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct InlineRuleProviderDef {
     /// Optional local cache path. Derived from the provider name's MD5 hash
     /// when absent.
@@ -893,6 +895,30 @@ mod tests {
                    1\n    cipher: chacha20-ietf\n    password: p\n    obfs: \
                    plain\n    protocol: origin\n";
         assert!(ssr.parse::<Config>().is_err(), "ssr should be rejected");
+    }
+
+    #[test]
+    fn parse_rejects_unknown_top_level_field() {
+        let cfg = r#"
+port: 9090
+ports: 8080
+"#;
+        assert!(cfg.parse::<Config>().is_err(), "unknown fields should fail");
+    }
+
+    #[test]
+    fn parse_rejects_unknown_nested_dns_field() {
+        let cfg = r#"
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+  nonexistent-field: 198.18.0.1/16
+"#;
+        assert!(
+            cfg.parse::<Config>().is_err(),
+            "unknown dns fields should fail"
+        );
     }
 
     /// Verify multi-protocol DNS listen config parses correctly.
@@ -999,7 +1025,7 @@ log-level: info
 ipv6: false
 external-controller: 127.0.0.1:9090
 external-ui: folder
-interface-name: en0
+interface: en0
 routing-mark: 6666
 
 hosts: {}
