@@ -712,6 +712,7 @@ pub struct EdnsClientSubnet {
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
+    #[serde(default)]
     pub ignore_resolve_fail: bool,
 }
 
