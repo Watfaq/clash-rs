@@ -712,6 +712,8 @@ pub struct EdnsClientSubnet {
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
+    /// Legacy flag kept for compatibility with existing configs/tests.
+    pub ignore_resolve_fail: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -911,7 +913,7 @@ dns:
   enable: true
   nameserver:
     - 8.8.8.8
-  fake-ip-rnage: 198.18.0.1/16
+  fake-ip-range-extra: 198.18.0.1/16
 "#;
         assert!(
             cfg.parse::<Config>().is_err(),
