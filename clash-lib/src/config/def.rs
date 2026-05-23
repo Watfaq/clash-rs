@@ -461,7 +461,6 @@ pub struct Config {
     /// outbound interface name
     /// # Note
     /// - not implemented yet
-    #[serde(alias = "interface-name")]
     pub interface: Option<String>,
     /// fwmark on Linux only
     /// # Note
@@ -1024,7 +1023,7 @@ log-level: info
 ipv6: false
 external-controller: 127.0.0.1:9090
 external-ui: folder
-interface-name: en0
+interface: en0
 routing-mark: 6666
 
 hosts: {}
