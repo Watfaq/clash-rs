@@ -7,7 +7,13 @@ pub(crate) fn must_bind_socket_on_interface(
     iface: &OutboundInterface,
     #[allow(unused_variables)] family: socket2::Domain,
 ) -> io::Result<()> {
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
+    // SO_BINDTODEVICE needs CAP_NET_RAW; on Android the host handles routing.
+    #[cfg(target_os = "android")]
+    {
+        let _ = (socket, iface);
+        Ok(())
+    }
+    #[cfg(any(target_os = "fuchsia", target_os = "linux"))]
     {
         use tracing::error;
         socket
