@@ -1,6 +1,7 @@
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 /// A running tuic-server instance that cleans up on drop.
 pub struct TuicServerProcess {
@@ -17,17 +18,8 @@ impl TuicServerProcess {
         let (ready_tx, ready_rx) = oneshot::channel::<anyhow::Result<()>>();
 
         let handle = tokio::spawn(async move {
-            let sock = std::net::UdpSocket::bind("127.0.0.1:0")
-                .expect("failed to allocate a free port");
-            let port = sock.local_addr().unwrap().port();
-            let server_addr: SocketAddr =
-                format!("127.0.0.1:{port}").parse().unwrap();
-            drop(sock); // socket released; tuic-server's init will re-bind
-
-            let _ = port_tx.send(port);
-
             let cfg = tuic_server::Config {
-                server: server_addr,
+                server: "127.0.0.1:0".parse().unwrap(),
                 log_level: tuic_server::config::LogLevel::Info,
                 users: HashMap::from([(
                     "00000000-0000-0000-0000-000000000001".parse().unwrap(),
@@ -78,9 +70,12 @@ impl TuicServerProcess {
                 online_counter,
                 online_clients: moka::future::Cache::new(capacity),
                 traffic_stats,
+                cancel: CancellationToken::new(),
             });
             match tuic_server::server::Server::init(ctx).await {
                 Ok(server) => {
+                    let port = server.local_addr().unwrap().port();
+                    let _ = port_tx.send(port);
                     let _ = ready_tx.send(Ok(()));
                     server.start().await;
                 }

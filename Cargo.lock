@@ -7316,7 +7316,6 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -7336,14 +7335,12 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
- "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
  "web-sys",
  "webpki-roots 1.0.7",
 ]
@@ -7358,6 +7355,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -7377,12 +7375,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -11389,7 +11389,7 @@ dependencies = [
 [[package]]
 name = "tuic-core"
 version = "1.8.4"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.4#649c10fe4efd557c5b5cb2cbc555c0e3f9e67298"
+source = "git+https://github.com/Itsusinn/tuic.git?branch=main#1fcb929243c0936bcde1c5b6c6ac9ffedec83d12"
 dependencies = [
  "bytes",
  "eyre",
@@ -11409,7 +11409,7 @@ dependencies = [
 [[package]]
 name = "tuic-server"
 version = "1.8.4"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.4#649c10fe4efd557c5b5cb2cbc555c0e3f9e67298"
+source = "git+https://github.com/Itsusinn/tuic.git?branch=main#1fcb929243c0936bcde1c5b6c6ac9ffedec83d12"
 dependencies = [
  "arc-swap",
  "aws-lc-rs",
@@ -11440,7 +11440,7 @@ dependencies = [
  "rcgen 0.14.8",
  "regex",
  "register-count",
- "reqwest 0.12.28",
+ "reqwest 0.13.3",
  "rustls",
  "rustls-acme",
  "rustls-pemfile",
@@ -11948,9 +11948,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
 dependencies = [
  "futures-util",
  "js-sys",
