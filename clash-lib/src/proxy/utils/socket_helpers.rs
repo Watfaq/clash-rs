@@ -67,6 +67,7 @@ pub async fn new_tcp_stream(
 
     if !cfg!(target_os = "android")
         && let Some(iface) = iface
+        && !endpoint.ip().is_loopback()
     {
         must_bind_socket_on_interface(&socket, iface, family)?;
         trace!("tcp socket bound to interface: {socket:?}");
@@ -129,8 +130,12 @@ pub async fn new_udp_socket(
     debug!("created udp socket");
 
     if !cfg!(target_os = "android") {
+        // Skip interface binding for loopback destinations — binding a socket
+        // to an outbound interface prevents reaching localhost addresses.
+        let dst_is_loopback =
+            family_hint.map(|a| a.ip().is_loopback()).unwrap_or(false);
         match (src, iface) {
-            (_, Some(iface)) => {
+            (_, Some(iface)) if !dst_is_loopback => {
                 must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                     |x| {
                         error!("failed to bind socket to interface: {}", x);
@@ -146,11 +151,13 @@ pub async fn new_udp_socket(
 
                 trace!(iface = ?iface, "udp socket bound: {socket:?}");
             }
-            (Some(src), None) => {
+            (Some(src), _) => {
+                // Either no interface, or destination is loopback (skip iface
+                // binding so localhost is reachable).
                 socket.bind(&src.into())?;
                 trace!(src = ?src, "udp socket bound: {socket:?}");
             }
-            (None, None) => {
+            (None, _) => {
                 // On Windows, UDP sockets must be bound to get a valid local_addr
                 // which is required for some operations (e.g., quinn/QUIC)
                 #[cfg(target_os = "windows")]
