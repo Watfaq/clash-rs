@@ -167,10 +167,21 @@ impl ProxyManager {
             .unwrap_or(true) // if not found, assume it's alive
     }
 
-    pub async fn report_alive(&self, name: &str, alive: bool) {
+    pub async fn report_alive(
+        &self,
+        name: &str,
+        alive: bool,
+        history: Option<DelayHistory>,
+    ) {
         let mut state = self.proxy_state.write().await;
-        let state = state.entry(name.to_owned()).or_default();
-        state.alive.store(alive, Ordering::Relaxed)
+        let entry = state.entry(name.to_owned()).or_default();
+        entry.alive.store(alive, Ordering::Relaxed);
+        if let Some(ins) = history {
+            entry.delay_history.push_back(ins);
+            if entry.delay_history.len() > 10 {
+                entry.delay_history.pop_front();
+            }
+        }
     }
 
     pub async fn delay_history(&self, name: &str) -> Vec<DelayHistory> {
@@ -747,10 +758,15 @@ impl ProxyManager {
             let resp = match uri.scheme() {
                 Some(scheme) if scheme == &http::uri::Scheme::HTTP => {
                     let io = TokioIo::new(stream);
-                    let (mut sender, conn) =
-                        hyper::client::conn::http1::handshake(io).await.map_err(
-                            |e| new_io_error(format!("failed to handshake: {e}")),
-                        )?;
+                    let (mut sender, conn) = tokio::time::timeout(
+                        timeout,
+                        hyper::client::conn::http1::handshake(io),
+                    )
+                    .await
+                    .map_err(|_| new_io_error("HTTP handshake timed out"))?
+                    .map_err(|e| {
+                        new_io_error(format!("failed to handshake: {e}"))
+                    })?;
 
                     tokio::task::spawn(async move {
                         if let Err(err) = conn.await {
@@ -786,10 +802,15 @@ impl ProxyManager {
 
                     let io = TokioIo::new(stream);
 
-                    let (mut sender, conn) =
-                        hyper::client::conn::http1::handshake(io).await.map_err(
-                            |e| new_io_error(format!("failed to handshake: {e}")),
-                        )?;
+                    let (mut sender, conn) = tokio::time::timeout(
+                        timeout,
+                        hyper::client::conn::http1::handshake(io),
+                    )
+                    .await
+                    .map_err(|_| new_io_error("HTTPS handshake timed out"))?
+                    .map_err(|e| {
+                        new_io_error(format!("failed to handshake: {e}"))
+                    })?;
 
                     tokio::task::spawn(async move {
                         if let Err(err) = conn.await {
@@ -842,23 +863,18 @@ impl ProxyManager {
 
         let result = tester.await;
 
-        self.report_alive(&name, result.is_ok()).await;
-
-        let ins = DelayHistory {
-            time: Utc::now(),
-            delay: result
-                .as_ref()
-                .map(|(actual, _)| *actual)
-                .unwrap_or_default(),
-        };
-
-        let mut state = self.proxy_state.write().await;
-        let state = state.entry(name.to_owned()).or_default();
-
-        state.delay_history.push_back(ins);
-        if state.delay_history.len() > 10 {
-            state.delay_history.pop_front();
-        }
+        self.report_alive(
+            &name,
+            result.is_ok(),
+            Some(DelayHistory {
+                time: Utc::now(),
+                delay: result
+                    .as_ref()
+                    .map(|(actual, _)| *actual)
+                    .unwrap_or_default(),
+            }),
+        )
+        .await;
 
         result
     }
@@ -1001,15 +1017,24 @@ mod tests {
         tests::initialize,
     };
     use futures::TryFutureExt;
+    use httpmock::{Method::GET, MockServer};
     use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
     #[tokio::test]
     async fn test_proxy_manager_alive() {
         initialize();
-        let mut mock_resolver = MockClashResolver::new();
-        mock_resolver.expect_resolve().returning(|_, _| {
-            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(142, 250, 66, 227))))
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(GET).path("/generate_204");
+            then.status(204);
         });
+        let url = server.url("/generate_204");
+
+        let mut mock_resolver = MockClashResolver::new();
+        mock_resolver
+            .expect_resolve()
+            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST))));
         mock_resolver.expect_ipv6().return_const(false);
 
         let manager =
@@ -1018,11 +1043,7 @@ mod tests {
         let mock_handler = Arc::new(direct::Handler::new(PROXY_DIRECT));
 
         manager
-            .url_test(
-                mock_handler.clone(),
-                "http://www.gstatic.com/generate_204",
-                None,
-            )
+            .url_test(mock_handler.clone(), &url, None)
             .await
             .expect("test failed");
 
@@ -1031,20 +1052,16 @@ mod tests {
             manager
                 .last_delay(PROXY_DIRECT)
                 .await
-                .is_some_and(|x| x.as_millis() > 0)
+                .is_some_and(|x| x.as_nanos() > 0)
         );
         assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
 
-        manager.report_alive(PROXY_DIRECT, false).await;
+        manager.report_alive(PROXY_DIRECT, false, None).await;
         assert!(!manager.alive(PROXY_DIRECT).await);
 
         for _ in 0..10 {
             manager
-                .url_test(
-                    mock_handler.clone(),
-                    "http://www.gstatic.com/generate_204",
-                    None,
-                )
+                .url_test(mock_handler.clone(), &url, None)
                 .await
                 .expect("test failed");
         }
@@ -1054,7 +1071,7 @@ mod tests {
             manager
                 .last_delay(PROXY_DIRECT)
                 .await
-                .is_some_and(|x| x.as_millis() > 0)
+                .is_some_and(|x| x.as_nanos() > 0)
         );
         assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 10);
     }

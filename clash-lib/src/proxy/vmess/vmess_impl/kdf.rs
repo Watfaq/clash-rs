@@ -1,6 +1,6 @@
 // https://github.com/Qv2ray/v2ray-rust/blob/1df95e479bd2844a484c663d7727fae82b3efabe/src/proxy/vmess/kdf.rs
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 type HmacSha256 = Hmac<Sha256>;
 

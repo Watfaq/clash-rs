@@ -68,6 +68,12 @@ where
             return Box::pin(self.inner.call(req));
         }
 
+        // /ui is a public endpoint — no auth required regardless of transport
+        let path = req.uri().path();
+        if path == "/ui" || path.starts_with("/ui/") {
+            return Box::pin(self.inner.call(req));
+        }
+
         let unauthorised = Response::builder()
             .status(http::StatusCode::UNAUTHORIZED)
             .body("unauthorized".to_string().into())

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use quinn::VarInt;
+use tuic_core::quinn::VarInt;
 
 use crate::{
     config::internal::proxy::OutboundTuic,
@@ -73,6 +73,8 @@ impl TryFrom<&OutboundTuic> for Handler {
                 s.receive_window.unwrap_or(8 * 1024 * 1024),
             )
             .unwrap_or(VarInt::MAX),
+            tls_cert: s.tls_cert.clone(),
+            tls_key: s.tls_key.clone(),
         }))
     }
 }

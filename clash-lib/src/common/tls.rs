@@ -1,7 +1,7 @@
 use rustls::{
     RootCertStore,
     client::{WebPkiServerVerifier, danger::ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
+    pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime},
 };
 use tracing::warn;
 
@@ -13,6 +13,108 @@ pub static GLOBAL_ROOT_STORE: LazyLock<Arc<RootCertStore>> =
 fn global_root_store() -> Arc<RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
     Arc::new(root_store)
+}
+
+/// Load a PEM certificate chain and private key from either inline PEM strings
+/// or file paths. A string containing `-----BEGIN` is treated as inline PEM;
+/// otherwise it is interpreted as a file path.
+///
+/// Returns `(cert_chain, private_key)` suitable for both rustls client auth
+/// (mTLS, via `with_client_auth_cert`) and rustls server config
+/// (`with_single_cert`).
+pub fn load_cert_and_key(
+    cert: &str,
+    key: &str,
+) -> std::io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+    let cert_pem = if cert.contains("-----BEGIN") {
+        cert.to_owned()
+    } else {
+        std::fs::read_to_string(cert).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("failed to read certificate '{cert}': {e}"),
+            )
+        })?
+    };
+
+    let key_pem = if key.contains("-----BEGIN") {
+        key.to_owned()
+    } else {
+        std::fs::read_to_string(key).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("failed to read private key '{key}': {e}"),
+            )
+        })?
+    };
+
+    let certs: Vec<CertificateDer<'static>> =
+        rustls_pemfile::certs(&mut cert_pem.as_bytes())
+            .filter_map(|r| {
+                r.map_err(|e| warn!("failed to parse certificate entry: {e}"))
+                    .ok()
+            })
+            .collect();
+
+    if certs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "no valid certificates found in PEM",
+        ));
+    }
+
+    let private_key = rustls_pemfile::private_key(&mut key_pem.as_bytes())
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("failed to parse private key: {e}"),
+            )
+        })?
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "no private key found in PEM",
+            )
+        })?;
+
+    Ok((certs, private_key))
+}
+
+/// Build a `rustls` [`ClientConfig`] with a custom certificate verifier and
+/// optional mTLS client certificate.
+///
+/// When `tls_cert` and `tls_key` are both `Some`, mutual TLS (mTLS) is
+/// enabled by presenting the client certificate during the TLS handshake.
+/// Both must be either `None` (no client auth) or `Some` (mTLS); mixing
+/// them returns an [`io::Error`].
+pub fn build_tls_client_config(
+    verifier: Arc<dyn ServerCertVerifier>,
+    tls_cert: Option<&str>,
+    tls_key: Option<&str>,
+) -> std::io::Result<rustls::ClientConfig> {
+    match (tls_cert, tls_key) {
+        (Some(cert), Some(key)) => {
+            let (certs, private_key) = load_cert_and_key(cert, key)?;
+            rustls::ClientConfig::builder()
+                .dangerous()
+                .with_custom_certificate_verifier(verifier)
+                .with_client_auth_cert(certs, private_key)
+                .map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("invalid mTLS client cert/key: {e}"),
+                    )
+                })
+        }
+        (None, None) => Ok(rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(verifier)
+            .with_no_client_auth()),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "tls-cert and tls-key must both be set or both omitted",
+        )),
+    }
 }
 
 #[derive(Debug)]

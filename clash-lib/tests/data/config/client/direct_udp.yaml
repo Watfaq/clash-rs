@@ -1,0 +1,4 @@
+socks-port: 19901
+ipv6: false
+mode: direct
+log-level: warn

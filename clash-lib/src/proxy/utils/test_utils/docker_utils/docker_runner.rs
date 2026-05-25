@@ -4,7 +4,7 @@ use anyhow;
 use bollard::{
     API_DEFAULT_VERSION, Docker, body_full,
     config::ContainerInspectResponse,
-    models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
+    models::{ContainerCreateBody, HostConfig, Mount, MountType, PortBinding},
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
         LogsOptions, RemoveContainerOptions, StartContainerOptions,
@@ -276,6 +276,104 @@ impl DockerTestRunner {
         }
     }
 
+    /// Apply tc netem traffic shaping to this container's eth0 interface by
+    /// starting a short-lived `nicolaka/netshoot` sidecar that shares the
+    /// container's network namespace and has NET_ADMIN capability.
+    ///
+    /// `delay_ms`: one-way delay in milliseconds (e.g. 50 for 50ms)
+    /// `loss_pct`: packet loss percentage (e.g. 1.0 = 1%)
+    #[cfg(all(docker_test, throughput_test))]
+    pub async fn apply_netem(
+        &self,
+        delay_ms: u32,
+        loss_pct: f32,
+    ) -> anyhow::Result<()> {
+        use super::consts::IMAGE_NETEM;
+        use bollard::query_parameters::WaitContainerOptionsBuilder;
+        use futures::StreamExt as _;
+
+        let tc_cmd = format!(
+            "tc qdisc add dev eth0 root netem delay {}ms loss {}%",
+            delay_ms, loss_pct
+        );
+        let network_mode = format!("container:{}", self.id);
+
+        let body = ContainerCreateBody {
+            image: Some(IMAGE_NETEM.to_owned()),
+            cmd: Some(vec!["sh".to_owned(), "-c".to_owned(), tc_cmd]),
+            host_config: Some(HostConfig {
+                network_mode: Some(network_mode),
+                cap_add: Some(vec!["NET_ADMIN".to_owned()]),
+                auto_remove: Some(false),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let sidecar = self
+            .instance
+            .create_container(Some(CreateContainerOptions::default()), body)
+            .await?;
+
+        self.instance
+            .start_container(
+                &sidecar.id,
+                None::<bollard::query_parameters::StartContainerOptions>,
+            )
+            .await?;
+
+        // Wait for the sidecar to finish running
+        let mut wait_stream = self.instance.wait_container(
+            &sidecar.id,
+            Some(
+                WaitContainerOptionsBuilder::new()
+                    .condition("not-running")
+                    .build(),
+            ),
+        );
+        while let Some(result) = wait_stream.next().await {
+            match result {
+                Ok(status) => {
+                    if status.status_code != 0 {
+                        // Explicit cleanup before bailing
+                        self.instance
+                            .remove_container(
+                                &sidecar.id,
+                                Some(RemoveContainerOptions {
+                                    force: true,
+                                    ..Default::default()
+                                }),
+                            )
+                            .await
+                            .ok();
+                        anyhow::bail!(
+                            "netem sidecar exited with code {}: {:?}",
+                            status.status_code,
+                            status.error
+                        );
+                    }
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
+
+        // Explicitly remove the sidecar now that we have verified the exit code
+        self.instance
+            .remove_container(
+                &sidecar.id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .ok();
+
+        Ok(())
+    }
+
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
         let logs = self
@@ -542,7 +640,7 @@ impl DockerTestRunnerBuilder {
                 .map(|(src, dst)| Mount {
                     target: Some(dst.to_string()),
                     source: Some(src.to_string()),
-                    typ: Some(MountTypeEnum::BIND),
+                    typ: Some(MountType::BIND),
                     read_only: Some(false),
                     ..Default::default()
                 })
@@ -602,14 +700,14 @@ impl DockerTestRunnerBuilder {
     }
 }
 
-/// Allocate a free TCP port by asking the OS. The listener is immediately
-/// dropped so Docker can bind the same port. The TOCTOU window is negligible
-/// in test environments.
+/// Allocate a unique TCP port number for use in a Docker test.
+///
+/// Delegates to the same process-global counter used by `alloc_port()` so
+/// that Docker port mappings and clash-rs SOCKS/echo ports can never
+/// collide when multiple tests run concurrently.
 #[cfg(docker_test)]
 pub fn alloc_docker_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("failed to allocate a free port");
-    listener.local_addr().unwrap().port()
+    super::PORT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn get_host_config(port: u16) -> HostConfig {

@@ -1,10 +1,6 @@
 #![feature(cfg_version)]
 #![feature(ip)]
-#![feature(sync_unsafe_cell)]
 #![feature(duration_millis_float)]
-#![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
-#![cfg_attr(not(version("1.88.0")), feature(let_chains))]
-#![cfg_attr(not(version("1.94.0")), feature(lazy_get))]
 
 #[cfg(feature = "tun")]
 use crate::proxy::tun;
@@ -88,6 +84,10 @@ pub struct Options {
     pub cwd: Option<String>,
     pub rt: Option<TokioRuntime>,
     pub log_file: Option<String>,
+    /// The original config file path, used to support "reload current config"
+    /// from the dashboard. Set this when starting from a file; leave `None`
+    /// for string/inline configs (e.g. FFI).
+    pub config_path: Option<String>,
 }
 
 pub enum TokioRuntime {
@@ -123,6 +123,8 @@ pub struct GlobalState {
     dns_listener: ArcRunner,
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
+    /// Path to the config file used at startup. Used by the dashboard "Reload"
+    /// button which sends an empty path to mean "reload current config".
     config_path: Option<String>,
 }
 
@@ -135,11 +137,13 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
             .enable_all()
             .build()?,
     };
-    let config_path: Option<String> = if let Config::File(ref p) = opts.config {
-        Some(p.clone())
-    } else {
-        None
-    };
+    let config_path = opts.config_path.or_else(|| {
+        if let Config::File(ref p) = opts.config {
+            Some(p.clone())
+        } else {
+            None
+        }
+    });
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
     let (log_tx, _) = broadcast::channel(100);
@@ -153,8 +157,13 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
         opts.log_file,
     );
 
+    let shutdown_token = tokio_util::sync::CancellationToken::new();
+    {
+        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
+        token_guard.push(shutdown_token.clone());
+    }
     rt.block_on(async {
-        match start(config, cwd, config_path, log_tx).await {
+        match start(config, cwd, config_path, log_tx, shutdown_token).await {
             Err(e) => {
                 eprintln!("start error: {e}");
                 Err(e)
@@ -162,6 +171,53 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
             Ok(_) => Ok(()),
         }
     })
+}
+
+/// Start a Clash instance in a background thread with independent lifecycle.
+/// Returns the thread handle and a CancellationToken to shut it down.
+/// Unlike `start_scaffold`, this does NOT register in the global
+/// SHUTDOWN_TOKEN.
+pub fn start_scaffold_instance(
+    opts: Options,
+) -> Result<(
+    std::thread::JoinHandle<()>,
+    tokio_util::sync::CancellationToken,
+)> {
+    let config_path = opts.config_path.or_else(|| {
+        if let Config::File(ref p) = opts.config {
+            Some(p.clone())
+        } else {
+            None
+        }
+    });
+    let config: InternalConfig = opts.config.try_parse()?;
+    let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
+    let rt_kind = opts.rt.unwrap_or(TokioRuntime::MultiThread);
+
+    let token = tokio_util::sync::CancellationToken::new();
+    let token_clone = token.clone();
+
+    let handle = std::thread::spawn(move || {
+        let rt = match rt_kind {
+            TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread(),
+            TokioRuntime::SingleThread => {
+                tokio::runtime::Builder::new_current_thread()
+            }
+        }
+        .enable_all()
+        .build()
+        .expect("Failed to build runtime");
+
+        let (log_tx, _) = tokio::sync::broadcast::channel(100);
+
+        if let Err(e) =
+            rt.block_on(start(config, cwd, config_path, log_tx, token_clone))
+        {
+            eprintln!("Clash instance error: {}", e);
+        }
+    });
+
+    Ok((handle, token))
 }
 
 static SHUTDOWN_TOKEN: std::sync::Mutex<Vec<tokio_util::sync::CancellationToken>> =
@@ -188,19 +244,10 @@ pub fn setup_default_crypto_provider() {
         #[cfg(feature = "aws-lc-rs")]
         {
             _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-            // watfaq-rustls is a separate fork with its own global provider
-            // state. When both `ring` and `aws-lc-rs` features are active
-            // (e.g. `--all-features`), its
-            // `get_default_or_install_from_crate_features` treats the
-            // combination as ambiguous and returns None, causing a
-            // panic. Explicit installation is therefore required.
-            _ = watfaq_rustls::crypto::aws_lc_rs::default_provider()
-                .install_default();
         }
         #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
         {
             _ = rustls::crypto::ring::default_provider().install_default();
-            _ = watfaq_rustls::crypto::ring::default_provider().install_default();
         }
     });
 }
@@ -210,15 +257,9 @@ pub async fn start(
     cwd: String,
     config_path: Option<String>,
     log_tx: broadcast::Sender<LogEvent>,
+    shutdown_token: tokio_util::sync::CancellationToken,
 ) -> Result<()> {
     setup_default_crypto_provider();
-
-    let shutdown_token = tokio_util::sync::CancellationToken::new();
-
-    {
-        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
-        token_guard.push(shutdown_token.clone());
-    }
 
     let cwd = PathBuf::from(cwd);
 
@@ -292,7 +333,7 @@ pub async fn start(
             let new_components =
                 create_components(cwd_clone.clone(), config).await?;
 
-            done.send(()).unwrap();
+            let _ = done.send(());
 
             components.stop_all();
             new_components.start_all();
@@ -314,7 +355,7 @@ pub async fn start(
                 new_components.cache_store.clone(),
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
-                Some(reload_token.clone()),
+                Some(reload_token.child_token()),
                 new_components.dns_listen.clone(),
                 new_components.dns_enabled,
             ));
@@ -459,11 +500,22 @@ async fn create_components(
         .as_ref()
         .map(|_| Arc::new(OnceLock::new()));
 
+    // When `dns.respect-rules` is true, share a `RuleDispatch` between the
+    // resolver and the (later-built) router + outbound manager. The DNS
+    // runtime provider consults the OnceLocks at dial time and falls back to
+    // DIRECT until they are populated.
+    let rule_dispatch: Option<Arc<dns::RuleDispatch>> = if config.dns.respect_rules {
+        Some(dns::RuleDispatch::new())
+    } else {
+        None
+    };
+
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
         pending_country_mmdb.clone(),
         outbound_registry.clone(),
+        rule_dispatch.clone(),
     )
     .await;
 
@@ -489,6 +541,15 @@ async fn create_components(
         )
         .await?,
     );
+
+    if let Some(rd) = &rule_dispatch
+        && rd.outbound_manager.set(outbound_manager.clone()).is_err()
+    {
+        warn!(
+            "RuleDispatch outbound_manager OnceLock was already set — this is \
+             unexpected and indicates a double-initialization bug"
+        );
+    }
 
     debug!("initializing mmdb");
     let country_mmdb = if let Some(ref mmdb_file) = country_mmdb_file {
@@ -568,6 +629,15 @@ async fn create_components(
         )
         .await,
     );
+
+    if let Some(rd) = &rule_dispatch
+        && rd.router.set(router.clone()).is_err()
+    {
+        warn!(
+            "RuleDispatch router OnceLock was already set — this is unexpected and \
+             indicates a double-initialization bug"
+        );
+    }
 
     let statistics_manager = StatisticsManager::new();
 
@@ -672,6 +742,7 @@ mod tests {
                 cwd: None,
                 rt: None,
                 log_file: None,
+                config_path: None,
             })
             .unwrap()
         });

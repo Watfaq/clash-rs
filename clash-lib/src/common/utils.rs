@@ -8,10 +8,7 @@ use crate::{
 use async_recursion::async_recursion;
 use futures::StreamExt;
 use http_body_util::{BodyDataStream, Empty};
-use rand::{
-    Fill, Rng,
-    distr::uniform::{SampleRange, SampleUniform},
-};
+use rand::distr::uniform::{SampleRange, SampleUniform};
 use sha2::Digest;
 use std::{
     collections::HashMap,
@@ -27,16 +24,11 @@ where
     T: SampleUniform,
     R: SampleRange<T>,
 {
-    let mut rng = rand::rng();
-    rng.random_range(range)
+    rand::random_range(range)
 }
 
-pub fn rand_fill<T>(buf: &mut T)
-where
-    T: Fill + ?Sized,
-{
-    let mut rng = rand::rng();
-    rng.fill(buf)
+pub fn rand_fill(buf: &mut [u8]) {
+    rand::fill(buf)
 }
 
 #[allow(dead_code)]
@@ -70,7 +62,7 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
 pub fn md5_str(bytes: &[u8]) -> String {
     let mut hasher = md5::Md5::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 pub fn current_timestamp_secs() -> u64 {
@@ -136,7 +128,6 @@ async fn download_with_ext<P>(
 where
     P: AsRef<Path> + std::marker::Send,
 {
-    use std::io::Write;
     debug!("downloading data from {url}");
     // Strip URI fragment before parsing: HTTP clients must not include fragments
     // in request-target URIs (RFC 7230 §5.3), and hyper::Uri rejects them.
@@ -185,10 +176,18 @@ where
     }
 
     debug!("downloading data to {}", path.as_ref().to_string_lossy());
-    let mut out = std::fs::File::create(&path)?;
+    // Write to a temp file in the same directory, then atomically rename so
+    // concurrent readers (e.g. parallel CI tests) never see a partial file.
+    let parent = path.as_ref().parent().unwrap_or(Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
     let mut stream = BodyDataStream::new(res.into_body());
     while let Some(chunk) = stream.next().await {
-        out.write_all(&chunk?)?;
+        std::io::Write::write_all(&mut tmp, &chunk?)?;
+    }
+    // persist() is an atomic rename on POSIX; on Windows it may fail if the
+    // destination is held open by another handle, so fall back to copy+delete.
+    if let Err(e) = tmp.persist(path.as_ref()) {
+        std::fs::copy(e.file.path(), path.as_ref())?;
     }
 
     Ok(())

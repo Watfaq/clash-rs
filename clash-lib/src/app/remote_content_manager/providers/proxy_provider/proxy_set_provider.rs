@@ -34,7 +34,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -44,7 +44,6 @@ struct ProviderScheme {
 
 struct Inner {
     proxies: Vec<AnyOutboundHandler>,
-    hc: Arc<HealthCheck>,
 }
 
 type ProxyUpdater = Box<
@@ -59,6 +58,7 @@ type ProxyParser = Box<
 
 pub struct ProxySetProvider {
     fetcher: Fetcher<ProxyUpdater, ProxyParser>,
+    hc: Arc<HealthCheck>,
     inner: Arc<tokio::sync::RwLock<Inner>>,
 }
 
@@ -79,25 +79,24 @@ impl ProxySetProvider {
             });
         }
 
-        let inner = Arc::new(tokio::sync::RwLock::new(Inner {
-            proxies: vec![],
-            hc: hc.clone(),
-        }));
+        let inner = Arc::new(tokio::sync::RwLock::new(Inner { proxies: vec![] }));
 
         let inner_clone = inner.clone();
 
         let n = name.clone();
+        let hc_updater = hc.clone();
         let updater: ProxyUpdater = Box::new(
             move |input: Vec<AnyOutboundHandler>| -> BoxFuture<'static, ()> {
-                let hc = hc.clone();
+                let hc = hc_updater.clone();
                 let n = n.clone();
                 let inner: Arc<tokio::sync::RwLock<Inner>> = inner_clone.clone();
                 Box::pin(async move {
-                    let mut inner = inner.write().await;
-                    debug!("updating {} proxies for: {}", n, input.len());
-                    inner.proxies.clone_from(&input);
+                    {
+                        let mut inner = inner.write().await;
+                        debug!("updating {} proxies for: {}", n, input.len());
+                        inner.proxies.clone_from(&input);
+                    }
                     hc.update(input).await;
-                    // check once after update
                     tokio::spawn(async move {
                         hc.check().await;
                     });
@@ -119,7 +118,18 @@ impl ProxySetProvider {
                     Some(proxies) => {
                         let proxies = proxies
                             .into_iter()
-                            .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
+                            .filter_map(|x| {
+                                match OutboundProxyProtocol::try_from(x) {
+                                    Ok(p) => Some(p),
+                                    Err(e) => {
+                                        warn!(
+                                            provider = n.as_str(),
+                                            "skipping proxy due to parse error: {e}"
+                                        );
+                                        None
+                                    }
+                                }
+                            })
                             .map(|x| match x {
                                 OutboundProxyProtocol::Direct(d) => {
                                     Ok(Arc::new(direct::Handler::new(&d.name)) as _)
@@ -191,7 +201,17 @@ impl ProxySetProvider {
                                 }
                             })
                             .collect::<Result<Vec<_>, crate::Error>>();
-                        Ok(proxies?)
+                        match proxies {
+                            Ok(proxies) => Ok(proxies),
+                            Err(e) => {
+                                warn!(
+                                    provider = n.as_str(),
+                                    "proxy provider failed to construct handler: \
+                                     {e}"
+                                );
+                                Err(e.into())
+                            }
+                        }
                     }
                     _ => Err(Error::InvalidConfig(format!("{n}: proxies is empty"))
                         .into()),
@@ -200,7 +220,7 @@ impl ProxySetProvider {
         );
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
-        Ok(Self { fetcher, inner })
+        Ok(Self { fetcher, hc, inner })
     }
 }
 
@@ -267,11 +287,11 @@ impl ProxyProvider for ProxySetProvider {
     }
 
     async fn touch(&self) {
-        self.inner.read().await.hc.touch().await;
+        self.hc.touch().await;
     }
 
     async fn healthcheck(&self) {
-        self.inner.read().await.hc.check().await;
+        self.hc.check().await;
     }
 }
 

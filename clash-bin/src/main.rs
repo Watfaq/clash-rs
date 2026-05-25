@@ -79,7 +79,8 @@ struct Cli {
     #[clap(
         long,
         value_parser,
-        default_value = "true",
+        action = clap::ArgAction::Set,
+        default_value_t = true,
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."
@@ -174,7 +175,7 @@ fn main() -> anyhow::Result<()> {
         )));
     }
 
-    let mut config = clash::Config::File(file).try_parse()?;
+    let mut config = clash::Config::File(file.clone()).try_parse()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
     if cli.compatibility {
@@ -216,6 +217,7 @@ fn main() -> anyhow::Result<()> {
         cwd,
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,
+        config_path: Some(file),
     })
     .inspect_err(|err| eprintln!("Failed to start clash: {err}"))?;
     Ok(())

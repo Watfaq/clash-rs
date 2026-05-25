@@ -3,7 +3,6 @@ use crate::{
     proxy::hysteria2::{self, Handler, HystOption, SalamanderObfs},
     session::SocksAddr,
 };
-use rand::Rng;
 use std::{
     num::{NonZeroU16, ParseIntError},
     ops::RangeInclusive,
@@ -35,10 +34,9 @@ impl PortGenerator {
     }
 
     pub fn get(&self) -> u16 {
-        let mut rng = rand::rng();
         let len =
             1 + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
-        let idx = rng.random_range(0..len);
+        let idx = rand::random_range(0..len);
         match idx {
             0 => self.default,
             idx if idx <= self.ports.len() => self.ports[idx - 1],
@@ -127,9 +125,11 @@ impl TryFrom<OutboundHysteria2> for Handler {
             cwnd: value.cwnd,
             udp_mtu: value.udp_mtu,
             disable_mtu_discovery: value.disable_mtu_discovery.unwrap_or(false),
+            tls_cert: value.tls_cert,
+            tls_key: value.tls_key,
         };
 
-        Ok(Handler::new(opts))
+        Ok(Handler::new(opts)?)
     }
 }
 

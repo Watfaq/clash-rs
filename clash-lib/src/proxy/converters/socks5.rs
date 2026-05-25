@@ -25,7 +25,9 @@ impl TryFrom<&OutboundSocks5> for Handler {
                 s.sni.clone().unwrap_or(s.common_opts.server.to_owned()),
                 None,
                 None,
-            )) as _)
+                None,
+                None,
+            )?) as _)
         } else {
             None
         };

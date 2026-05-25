@@ -1,3 +1,160 @@
+## Proxy E2E Throughput Tests
+
+### Overview
+
+Each supported proxy protocol and transport combination has an automated
+end-to-end throughput test. Tests run against real Docker containers running
+the proxy server and measure actual upload and download throughput through the
+full clash-rs pipeline (outbound handler → proxy server → echo server).
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│ test process                                         │
+│                                                      │
+│  ┌─────────────┐   SOCKS5   ┌──────────────────┐    │
+│  │ test client ├───────────►│ clash-rs process │    │
+│  └─────────────┘            └────────┬─────────┘    │
+│         ▲                            │ proxy proto   │
+│         │ download                   ▼               │
+│  ┌──────┴──────┐         ┌──────────────────────┐   │
+│  │ echo server │◄────────┤ Docker proxy server  │   │
+│  │  (Tokio)   │         │ (xray/v2fly/sing-box) │   │
+│  └─────────────┘         └──────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+The echo server is a local Tokio TCP listener. The proxy server runs in a
+Docker container. clash-rs is spawned as a subprocess with a SOCKS5 inbound.
+
+### Measurement accuracy
+
+A **sync byte** (`0xAC`) is used as an upload barrier:
+
+1. Client sends `N` bytes (upload) through the proxy
+2. Echo server receives all `N` bytes, then sends `0xAC`
+3. Client reads `0xAC` → stops upload timer (true E2E delivery time)
+4. Client starts download timer → echo server sends `N` bytes back
+5. Client receives all bytes → stops download timer
+
+Without the sync byte, fast protocols appear slower on download because the
+download timer starts while upload bytes are still in transit.
+
+Each test runs **3 times** and reports the **median ± stdev** across runs to
+filter single-run noise.
+
+### Netem tests (adverse network simulation)
+
+Five representative protocols are also tested under a simulated bad network:
+**50 ms one-way delay + 1% packet loss**. This shows QUIC-based protocols
+(tuic, hysteria2, shadowquic) outperforming TCP-based ones under packet loss.
+
+Network conditions are applied by a short-lived `nicolaka/netshoot` sidecar
+container that shares the proxy container's network namespace and runs:
+
+```
+tc qdisc add dev eth0 root netem delay 50ms loss 1%
+```
+
+No changes are needed to the proxy server Docker images.
+
+### Running locally
+
+```bash
+# build first (tests use the debug binary)
+cargo build -p clash-rs --all-features
+
+# run all throughput tests for one protocol (e.g. tuic)
+CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
+  --test-threads=1 -- throughput_tuic
+
+# run every throughput test
+RUSTFLAGS="--cfg throughput_test" \
+CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
+  -- --test-threads=1 throughput
+
+# collect results to a JSON-lines file
+THROUGHPUT_RESULTS_FILE=results.jsonl \
+RUSTFLAGS="--cfg throughput_test" \
+CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
+  -- --test-threads=1 throughput
+
+# format results into Markdown tables
+python3 bench/format_throughput.py results.jsonl
+```
+
+> **Note:** tests are gated on `#[cfg(all(test, docker_test, throughput_test))]`.
+> Pass `--cfg throughput_test` via `RUSTFLAGS` (e.g. `RUSTFLAGS="--cfg throughput_test"`) to enable them — `cargo test` does not accept `--cfg` directly.
+
+### CI workflow
+
+The workflow (`.github/workflows/proxy-throughput.yml`) triggers on PRs that
+touch proxy or transport code. It:
+
+1. Pre-pulls all required Docker images
+2. Builds clash-rs in debug mode
+3. Runs all throughput tests (including netem variants)
+4. Collects `THROUGHPUT_RESULTS_FILE` output
+5. Posts grouped per-protocol Markdown tables as a PR comment
+
+### Result format
+
+Each completed test appends one JSON line to `THROUGHPUT_RESULTS_FILE`:
+
+```json
+{
+  "label": "tuic-bbr",
+  "upload_mbps": 9823.4,
+  "download_mbps": 8901.2,
+  "upload_stdev_mbps": 42.1,
+  "download_stdev_mbps": 38.7,
+  "runs": 3,
+  "total_bytes": 33554432,
+  "netem": null
+}
+```
+
+`format_throughput.py` groups results by protocol (first hyphen-delimited
+segment of the label) and renders one Markdown table per protocol, plus a
+separate **Netem Tests** section for labels ending in `-netem`.
+
+### Adding a new test
+
+1. Add a `get_XXX_runner() -> anyhow::Result<DockerTestRunner>` helper that
+   starts the proxy server Docker container.
+2. Write the test function under `#[cfg(all(test, docker_test, throughput_test))]`:
+
+```rust
+#[tokio::test]
+async fn e2e_throughput_my_proto_tcp() -> anyhow::Result<()> {
+    initialize();
+    let socks_port = alloc_port();
+    let echo_port = alloc_port();
+    let container = get_my_proto_runner().await?;
+    let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+    let gateway_ip = container.docker_gateway_ip();
+    let binary = find_clash_rs_binary();
+    let config = format!(r#"
+socks-port: {socks_port}
+...
+"#);
+    container.run_and_cleanup(async move {
+        clash_process_e2e_throughput(
+            &binary, &config, "my-proto-tcp",
+            socks_port, echo_port, gateway_ip, E2E_PAYLOAD_BYTES,
+        ).await.map(|_| ())
+    }).await
+}
+```
+
+3. Add the Docker image to the CI pre-pull step in
+   `.github/workflows/proxy-throughput.yml`.
+4. Add the protocol to `PROTOCOL_META` in `bench/format_throughput.py` so
+   results appear in the correct table section.
+
+---
+
 ## To get a flamegraph
 
 ```
@@ -13,12 +170,12 @@ _adjust args on your own_
 
 * client - Debian 12.5 running inside Hyper-V on i9-9900KF and 64GB mem
 * server - DS1821+
-* connection - 10 Gig cabled 
+* connection - 10 Gig cabled
 
 ### Direct connect
 
 ```
-~ » iperf3 -c dsm                                                                                        
+~ » iperf3 -c dsm
 Connecting to host dsm, port 5201
 [  5] local 10.0.0.14 port 40148 connected to 10.0.0.11 port 5201
 [ ID] Interval           Transfer     Bitrate         Retr  Cwnd
@@ -45,7 +202,7 @@ iperf Done.
 
 
 ```
-~ » iperf3 -c dsm                                                                                        
+~ » iperf3 -c dsm
 Connecting to host dsm, port 5201
 [  5] local 10.0.0.14 port 41436 connected to 10.0.0.11 port 5201
 [ ID] Interval           Transfer     Bitrate         Retr  Cwnd
@@ -114,7 +271,7 @@ The benchmark uses **veth pairs with network namespaces** to ensure traffic actu
   - veth1 placed in separate network namespace to prevent kernel local routing
 - **Baseline**: Direct connection to 192.0.2.2 via veth (no TUN routing)
   - Expected: ~5-20 Gbps (virtual network interface speed)
-- **TUN Test**: 
+- **TUN Test**:
   - Removes direct route to 192.0.2.2
   - Configures TUN to route 192.0.2.0/24
   - Traffic to 192.0.2.2 **must** go through TUN

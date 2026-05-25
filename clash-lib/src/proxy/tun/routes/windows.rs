@@ -152,6 +152,7 @@ pub fn set_dns_v4(
 
 // SetInterfaceDnsSettings()
 // See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
+#[allow(dead_code)]
 pub fn set_dns_v6(
     iface: &OutboundInterface,
     name_servers: &[Ipv6Addr],

@@ -20,7 +20,7 @@ pub enum OutboundProxy {
 }
 
 impl OutboundProxy {
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             OutboundProxy::ProxyServer(s) => s.name().to_string(),
             OutboundProxy::ProxyGroup(g) => g.name().to_string(),
@@ -89,7 +89,7 @@ pub enum OutboundProxyProtocol {
 }
 
 impl OutboundProxyProtocol {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match &self {
             OutboundProxyProtocol::Direct(direct) => &direct.name,
             OutboundProxyProtocol::Reject(reject) => &reject.name,
@@ -267,6 +267,12 @@ pub struct OutboundAnytls {
     pub idle_session_timeout: Option<u64>,
     /// Parsed for config compatibility; currently not applied by the runtime.
     pub min_idle_session: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -282,6 +288,12 @@ pub struct OutboundTrojan {
     pub network: Option<String>,
     pub grpc_opts: Option<GrpcOpt>,
     pub ws_opts: Option<WsOpt>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -302,6 +314,12 @@ pub struct OutboundVmess {
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -322,6 +340,12 @@ pub struct OutboundVless {
     pub reality_opts: Option<RealityOpt>,
     pub flow: Option<String>,
     pub client_fingerprint: Option<String>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[cfg(feature = "wireguard")]
@@ -381,6 +405,12 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[cfg(feature = "shadowquic")]
@@ -497,6 +527,12 @@ pub struct OutboundHysteria2 {
     pub disable_mtu_discovery: Option<bool>,
     /// bbr congestion control window
     pub cwnd: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    /// Must be set together with `tls-key`.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    /// Must be set together with `tls-cert`.
+    pub tls_key: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
@@ -677,6 +713,15 @@ pub struct OutboundGroupSelect {
 pub enum OutboundProxyProviderDef {
     Http(OutboundHttpProvider),
     File(OutboundFileProvider),
+}
+
+impl OutboundProxyProviderDef {
+    pub fn set_name(&mut self, name: String) {
+        match self {
+            OutboundProxyProviderDef::Http(p) => p.name = name,
+            OutboundProxyProviderDef::File(p) => p.name = name,
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

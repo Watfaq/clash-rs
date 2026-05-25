@@ -1,5 +1,5 @@
 use byteorder::{BigEndian, ReadBytesExt};
-use hmac::Mac;
+use hmac::{KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use std::{io::Read, ptr::copy_nonoverlapping};
 

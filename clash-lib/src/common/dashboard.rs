@@ -4,7 +4,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use rand::Rng;
 use tracing::{info, warn};
 
 use crate::{
@@ -45,7 +44,7 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 
     info!("downloading dashboard from {}", download_url);
 
-    let rand_part: u64 = rand::rng().random();
+    let rand_part: u64 = rand::random::<u64>();
     let base_dir = dir.parent().unwrap_or(Path::new("."));
 
     // Ensure the directory that will hold the temp files exists.
@@ -78,7 +77,7 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 
     // Extract into a temporary directory first so the existing working
     // dashboard is not removed until we know extraction succeeded.
-    let rand_part2: u64 = rand::rng().random();
+    let rand_part2: u64 = rand::random::<u64>();
     let extract_tmp = base_dir.join(format!("_dashboard_extract_{rand_part2:016x}"));
     fs::create_dir_all(&extract_tmp)?;
 
@@ -98,7 +97,7 @@ pub async fn download_dashboard<P: AsRef<Path>>(
     // Safely replace the target directory using a backup-and-swap strategy
     // so the existing dashboard is preserved if the rename fails.
     let backup = if dir.exists() {
-        let rand_part3: u64 = rand::rng().random();
+        let rand_part3: u64 = rand::random::<u64>();
         let backup_dir =
             base_dir.join(format!("_dashboard_backup_{rand_part3:016x}"));
         fs::rename(dir, &backup_dir)?;

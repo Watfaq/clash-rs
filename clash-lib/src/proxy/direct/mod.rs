@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+pub(crate) mod datagram;
+
 use crate::{
     app::{
         dispatcher::{
@@ -12,8 +14,8 @@ use crate::{
     config::internal::proxy::PROXY_DIRECT,
     proxy::{
         OutboundHandler,
-        datagram::OutboundDatagramImpl,
-        utils::{family_hint_for_session, new_tcp_stream, new_udp_socket},
+        direct::datagram::OutboundDatagramImpl,
+        utils::{new_dual_stack_udp_socket, new_tcp_stream},
     },
     session::Session,
 };
@@ -91,23 +93,17 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let family_hint = family_hint_for_session(sess, &resolver).await;
-        let bind_addr: std::net::IpAddr = if sess.source.is_ipv4() {
-            std::net::Ipv4Addr::UNSPECIFIED.into()
-        } else {
-            std::net::Ipv6Addr::UNSPECIFIED.into()
-        };
-        let d = new_udp_socket(
-            Some((bind_addr, 0).into()),
+        // The outbound socket is shared across ALL destinations from the same
+        // client (keyed by src_addr only in the dispatcher). Use a dual-stack
+        // socket so one socket can send to both IPv4 and IPv6 destinations
+        // without EAFNOSUPPORT.
+        let udp = new_dual_stack_udp_socket(
             sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
-            family_hint,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
-
-        let d = ChainedDatagramWrapper::new(d);
+        )?;
+        let d =
+            ChainedDatagramWrapper::new(OutboundDatagramImpl::new(udp, resolver));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }
@@ -167,5 +163,157 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         HashMap::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        app::dns::MockClashResolver,
+        proxy::datagram::UdpPacket,
+        session::{Network, Session, SocksAddr, Type},
+    };
+    use futures::{SinkExt, StreamExt};
+    use std::{
+        net::{Ipv4Addr, SocketAddr},
+        sync::Arc,
+        time::Duration,
+    };
+    use tokio::net::UdpSocket;
+
+    async fn spawn_udp_echo(bind: &str) -> SocketAddr {
+        let sock = UdpSocket::bind(bind).await.unwrap();
+        let addr = sock.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 4096];
+            loop {
+                let Ok((n, peer)) = sock.recv_from(&mut buf).await else {
+                    break;
+                };
+                let _ = sock.send_to(&buf[..n], peer).await;
+            }
+        });
+        addr
+    }
+
+    fn make_resolver() -> ThreadSafeDNSResolver {
+        // IP destinations never touch the resolver; an empty mock is enough.
+        Arc::new(MockClashResolver::new())
+    }
+
+    /// Full round-trip through Handler::connect_datagram →
+    /// new_dual_stack_udp_socket → IPv4 echo server.  This exercises the
+    /// real socket-creation path (the source of the Windows WSAEINVAL
+    /// regression in #1399).
+    #[tokio::test]
+    async fn test_connect_datagram_ipv4_roundtrip() {
+        let echo = spawn_udp_echo("127.0.0.1:0").await;
+        let handler = Handler::new("DIRECT");
+        let sess = Session {
+            network: Network::Udp,
+            typ: Type::Socks5,
+            destination: SocksAddr::Ip(echo),
+            ..Default::default()
+        };
+
+        let mut d = handler
+            .connect_datagram(&sess, make_resolver())
+            .await
+            .expect("connect_datagram failed");
+
+        d.send(UdpPacket {
+            data: b"hello-v4".to_vec(),
+            dst_addr: SocksAddr::Ip(echo),
+            ..Default::default()
+        })
+        .await
+        .expect("send failed");
+
+        let pkt = tokio::time::timeout(Duration::from_secs(2), d.next())
+            .await
+            .expect("timed out")
+            .expect("stream ended");
+        assert_eq!(pkt.data, b"hello-v4");
+    }
+
+    /// Same path but sending to two different IPv4 destinations via the same
+    /// socket — validates the 1→N multiplexing that requires a dual-stack
+    /// socket in the first place.
+    #[tokio::test]
+    async fn test_connect_datagram_ipv4_multi_dest() {
+        let echo_a = spawn_udp_echo("127.0.0.1:0").await;
+        let echo_b = spawn_udp_echo("127.0.0.1:0").await;
+        let handler = Handler::new("DIRECT");
+        let sess = Session {
+            network: Network::Udp,
+            typ: Type::Socks5,
+            destination: SocksAddr::Ip(echo_a),
+            ..Default::default()
+        };
+
+        let mut d = handler
+            .connect_datagram(&sess, make_resolver())
+            .await
+            .expect("connect_datagram failed");
+
+        for (dst, payload) in [(echo_a, b"to-a" as &[u8]), (echo_b, b"to-b")] {
+            d.send(UdpPacket {
+                data: payload.to_vec(),
+                dst_addr: SocksAddr::Ip(dst),
+                ..Default::default()
+            })
+            .await
+            .expect("send failed");
+        }
+
+        let mut received = std::collections::HashSet::new();
+        for _ in 0..2 {
+            let pkt = tokio::time::timeout(Duration::from_secs(2), d.next())
+                .await
+                .expect("timed out")
+                .expect("stream ended");
+            received.insert(pkt.data);
+        }
+        assert!(received.contains(b"to-a".as_ref()));
+        assert!(received.contains(b"to-b".as_ref()));
+    }
+
+    /// IPv6 round-trip — skipped when the host has no IPv6 loopback.
+    #[tokio::test]
+    async fn test_connect_datagram_ipv6_roundtrip() {
+        // Probe for IPv6 loopback availability.
+        if UdpSocket::bind("[::1]:0").await.is_err() {
+            eprintln!("skipping: no IPv6 loopback");
+            return;
+        }
+        let echo = spawn_udp_echo("[::1]:0").await;
+        let handler = Handler::new("DIRECT");
+        let sess = Session {
+            network: Network::Udp,
+            typ: Type::Socks5,
+            destination: SocksAddr::Ip(echo),
+            source: SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)),
+            ..Default::default()
+        };
+
+        let mut d = handler
+            .connect_datagram(&sess, make_resolver())
+            .await
+            .expect("connect_datagram failed");
+
+        d.send(UdpPacket {
+            data: b"hello-v6".to_vec(),
+            dst_addr: SocksAddr::Ip(echo),
+            ..Default::default()
+        })
+        .await
+        .expect("send failed");
+
+        let pkt = tokio::time::timeout(Duration::from_secs(2), d.next())
+            .await
+            .expect("timed out")
+            .expect("stream ended");
+        assert_eq!(pkt.data, b"hello-v6");
     }
 }

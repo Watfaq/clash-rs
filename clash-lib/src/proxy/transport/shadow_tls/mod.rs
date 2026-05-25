@@ -1,13 +1,9 @@
 use async_trait::async_trait;
-use rand::{Rng, distr::Distribution};
-use std::{
-    io,
-    ptr::copy_nonoverlapping,
-    sync::{Arc, LazyLock},
-};
+use rand::{RngExt, distr::Distribution};
+use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 use stream::{ProxyTlsStream, VerifiedStream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
+use tokio_rustls::{TlsConnector, client::TlsStream};
 use utils::Hmac;
 
 mod prelude;
@@ -15,16 +11,11 @@ mod stream;
 mod utils;
 
 use super::Transport;
-use crate::{common::errors::map_io_error, proxy::AnyStream};
+use crate::{
+    common::{errors::map_io_error, tls::GLOBAL_ROOT_STORE},
+    proxy::AnyStream,
+};
 use prelude::*;
-
-static ROOT_STORE: LazyLock<Arc<watfaq_rustls::RootCertStore>> =
-    LazyLock::new(root_store);
-
-fn root_store() -> Arc<watfaq_rustls::RootCertStore> {
-    let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
-    Arc::new(root_store)
-}
 
 pub struct Client {
     host: String,
@@ -49,14 +40,18 @@ impl Client {
 
         // handshake
         let hamc_handshake = Hmac::new(&self.password, (&[], &[]));
-        let sni_name =
-            watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
-                .map_err(map_io_error)?;
+        let sni_name = rustls::pki_types::ServerName::try_from(self.host.clone())
+            .map_err(map_io_error)?;
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
         let connector = new_connector();
         let mut tls = connector
-            .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
+            .connect_with_session_id_generator(
+                sni_name,
+                proxy_stream,
+                Some(session_id_generator),
+                |_| {},
+            )
             .await?;
 
         // check if is authorized
@@ -120,8 +115,8 @@ impl Transport for Client {
 }
 
 fn new_connector() -> TlsConnector {
-    let tls_config = watfaq_rustls::ClientConfig::builder()
-        .with_root_certificates(ROOT_STORE.clone())
+    let tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
 
     TlsConnector::from(Arc::new(tls_config))
@@ -140,7 +135,7 @@ fn generate_session_id(hmac: &Hmac, buf: &[u8]) -> [u8; TLS_SESSION_ID_SIZE] {
     }
 
     let mut session_id = [0; TLS_SESSION_ID_SIZE];
-    rand::rng().fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
+    rand::fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
     let mut hmac = hmac.to_owned();
     hmac.update(&buf[0..SESSION_ID_START]);
     hmac.update(&session_id);

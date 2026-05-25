@@ -360,8 +360,15 @@ mod tests {
             0,
             "".to_owned(),
         );
-        let tls =
-            transport::TlsClient::new(true, "example.org".to_owned(), None, None);
+        let tls = transport::TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("failed to create TLS client");
 
         let container = get_ws_runner(host_port).await?;
 
@@ -421,7 +428,10 @@ mod tests {
             "example.org".to_owned(),
             Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
             None,
-        );
+            None,
+            None,
+        )
+        .expect("failed to create TLS client");
 
         let runner = get_grpc_runner(host_port).await?;
 
@@ -440,5 +450,287 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    fn base_config(server: &str, port: u16, socks_port: u16, extra: &str) -> String {
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: trojan
+    server: {server}
+    port: {port}
+    password: example
+    skip-cert-verify: true
+    udp: false
+{extra}
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = port,
+            extra = extra,
+        )
+    }
+
+    const TROJAN_WS_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "websocket": {"enabled": true, "path": "/", "host": "example.org"},
+    "ssl": {"verify": true, "cert": "/fullchain.pem", "key": "/privkey.pem", "sni": "example.org"}
+}"#;
+
+    const TROJAN_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [{"port": 10002, "listen": "0.0.0.0", "protocol": "trojan",
+        "settings": {"clients": [{"password": "example", "email": "grpc@example.com"}]},
+        "streamSettings": {"network": "grpc", "security": "tls",
+            "tlsSettings": {"certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]},
+            "grpcSettings": {"serviceName": "example"}}}],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
+    const TROJAN_TCP_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "ssl": {
+        "verify": true,
+        "cert": "/fullchain.pem",
+        "key": "/privkey.pem",
+        "sni": "example.org"
+    }
+}"#;
+
+    async fn get_tcp_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_TCP_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (cert.to_str().unwrap(), "/fullchain.pem"),
+                (key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_WS_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (cert.to_str().unwrap(), "/fullchain.pem"),
+                (key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_GRPC_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_tcp() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_tcp_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_ws() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ws_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    network: ws
+    ws-opts:
+      path: /
+      headers:
+        Host: example.org"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-ws",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_grpc() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_grpc_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: example"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-grpc",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

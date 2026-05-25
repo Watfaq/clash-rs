@@ -204,9 +204,9 @@ mod tests {
         let manager = ProxyManager::new(resolver, None);
         // if the proxy alive state isn't set, will return true by default
         // so we need to clear the alive states first
-        manager.report_alive("a", false).await;
-        manager.report_alive("b", false).await;
-        manager.report_alive("c", false).await;
+        manager.report_alive("a", false, None).await;
+        manager.report_alive("b", false, None).await;
+        manager.report_alive("c", false, None).await;
 
         let mut strategy_fn = strategy_sticky_session(manager.clone());
 
@@ -215,9 +215,9 @@ mod tests {
         assert!(res.is_err());
         assert_cache_state!(CACHE_MISS);
 
-        manager.report_alive("a", true).await;
-        manager.report_alive("b", true).await;
-        manager.report_alive("c", true).await;
+        manager.report_alive("a", true, None).await;
+        manager.report_alive("b", true, None).await;
+        manager.report_alive("c", true, None).await;
 
         let mut session1 = Session::default();
         let src1 = Ipv4Addr::new(127, 0, 0, 1);

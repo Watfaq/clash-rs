@@ -8,13 +8,12 @@ pub use proxy_set_provider::ProxySetProvider;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::RwLock;
 
 use crate::{
     app::remote_content_manager::providers::Provider, proxy::AnyOutboundHandler,
 };
 
-pub type ThreadSafeProxyProvider = Arc<RwLock<dyn ProxyProvider + Send + Sync>>;
+pub type ArcProxyProvider = Arc<dyn ProxyProvider + Send + Sync>;
 
 #[async_trait]
 pub trait ProxyProvider: Provider {

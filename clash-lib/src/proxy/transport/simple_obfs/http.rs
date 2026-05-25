@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use base64::Engine;
 use bytes::{BufMut, BytesMut};
-use rand::Rng;
 use std::{
     io,
     pin::Pin,
@@ -107,8 +106,8 @@ impl AsyncWrite for HTTPObfs {
             buffer.put_slice(
                 format!(
                     "User-Agent: curl/7.{}.{}\r\n",
-                    rand::rng().random_range(0..54),
-                    rand::rng().random_range(0..2),
+                    rand::random_range(0..54),
+                    rand::random_range(0..2),
                 )
                 .as_bytes(),
             );

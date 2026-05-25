@@ -20,3 +20,5 @@ pub const IMAGE_HYSTERIA: &str = "tobyxdd/hysteria:latest";
 #[cfg(feature = "shadowquic")]
 pub const IMAGE_SHADOWQUIC: &str = "ghcr.io/spongebob888/shadowquic:latest";
 pub const IMAGE_SINGBOX: &str = "ghcr.io/sagernet/sing-box:v1.13.8";
+#[cfg(all(docker_test, throughput_test))]
+pub const IMAGE_NETEM: &str = "nicolaka/netshoot:latest";

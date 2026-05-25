@@ -64,7 +64,9 @@ impl TryFrom<&OutboundTrojan> for Handler {
                             .collect::<Vec<String>>()
                     })),
                     None,
-                );
+                    s.tls_cert.as_deref(),
+                    s.tls_key.as_deref(),
+                )?;
                 Some(Box::new(client))
             },
             transport: s

@@ -1,0 +1,16 @@
+---
+listeners:
+  - name: "anytls"
+    type: anytls
+    listen: 0.0.0.0
+    port: 8902
+    password: "anytls-smoke-test-password"
+    # no certificate/private-key → ephemeral self-signed cert
+
+allow-lan: true
+mode: rule
+log-level: trace
+external-controller: :9092
+
+rules:
+  - MATCH, DIRECT

@@ -22,7 +22,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     session::{Session, SocksAddr},
 };
 use anyhow::anyhow;
@@ -36,7 +36,6 @@ use quinn::{
     ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
 };
 use quinn_proto::TransportConfig;
-use rustls::ClientConfig as RustlsClientConfig;
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -84,6 +83,10 @@ pub struct HystOption {
     pub ca_str: Option<String>,
     #[allow(dead_code)]
     pub cwnd: Option<u64>,
+    /// File path or inline PEM client certificate for mTLS.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    pub tls_key: Option<String>,
 }
 
 enum CcRx {
@@ -126,16 +129,20 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> Self {
+    pub fn new(opts: HystOption) -> std::io::Result<Self> {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
-        let verify =
-            DefaultTlsVerifier::new(opts.fingerprint.clone(), opts.skip_cert_verify);
-        let mut tls_config = RustlsClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verify))
-            .with_no_client_auth();
+        let verify = Arc::new(DefaultTlsVerifier::new(
+            opts.fingerprint.clone(),
+            opts.skip_cert_verify,
+        ));
+        let mut tls_config = build_tls_client_config(
+            verify,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| std::io::Error::new(e.kind(), format!("hysteria2 TLS: {e}")))?;
 
         // should set alpn_protocol `h3` default
         tls_config.alpn_protocols = if opts.alpn.is_empty() {
@@ -161,7 +168,7 @@ impl Handler {
         client_config.transport_config(Arc::new(transport));
         let ep_config = quinn::EndpointConfig::default();
 
-        Self {
+        Ok(Self {
             opts,
             ep_config,
             client_config,
@@ -169,7 +176,7 @@ impl Handler {
             conn: Mutex::new(None),
             guard: Mutex::new(None),
             support_udp: RwLock::new(true),
-        }
+        })
     }
 
     // connect and auth
@@ -801,12 +808,274 @@ mod tests {
             cwnd: None,
             udp_mtu: None,
             disable_mtu_discovery: false,
+            tls_cert: None,
+            tls_key: None,
         };
 
-        let handler = Arc::new(Handler::new(opts));
+        let handler = Arc::new(
+            Handler::new(opts).expect("failed to create hysteria2 handler"),
+        );
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    // Plain hysteria2 server — no obfs, auth password "passwd"
+    const HYSTERIA2_SERVER_CONFIG: &str = r#"{
+    "listen": ":10002",
+    "tls": {
+        "cert": "/home/ubuntu/my.crt",
+        "key": "/home/ubuntu/my.key"
+    },
+    "up_mbps": 100,
+    "down_mbps": 100,
+    "auth": {
+        "type": "password",
+        "password": "passwd"
+    }
+}"#;
+
+    // Hysteria2 server with obfs-salamander, auth password "passwd"
+    const HYSTERIA_SALAMANDER_SERVER_CONFIG: &str = r#"{
+    "listen": ":10002",
+    "tls": {
+        "cert": "/home/ubuntu/my.crt",
+        "key": "/home/ubuntu/my.key"
+    },
+    "obfs": {
+        "type": "salamander",
+        "salamander": {
+            "password": "salamander-password"
+        }
+    },
+    "up_mbps": 100,
+    "down_mbps": 100,
+    "auth": {
+        "type": "password",
+        "password": "passwd"
+    }
+}"#;
+
+    async fn build_hysteria2_runner(
+        server_config: &str,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(server_config.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_HYSTERIA)
+            .cmd(&["server"])
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/config.json"),
+                (cert.to_str().unwrap(), "/home/ubuntu/my.crt"),
+                (key.to_str().unwrap(), "/home/ubuntu/my.key"),
+            ])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_hysteria2_plain() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = build_hysteria2_runner(HYSTERIA2_SERVER_CONFIG).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: hysteria2
+    server: {server}
+    port: {port}
+    password: passwd
+    sni: example.org
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "hysteria2-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_hysteria2_plain_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = build_hysteria2_runner(HYSTERIA2_SERVER_CONFIG).await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: hysteria2
+    server: {server}
+    port: {port}
+    password: passwd
+    sni: example.org
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "hysteria2-plain-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_hysteria2_salamander() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container =
+            build_hysteria2_runner(HYSTERIA_SALAMANDER_SERVER_CONFIG).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: hysteria2
+    server: {server}
+    port: {port}
+    password: passwd
+    obfs: salamander
+    obfs-password: salamander-password
+    sni: example.org
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "hysteria2-salamander",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

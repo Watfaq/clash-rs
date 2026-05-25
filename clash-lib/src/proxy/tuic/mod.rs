@@ -4,17 +4,20 @@ mod handle_task;
 pub(crate) mod types;
 
 use crate::{
-    common::tls::DefaultTlsVerifier,
+    common::tls::{DefaultTlsVerifier, build_tls_client_config},
     proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
 };
 use anyhow::Result;
 use async_trait::async_trait;
 
-use quinn::{
-    EndpointConfig, TokioRuntime,
-    congestion::{BbrConfig, NewRenoConfig},
-};
 use tracing::debug;
+use tuic_core::quinn::{
+    ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint, EndpointConfig,
+    TokioRuntime, TransportConfig as QuinnTransportConfig, VarInt,
+    bbr::BbrConfig,
+    congestion::{Bbr3Config, CubicConfig, NewRenoConfig},
+    crypto::rustls::QuicClientConfig,
+};
 
 use erased_serde::Serialize as ErasedSerialize;
 use std::{
@@ -46,11 +49,6 @@ use crate::{
 
 use crate::session::SocksAddr as ClashSocksAddr;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
-use tuic_core::quinn::quinn::{
-    ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
-    TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
-    crypto::rustls::QuicClientConfig,
-};
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
@@ -89,6 +87,10 @@ pub struct HandlerOptions {
     pub max_udp_relay_packet_size: u64,
     pub ip: Option<String>,
     pub sni: Option<String>,
+    /// File path or inline PEM client certificate for mTLS.
+    pub tls_cert: Option<String>,
+    /// File path or inline PEM client private key for mTLS.
+    pub tls_key: Option<String>,
 }
 
 pub struct Handler {
@@ -204,14 +206,14 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<TuicEndpoint> {
-        let verifier = DefaultTlsVerifier::new(None, opts.skip_cert_verify);
-        let mut crypto =
-            rustls::client::ClientConfig::builder_with_protocol_versions(&[
-                &rustls::version::TLS13,
-            ])
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(verifier))
-            .with_no_client_auth();
+        let verifier =
+            Arc::new(DefaultTlsVerifier::new(None, opts.skip_cert_verify));
+        let mut crypto = build_tls_client_config(
+            verifier,
+            opts.tls_cert.as_deref(),
+            opts.tls_key.as_deref(),
+        )
+        .map_err(|e| anyhow::anyhow!("tuic TLS: {e}"))?;
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
@@ -235,6 +237,8 @@ impl Handler {
                 .congestion_controller_factory(Arc::new(NewRenoConfig::default())),
             CongestionControl::Bbr => transport_config
                 .congestion_controller_factory(Arc::new(BbrConfig::default())),
+            CongestionControl::Bbr3 => transport_config
+                .congestion_controller_factory(Arc::new(Bbr3Config::default())),
         };
 
         quinn_config.transport_config(Arc::new(transport_config));
@@ -264,7 +268,7 @@ impl Handler {
 
         debug!("binding socket to: {:?}", socket.local_addr()?);
 
-        let mut endpoint = QuinnEndpoint::new(
+        let endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
             None,
             socket.into_std()?,
@@ -452,6 +456,8 @@ mod tests {
             gc_lifetime: Duration::from_millis(15000),
             send_window: 8 * 1024 * 1024 * 2,
             receive_window: VarInt::from_u64(8 * 1024 * 1024)?,
+            tls_cert: None,
+            tls_key: None,
         })
     }
 
@@ -574,5 +580,328 @@ mod tests {
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    // Inlined from tuic.toml — UUID/password auth, BBR, h3 ALPN
+    const TUIC_SERVER_CONFIG: &str = r#"server = "0.0.0.0:10002"
+
+data_dir = ""
+zero_rtt_handshake = false
+dual_stack = false
+
+acl = '''
+direct 0.0.0.0/0
+direct ::/0
+'''
+
+[users]
+00000000-0000-0000-0000-000000000001 = "passwd"
+
+[tls]
+certificate = "/opt/tuic/fullchain.pem"
+private_key = "/opt/tuic/privkey.pem"
+alpn = ["h3"]
+
+[outbound.default]
+type = "direct"
+ip_mode = "auto"
+"#;
+
+    async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TUIC_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TUIC)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/tuic/config.json"),
+                (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
+                (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
+            ])
+            .env(&["TUIC_FORCE_TOML=1"])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_tuic_bbr() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tuic_runner().await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: tuic
+    server: {server}
+    port: {port}
+    uuid: 00000000-0000-0000-0000-000000000001
+    password: passwd
+    alpn:
+      - h3
+    congestion-controller: bbr
+    disable-sni: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "tuic-bbr",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_tuic_bbr_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tuic_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: tuic
+    server: {server}
+    port: {port}
+    uuid: 00000000-0000-0000-0000-000000000001
+    password: passwd
+    alpn:
+      - h3
+    congestion-controller: bbr
+    disable-sni: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "tuic-bbr-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_tuic_cubic() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tuic_runner().await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: tuic
+    server: {server}
+    port: {port}
+    uuid: 00000000-0000-0000-0000-000000000001
+    password: passwd
+    alpn:
+      - h3
+    congestion-controller: cubic
+    disable-sni: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "tuic-cubic",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_tuic_new_reno() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tuic_runner().await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: tuic
+    server: {server}
+    port: {port}
+    uuid: 00000000-0000-0000-0000-000000000001
+    password: passwd
+    alpn:
+      - h3
+    congestion-controller: new_reno
+    disable-sni: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "tuic-new_reno",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

@@ -69,15 +69,12 @@ pub(crate) mod tests {
         CRYPTO_PROVIDER_LOCK.get_or_init(|| {
             #[cfg(feature = "aws-lc-rs")]
             {
-                rustls::crypto::aws_lc_rs::default_provider()
-                    .install_default()
-                    .unwrap()
+                let _ =
+                    rustls::crypto::aws_lc_rs::default_provider().install_default();
             }
             #[cfg(feature = "ring")]
             {
-                rustls::crypto::ring::default_provider()
-                    .install_default()
-                    .unwrap()
+                let _ = rustls::crypto::ring::default_provider().install_default();
             }
         });
     }

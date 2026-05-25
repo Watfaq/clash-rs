@@ -2,7 +2,7 @@ use crate::{
     app::net::DEFAULT_OUTBOUND_INTERFACE,
     config::internal::proxy::PROXY_DIRECT,
     dns::{
-        ClashResolver, EdnsClientSubnet, ThreadSafeDNSClient,
+        ClashResolver, EdnsClientSubnet, RuleDispatch, ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
     },
     proxy::{
@@ -22,6 +22,7 @@ pub async fn make_clients(
     outbounds: OutboundHandlerRegistry,
     edns_client_subnet: Option<EdnsClientSubnet>,
     fw_mark: Option<u32>,
+    rule_dispatch: Option<Arc<RuleDispatch>>,
 ) -> Vec<ThreadSafeDNSClient> {
     let mut rv = Vec::new();
 
@@ -31,6 +32,14 @@ pub async fn make_clients(
         let proxy_name = s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string());
         let proxy: Arc<dyn proxy::OutboundHandler> =
             Arc::new(SharedOutboundHandler::new(proxy_name, outbounds.clone()));
+
+        // An explicit `#proxy=...` always wins — rule-engine routing is only
+        // applied to nameservers that opted into the default DIRECT path.
+        let rd = if s.proxy.is_none() {
+            rule_dispatch.clone()
+        } else {
+            None
+        };
 
         let port = if s.net == DNSNetMode::Dhcp { 0 } else { s.port };
 
@@ -48,6 +57,7 @@ pub async fn make_clients(
             proxy,
             ecs: edns_client_subnet.clone(),
             fw_mark,
+            rule_dispatch: rd,
         })
         .await
         {
@@ -64,21 +74,21 @@ pub fn build_dns_response_message(
     recursive_available: bool,
     authoritative: bool,
 ) -> hickory_proto::op::Message {
-    let mut res = hickory_proto::op::Message::new();
+    let mut res =
+        hickory_proto::op::Message::response(req.metadata.id, req.metadata.op_code);
 
-    res.set_id(req.id());
-    res.set_op_code(req.op_code());
-    res.set_message_type(hickory_proto::op::MessageType::Response);
-    res.add_queries(req.queries().iter().cloned());
-    res.set_recursion_available(recursive_available);
-    res.set_authoritative(authoritative);
-    res.set_recursion_desired(req.recursion_desired());
-    res.set_checking_disabled(req.checking_disabled());
-    if let Some(edns) = req.extensions().clone() {
+    res.metadata.recursion_available = recursive_available;
+    res.metadata.authoritative = authoritative;
+    res.metadata.recursion_desired = req.metadata.recursion_desired;
+    res.metadata.checking_disabled = req.metadata.checking_disabled;
+
+    res.add_queries(req.queries.iter().cloned());
+
+    if let Some(edns) = req.edns.clone() {
         res.set_edns(edns);
     }
 
-    if let Some(edns) = res.extensions_mut() {
+    if let Some(edns) = res.edns.as_mut() {
         // Remove only padding options, keep everything else
         edns.options_mut().remove(EdnsCode::Padding);
     }

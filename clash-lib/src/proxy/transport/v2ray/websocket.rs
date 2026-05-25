@@ -54,7 +54,9 @@ impl V2rayWsClient {
                 host.clone(),
                 Some(vec!["http/1.1".to_owned()]),
                 None,
-            )) as _)
+                None,
+                None,
+            )?) as _)
         } else {
             None
         };

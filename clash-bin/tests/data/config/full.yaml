@@ -299,6 +299,26 @@ listeners:
     #   - name: bob
     #     password: "bob-base64-32-byte-key="
 
+  # AnyTLS inbound — TLS-based inbound with multi-user support.
+  # Clients authenticate with a password; wrong passwords are forwarded to the
+  # fallback host for GFW active-probe camouflage.
+  # certificate/private-key may be inline PEM ("-----BEGIN …") or file paths.
+  # Omit both to auto-generate an ephemeral self-signed certificate.
+  - name: anytls-in
+    type: anytls
+    listen: 0.0.0.0
+    port: 8443
+    udp: true
+    password: "your-password-here"          # single-user shorthand
+    # certificate: /path/to/cert.pem        # or "-----BEGIN CERTIFICATE-----\n…"
+    # private-key: /path/to/key.pem         # or "-----BEGIN PRIVATE KEY-----\n…"
+    # fallback: "example.com:443"           # forward unauthenticated probes here
+    # users:                                # multi-user (overrides password:)
+    #   - name: alice
+    #     password: "alice-password"
+    #   - name: bob
+    #     password: "bob-password"
+
 # Inbound providers — load listener lists from files or HTTP endpoints.
 # The referenced YAML must have a top-level `listeners:` key.
 # inbound-providers:

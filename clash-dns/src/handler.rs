@@ -7,18 +7,17 @@ use crate::{
 };
 use async_trait::async_trait;
 use hickory_proto::{
-    op::{Header, Message, MessageType, OpCode, ResponseCode},
+    op::{
+        Header, HeaderCounts, Message, MessageType, Metadata, OpCode, ResponseCode,
+    },
     rr::RecordType,
 };
 use hickory_server::{
-    ServerFuture,
-    authority::MessageResponseBuilder,
+    Server,
+    net::runtime::Time,
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
+    zone_handler::MessageResponseBuilder,
 };
-#[cfg(feature = "aws-lc-rs")]
-use rustls::crypto::aws_lc_rs::sign::any_supported_type;
-#[cfg(all(not(feature = "aws-lc-rs"), feature = "ring"))]
-use rustls::crypto::ring::sign::any_supported_type;
 use rustls::{server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey};
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
@@ -33,13 +32,20 @@ struct CertificateKeyPair {
 impl From<CertificateKeyPair> for Arc<dyn rustls::server::ResolvesServerCert> {
     fn from(pair: CertificateKeyPair) -> Self {
         Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
-            CertifiedKey::new(pair.certs, any_supported_type(&pair.key).unwrap()),
+            CertifiedKey::new(
+                pair.certs,
+                rustls::crypto::CryptoProvider::get_default()
+                    .expect("no default crypto provider installed")
+                    .key_provider
+                    .load_private_key(pair.key)
+                    .expect("unsupported private key type"),
+            ),
         )))
     }
 }
 
 struct DnsListener<H: RequestHandler> {
-    server: ServerFuture<H>,
+    server: Server<H>,
 }
 
 struct DnsHandler<X> {
@@ -65,81 +71,90 @@ where
         request: &Request,
         mut response_handle: H,
     ) -> Result<ResponseInfo, DNSError> {
-        if request.op_code() != OpCode::Query {
+        if request.metadata.op_code != OpCode::Query {
             return Err(DNSError::InvalidOpQuery(format!(
                 "invalid OP code: {}",
-                request.op_code()
+                request.metadata.op_code
             )));
         }
 
-        if request.message_type() != MessageType::Query {
+        if request.metadata.message_type != MessageType::Query {
             return Err(DNSError::InvalidOpQuery(format!(
                 "invalid message type: {}",
-                request.message_type()
+                request.metadata.message_type
             )));
         }
 
-        let builder = MessageResponseBuilder::from_message_request(request);
-        let mut header = Header::response_from_request(request.header());
+        let mut metadata = Metadata::response_from_request(&request.metadata);
 
         let query = request
+            .queries
             .queries()
             .first()
             .ok_or(DNSError::QueryFailed("no query".to_string()))?;
 
         if query.query_type() == RecordType::AAAA && !self.exchanger.ipv6() {
-            header.set_authoritative(true);
+            metadata.authoritative = true;
 
-            let resp = builder.build_no_records(header);
-            return Ok(response_handle.send_response(resp).await?);
+            let resp = MessageResponseBuilder::from_message_request(request)
+                .build_no_records(metadata);
+            return response_handle
+                .send_response(resp)
+                .await
+                .map_err(|e| DNSError::QueryFailed(e.to_string()));
         }
 
-        let mut m = Message::new();
-        m.set_op_code(request.op_code());
-        m.set_message_type(request.message_type());
-        m.set_recursion_desired(request.recursion_desired());
+        let mut m = Message::new(
+            request.metadata.id,
+            request.metadata.message_type,
+            request.metadata.op_code,
+        );
+        m.metadata.recursion_desired = request.metadata.recursion_desired;
+        m.metadata.checking_disabled = request.metadata.checking_disabled;
         m.add_query(query.original().clone());
-        m.add_additionals(request.additionals().iter().cloned());
-        m.add_name_servers(request.name_servers().iter().cloned());
-        for sig0 in request.sig0() {
-            m.add_sig0(sig0.clone());
-        }
-        if let Some(edns) = request.edns() {
+        m.add_additionals(request.additionals.iter().cloned());
+        m.add_authorities(request.authorities.iter().cloned());
+        if let Some(edns) = &request.edns {
             m.set_edns(edns.clone());
         }
 
         match self.exchanger.exchange(&m).await {
             Ok(m) => {
-                header.set_recursion_available(m.recursion_available());
-                header.set_response_code(m.response_code());
-                header.set_authoritative(m.authoritative());
+                metadata.recursion_available = m.metadata.recursion_available;
+                metadata.response_code = m.metadata.response_code;
+                metadata.authoritative = m.metadata.authoritative;
+                metadata.truncation = m.metadata.truncation;
+                metadata.authentic_data = m.metadata.authentic_data;
+                metadata.checking_disabled = m.metadata.checking_disabled;
 
-                header.set_answer_count(m.answer_count());
-                header.set_name_server_count(m.name_server_count());
-                header.set_additional_count(m.additional_count());
+                let resp_edns = if request.edns.is_some() {
+                    m.edns.clone()
+                } else {
+                    None
+                };
 
-                let mut rv = builder.build(
-                    header,
-                    m.answers(),
-                    m.name_servers(),
-                    &[],
-                    m.additionals(),
+                let rv = MessageResponseBuilder::new(
+                    &request.queries,
+                    resp_edns.as_ref(),
+                )
+                .build(
+                    metadata,
+                    m.answers.iter(),
+                    m.authorities.iter(),
+                    std::iter::empty(),
+                    m.additionals.iter(),
                 );
-
-                if let Some(edns) = request.edns()
-                    && edns.flags().dnssec_ok
-                    && let Some(edns) = m.extensions()
-                {
-                    rv.set_edns(edns.clone());
-                }
 
                 debug!(
                     "answering dns query {} with answer {:?}",
                     query.name(),
-                    m.answers(),
+                    &m.answers,
                 );
 
-                Ok(response_handle.send_response(rv).await?)
+                Ok(response_handle
+                    .send_response(rv)
+                    .await
+                    .map_err(|e| DNSError::QueryFailed(e.to_string()))?)
             }
             Err(e) => {
                 debug!("dns resolve error: {}", e);
@@ -154,16 +169,16 @@ impl<X> RequestHandler for DnsHandler<X>
 where
     X: DnsMessageExchanger + Unpin + Send + Sync + 'static,
 {
-    async fn handle_request<H: ResponseHandler>(
+    async fn handle_request<R: ResponseHandler, T: Time>(
         &self,
         request: &Request,
-        response_handle: H,
+        response_handle: R,
     ) -> ResponseInfo {
         debug!(
             "got dns request [{}][{:?}][{:?}] from {}",
             request.protocol(),
-            request.queries().first().map(|x| x.query_type()),
-            request.queries().first().map(|x| x.name()),
+            request.queries.queries().first().map(|x| x.query_type()),
+            request.queries.queries().first().map(|x| x.name()),
             request.src()
         );
 
@@ -171,9 +186,14 @@ where
             .await
             .unwrap_or_else(|e| {
                 debug!("dns request error: {}", e);
-                let mut h = Header::new();
-                h.set_response_code(ResponseCode::ServFail);
-                h.into()
+                let mut metadata =
+                    Metadata::response_from_request(&request.metadata);
+                metadata.response_code = ResponseCode::ServFail;
+                Header {
+                    metadata,
+                    counts: HeaderCounts::default(),
+                }
+                .into()
             })
     }
 }
@@ -189,7 +209,7 @@ where
     X: DnsMessageExchanger + Sync + Send + Unpin + 'static,
 {
     let handler = DnsHandler { exchanger };
-    let mut s = ServerFuture::new(handler);
+    let mut s = Server::new(handler);
 
     let mut has_server = false;
 
@@ -210,7 +230,7 @@ where
             .await
             .map(|x| {
                 info!("TCP dns server listening on: {}", addr);
-                s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
+                s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT, 4096);
             })
             .inspect_err(|x| {
                 error!("failed to listen TCP DNS server on {}: {}", addr, x);
@@ -362,24 +382,26 @@ mod tests {
         tls::{self, global_root_store},
     };
     use futures::FutureExt;
-    use hickory_client::client::{Client, ClientHandle};
-    use hickory_proto::{
-        h2::HttpsClientStreamBuilder,
-        h3::H3ClientStreamBuilder,
-        rr::{DNSClass, Name, RData, RecordType, rdata::A},
+    use hickory_net::{
+        client::{Client, ClientHandle},
+        h2::HttpsClientStream,
+        h3::H3ClientStream,
         runtime::TokioRuntimeProvider,
-        rustls::tls_client_connect,
         tcp::TcpClientStream,
+        tls::tls_client_connect,
         udp::UdpClientStream,
     };
-    use rustls::ClientConfig;
+    use hickory_proto::rr::{DNSClass, Name, RData, RecordType};
+    use rustls::{ClientConfig, pki_types::ServerName};
     use std::{sync::Arc, time::Duration};
     use tokio::{
         net::{TcpListener, UdpSocket},
         task::JoinHandle,
     };
 
-    async fn send_query(client: &mut Client) -> anyhow::Result<()> {
+    async fn send_query(
+        client: &mut Client<TokioRuntimeProvider>,
+    ) -> anyhow::Result<()> {
         let name = Name::from_ascii("www.example.com.").unwrap();
 
         let mut retries = 3;
@@ -401,10 +423,10 @@ mod tests {
             }
         };
 
-        let answers = response.answers();
+        let answers = &response.answers;
 
-        if let RData::A(ip) = answers[0].data() {
-            assert_eq!(*ip, A::new(93, 184, 215, 14))
+        if let RData::A(ip) = &answers[0].data {
+            assert_eq!(ip.0, std::net::Ipv4Addr::new(93, 184, 215, 14))
         } else {
             unreachable!("unexpected result")
         }
@@ -420,8 +442,10 @@ mod tests {
         mock_exchanger.expect_ipv6().returning(|| false);
         mock_exchanger.expect_exchange().returning(|_| {
             async {
-                let mut m = hickory_proto::op::Message::new();
-                m.set_response_code(hickory_proto::op::ResponseCode::NoError);
+                let mut m = hickory_proto::op::Message::response(
+                    0,
+                    hickory_proto::op::OpCode::Query,
+                );
                 m.add_answer(hickory_proto::rr::Record::from_rdata(
                     "www.example.com".parse().unwrap(),
                     60,
@@ -502,16 +526,16 @@ mod tests {
         let stream =
             UdpClientStream::builder(udp_addr, TokioRuntimeProvider::new()).build();
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
-        let (stream, sender) =
+        let (stream_future, sender) =
             TcpClientStream::new(tcp_addr, None, None, TokioRuntimeProvider::new());
-
-        let (mut client, handle) = Client::new(stream, sender, None).await?;
-        tokio::spawn(handle);
+        let stream = stream_future.await?;
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::new(stream, sender);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -523,20 +547,23 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let (stream, sender) = tls_client_connect(
+        let server_name = ServerName::try_from("dns.example.com").unwrap();
+        let (stream_future, sender) = tls_client_connect(
             dot_addr,
-            "dns.example.com".to_owned(),
+            server_name,
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         );
 
-        let (mut client, handle) =
-            Client::with_timeout(stream, sender, Duration::from_secs(5), None)
-                .await
-                .inspect_err(|e| {
-                    assert!(false, "Failed to connect to DoT server: {}", e);
-                })?;
-        tokio::spawn(handle);
+        let stream = stream_future.await.inspect_err(|e| {
+            assert!(false, "Failed to connect to DoT server: {}", e);
+        })?;
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::with_timeout(
+            stream,
+            sender,
+            Duration::from_secs(5),
+        );
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -549,18 +576,15 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let stream = HttpsClientStreamBuilder::with_client_config(
+        let stream = HttpsClientStream::builder(
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         )
-        .build(
-            doh_addr,
-            "dns.example.com".to_owned(),
-            "/dns-query".to_owned(),
-        );
+        .build(doh_addr, "dns.example.com".into(), "/dns-query".into())
+        .await?;
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
 
@@ -573,17 +597,13 @@ mod tests {
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
-        let stream = H3ClientStreamBuilder::default()
+        let stream = H3ClientStream::builder()
             .crypto_config(tls_config)
-            .clone()
-            .build(
-                doh3_addr,
-                "dns.example.com".to_owned(),
-                "/dns-query".to_owned(),
-            );
+            .build(doh3_addr, "dns.example.com".into(), "/dns-query".into())
+            .await?;
 
-        let (mut client, handle) = Client::connect(stream).await?;
-        tokio::spawn(handle);
+        let (mut client, bg) = Client::<TokioRuntimeProvider>::from_sender(stream);
+        tokio::spawn(bg);
 
         send_query(&mut client).await?;
         Ok(())

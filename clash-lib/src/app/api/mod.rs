@@ -4,6 +4,8 @@ use tokio::sync::broadcast::Sender;
 
 use super::{dispatcher::StatisticsManager, logging::LogEvent};
 
+#[cfg(feature = "dashboard")]
+mod embedded_dashboard;
 mod handlers;
 mod ipc;
 mod middlewares;

@@ -20,7 +20,7 @@ A custom protocol, rule based network proxy software.
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
 - 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote, and expose it as a local UDP/TCP/DoH/DoT server.
 - ⚙️ AnyTLS/Hysteria2/Shadowquic/Shadowsocks/Socks5(TCP/UDP)/SSH/Tailscale/tor(onion)/Trojan/Tuic/VLess/Vmess/Wireguard(userspace) outbound support with different underlying transports(gRPC/TLS/H2/WebSocket/etc.).
-- 🔀 Multiple inbound modes: HTTP, SOCKS5, Mixed, Shadowsocks, Redir, TProxy, and TUN (utun) for transparent proxying.
+- 🔀 Multiple inbound modes: HTTP, SOCKS5, Mixed, Shadowsocks, AnyTLS, Redir, TProxy, and TUN (utun) for transparent proxying.
 - 🌍 Dynamic remote rule/proxy loader.
 - 🎵 Tracing with Jaeger
 
@@ -34,6 +34,7 @@ A custom protocol, rule based network proxy software.
 | `socks` | SOCKS5 (TCP + UDP) | |
 | `mixed` | HTTP + SOCKS5 on a single port | |
 | `shadowsocks` | Shadowsocks inbound with multi-user support | `shadowsocks` feature |
+| `anytls` | AnyTLS inbound with multi-user support, GFW fallback camouflage | |
 | `tun` | TUN device for transparent proxying | All platforms |
 | `tproxy` | Transparent proxy (TCP + UDP) | Linux; `tproxy` feature |
 | `redir` | TCP redirect | Linux; `redir` feature |

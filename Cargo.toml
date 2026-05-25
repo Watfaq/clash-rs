@@ -12,18 +12,18 @@ members = [
 
 
 [workspace.package]
-version = "0.10.0"
+version = "0.10.6"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
 homepage = "https://github.com/watfaq/clash-rs"
 
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 codegen-units = 1
-lto = "thin"
-strip = true
-debug = 2
+lto = "fat"
+strip = "symbols"
+debug = 0
 panic = "abort"
 
 [profile.detailed-release]
@@ -46,4 +46,6 @@ redundant_clone = "deny"
 needless_collect = "deny"
 
 [patch.crates-io]
-shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust", rev = "dee2d932dc580e0e1b7a5a591ff5f8c51f70495e" }
+rustls = { git = "https://github.com/Watfaq/rustls.git", branch = "watfaq/0.23.40" }
+tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", branch = "watfaq/0.26.4" }
+

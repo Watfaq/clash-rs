@@ -171,8 +171,9 @@ impl Runner for ApiRunner {
                 .nest("/providers/rules", handlers::provider::rule_routes(router))
                 .nest(
                     "/connections",
-                    handlers::connection::routes(statistics_manager),
+                    handlers::connection::routes(statistics_manager.clone()),
                 )
+                .nest("/flows", handlers::flows::routes(statistics_manager))
                 .nest("/dns", handlers::dns::routes(dns_resolver))
                 .layer(middleware::from_fn(
                     middlewares::fix_json_content_type::fix_content_type,
@@ -188,6 +189,15 @@ impl Runner for ApiRunner {
                         "/ui/",
                         ServeDir::new(PathBuf::from(cwd).join(external_ui)),
                     );
+            } else {
+                #[cfg(feature = "dashboard")]
+                {
+                    use super::embedded_dashboard;
+                    router = router
+                        .route("/ui", get(|| async { Redirect::to("/ui/") }))
+                        .route("/ui/", get(embedded_dashboard::serve_index))
+                        .route("/ui/{*path}", get(embedded_dashboard::serve_asset));
+                }
             }
 
             // Create display strings before moving values

@@ -7,7 +7,7 @@ homepage = { workspace = true }
 authors = { workspace = true }
 
 [features]
-default = ["standard", "aws-lc-rs"]
+default = ["standard", "aws-lc-rs", "dashboard"]
 standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "wireguard", "tailscale", "clash-lib/zero_copy", "tproxy", "tun", "redir"]
 
 plus = ["standard", "onion"]
@@ -28,6 +28,7 @@ redir = ["clash-lib/redir"]
 tun = ["clash-lib/tun"]
 
 bench = ["clash-lib/bench"]
+dashboard = ["clash-lib/dashboard"]
 dhat-heap = ["dep:dhat"]
 telemetry = ["clash-lib/telemetry"]
 jemallocator = ["dep:tikv-jemallocator"]

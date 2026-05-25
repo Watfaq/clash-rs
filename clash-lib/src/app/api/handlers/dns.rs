@@ -6,7 +6,10 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use hickory_proto::{op::Message, rr::RecordType};
+use hickory_proto::{
+    op::{Message, MessageType, OpCode},
+    rr::RecordType,
+};
 use http::StatusCode;
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -41,7 +44,7 @@ async fn query_dns(
             .into_response();
     }
     let typ: RecordType = q.typ.parse().unwrap_or(RecordType::A);
-    let mut m = Message::new();
+    let mut m = Message::new(0, MessageType::Query, OpCode::Query);
 
     let name = hickory_proto::rr::Name::from_str_relaxed(q.name.as_str());
 
@@ -54,11 +57,14 @@ async fn query_dns(
     match state.resolver.exchange(&m).await {
         Ok(response) => {
             let mut resp = Map::new();
-            resp.insert("Status".to_owned(), response.response_code().low().into());
+            resp.insert(
+                "Status".to_owned(),
+                response.metadata.response_code.low().into(),
+            );
             resp.insert(
                 "Question".to_owned(),
                 response
-                    .queries()
+                    .queries
                     .iter()
                     .map(|x| {
                         let mut data = Map::new();
@@ -77,39 +83,42 @@ async fn query_dns(
                     .into(),
             );
 
-            resp.insert("TC".to_owned(), response.truncated().into());
-            resp.insert("RD".to_owned(), response.recursion_desired().into());
-            resp.insert("RA".to_owned(), response.recursion_available().into());
-            resp.insert("AD".to_owned(), response.authentic_data().into());
-            resp.insert("CD".to_owned(), response.checking_disabled().into());
+            resp.insert("TC".to_owned(), response.metadata.truncation.into());
+            resp.insert("RD".to_owned(), response.metadata.recursion_desired.into());
+            resp.insert(
+                "RA".to_owned(),
+                response.metadata.recursion_available.into(),
+            );
+            resp.insert("AD".to_owned(), response.metadata.authentic_data.into());
+            resp.insert("CD".to_owned(), response.metadata.checking_disabled.into());
 
             let rr2json = |rr: &hickory_proto::rr::Record| -> Value {
                 let mut data = Map::new();
-                data.insert("name".to_owned(), rr.name().to_string().into());
+                data.insert("name".to_owned(), rr.name.to_string().into());
                 data.insert("type".to_owned(), u16::from(rr.record_type()).into());
-                data.insert("ttl".to_owned(), rr.ttl().into());
-                data.insert("data".to_owned(), rr.data().to_string().into());
+                data.insert("ttl".to_owned(), rr.ttl.into());
+                data.insert("data".to_owned(), rr.data.to_string().into());
                 data.into()
             };
 
-            if response.answer_count() > 0 {
+            if !response.answers.is_empty() {
                 resp.insert(
                     "Answer".to_owned(),
-                    response.answers().iter().map(rr2json).collect(),
+                    response.answers.iter().map(rr2json).collect(),
                 );
             }
 
-            if response.name_server_count() > 0 {
+            if !response.authorities.is_empty() {
                 resp.insert(
                     "Authority".to_owned(),
-                    response.name_servers().iter().map(rr2json).collect(),
+                    response.authorities.iter().map(rr2json).collect(),
                 );
             }
 
-            if response.additional_count() > 0 {
+            if !response.additionals.is_empty() {
                 resp.insert(
                     "Additional".to_owned(),
-                    response.additionals().iter().map(rr2json).collect(),
+                    response.additionals.iter().map(rr2json).collect(),
                 );
             }
 
