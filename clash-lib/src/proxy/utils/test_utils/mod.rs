@@ -1,3 +1,4 @@
+pub mod echo;
 pub mod noop;
 
 #[cfg(docker_test)]

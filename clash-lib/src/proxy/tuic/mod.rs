@@ -420,14 +420,17 @@ pub(crate) mod test_utils;
 mod tests {
     use std::{sync::Arc, time::Duration};
 
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use super::{test_utils::TuicServerProcess, *};
     use crate::{
-        proxy::utils::{GLOBAL_DIRECT_CONNECTOR, test_utils::noop::NoopResolver},
+        proxy::utils::{
+            GLOBAL_DIRECT_CONNECTOR,
+            test_utils::{
+                echo::{TcpEchoConfig, TcpEchoServer},
+                noop::NoopResolver,
+            },
+        },
         session::Session,
     };
 
@@ -469,20 +472,8 @@ mod tests {
         let server = TuicServerProcess::start().await?;
         let port = server.port();
 
-        // Start a local echo server as the target
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let target_port = listener.local_addr()?.port();
-
-        let target_handle = tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut buf = vec![0u8; 5];
-            for _ in 0..10 {
-                stream.read_exact(&mut buf).await.unwrap();
-                assert_eq!(&buf, b"hello");
-                stream.write_all(b"world").await.unwrap();
-                stream.flush().await.unwrap();
-            }
-        });
+        let echo = TcpEchoServer::start().await?;
+        let target_port = echo.port();
 
         let opts = gen_options(port)?;
         let handler = Arc::new(Handler::new(opts));
@@ -516,7 +507,7 @@ mod tests {
             assert_eq!(&buf, b"world");
         }
 
-        target_handle.await?;
+        drop(echo);
         Ok(())
     }
 
@@ -527,20 +518,14 @@ mod tests {
         let server = TuicServerProcess::start().await?;
         let port = server.port();
 
-        // Start a local TCP target so failure cannot be blamed on an
-        // unreachable upstream.
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let target_port = listener.local_addr()?.port();
-        let _target_handle = tokio::spawn(async move {
-            // Accept one connection, then idle — the test should never
-            // actually reach this point because auth fails first.
-            if let Ok((mut stream, _)) = listener.accept().await {
-                let mut buf = [0u8; 5];
-                while stream.read_exact(&mut buf).await.is_ok() {
-                    stream.write_all(b"world").await.ok();
-                }
-            }
-        });
+        let echo = TcpEchoServer::start_with(TcpEchoConfig {
+            response: b"world",
+            expected_request: None,
+            read_size: 5,
+            iterations: None,
+        })
+        .await?;
+        let target_port = echo.port();
 
         let mut opts = gen_options(port)?;
         opts.password = "wrong_password".into();
@@ -581,6 +566,7 @@ mod tests {
                  succeeded"
             );
         }
+        drop(echo);
         Ok(())
     }
 }
