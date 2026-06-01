@@ -1,4 +1,3 @@
-#![feature(cfg_version)]
 #![feature(ip)]
 #![feature(duration_millis_float)]
 
