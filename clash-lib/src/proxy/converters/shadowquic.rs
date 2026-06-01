@@ -1,8 +1,7 @@
 use shadowquic::config::{
     default_alpn, default_blackhole_detection, default_congestion_control,
-    default_gso, default_initial_mtu, default_keep_alive_interval,
-    default_min_mtu, default_mtu_discovery, default_over_stream,
-    default_zero_rtt,
+    default_gso, default_initial_mtu, default_keep_alive_interval, default_min_mtu,
+    default_mtu_discovery, default_over_stream, default_zero_rtt,
 };
 
 use crate::{
