@@ -27,7 +27,7 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    PlainProxyAPIResponse, utils::new_udp_socket,
+    PlainProxyAPIResponse,
 };
 use crate::app::dispatcher::ChainedStream;
 // This is ugly, it may be exposed better by shadowquic in the future
@@ -88,25 +88,13 @@ impl Handler {
                     }
                     SocksAddr::Ip(socket_addr) => socket_addr,
                 };
-                let bind_addr = if addr.is_ipv4() {
-                    "0.0.0.0:0".parse().unwrap()
-                } else {
-                    "[::]:0".parse().unwrap()
-                };
-                let socket = new_udp_socket(
-                    Some(bind_addr),
-                    sess.iface.as_ref(),
-                    #[cfg(target_os = "linux")]
-                    sess.so_mark,
-                    Some(bind_addr),
-                )
-                .await?;
-
-                let mut ep = ShadowQuicClient::new_with_socket(
-                    self.opts.clone(),
-                    socket.into_std()?,
-                )
-                .map_err(new_io_error)?;
+                let mut cfg = self.opts.clone();
+                cfg.socket_opt.fw_mark = sess.so_mark;
+                cfg.socket_opt.bind_interface = sess
+                    .iface
+                    .as_ref()
+                    .map(|iface| config::Interface::Device(iface.name.clone()));
+                let mut ep = ShadowQuicClient::new(cfg);
                 ep.config.addr = addr.to_string();
                 Ok(ep) as io::Result<ShadowQuicClient>
             })
