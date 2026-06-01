@@ -27,7 +27,7 @@ pub struct TailscaleDatagramOutbound {
 
 impl TailscaleDatagramOutbound {
     pub fn new(
-        socket: ::tailscale::UdpSocket,
+        socket: ::tailscale::netstack::UdpSocket,
         resolver: ThreadSafeDNSResolver,
     ) -> Self {
         let local_addr = socket.local_addr();
