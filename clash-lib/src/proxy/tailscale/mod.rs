@@ -8,6 +8,7 @@ use std::{
 
 use async_trait::async_trait;
 use erased_serde::Serialize as ErasedSerialize;
+use tailscale::config::{BadFormatBehavior, load_key_file};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -84,16 +85,13 @@ impl Handler {
             // the Device is alive; no explicit save step is required.
             let state_file =
                 PathBuf::from(state_dir).join(TAILSCALE_STATE_FILE_NAME);
-            ::tailscale::load_key_file(
-                state_file,
-                ::tailscale::BadFormatBehavior::Error,
-            )
-            .await
-            .map_err(|e| {
-                io::Error::other(format!(
-                    "failed to initialize tailscale key state: {e}"
-                ))
-            })?
+            load_key_file(state_file, BadFormatBehavior::Error)
+                .await
+                .map_err(|e| {
+                    io::Error::other(format!(
+                        "failed to initialize tailscale key state: {e}"
+                    ))
+                })?
         } else {
             // ephemeral: false but no state_dir — identity is in-memory only
             // and will be lost when the process exits.  Log so users are aware.
