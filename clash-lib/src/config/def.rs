@@ -363,7 +363,7 @@ impl Display for LogLevel {
 /// ...
 /// ```
 #[derive(Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct Config {
     /// The HTTP proxy port
@@ -529,6 +529,120 @@ impl FromStr for Config {
     }
 }
 
+/// All known top-level field names for [`Config`] (including rename/alias
+/// variants).  Used by [`check_unknown_fields`] to detect typos when the caller
+/// requests strict validation.
+///
+/// **Keep this list in sync with the fields and `#[serde(...)]` attributes of
+/// [`Config`].**
+const KNOWN_CONFIG_FIELDS: &[&str] = &[
+    // port (rename_all kebab-case = "port"; alias = "http_port")
+    "port",
+    "http_port",
+    "socks-port",
+    "redir-port",
+    "tproxy-port",
+    "mixed-port",
+    "authentication",
+    "allow-lan",
+    "bind-address",
+    "mode",
+    "log-level",
+    "dns",
+    "profile",
+    "proxies",
+    "proxy-groups",
+    "rules",
+    "hosts",
+    "mmdb",
+    "mmdb-download-url",
+    "asn-mmdb",
+    "asn-mmdb-download-url",
+    "geosite",
+    "geosite-download-url",
+    "ipv6",
+    "external-controller",
+    // external-controller-ipc has platform-specific aliases
+    "external-controller-ipc",
+    "external-controller-unix",
+    "external-controller-pipe",
+    "external-ui",
+    "external-ui-url",
+    "secret",
+    "cors-allow-origins",
+    "interface",
+    "routing-mark",
+    "proxy-providers",
+    "rule-providers",
+    "experimental",
+    "tun",
+    "listeners",
+    "inbound-providers",
+];
+
+/// All known field names for the [`DNS`] sub-section (rename_all kebab-case).
+///
+/// **Keep this list in sync with the fields of [`DNS`].**
+const KNOWN_DNS_FIELDS: &[&str] = &[
+    "enable",
+    "ipv6",
+    "use-hosts",
+    "nameserver",
+    "fallback",
+    "fallback-filter",
+    "listen",
+    "enhanced-mode",
+    "fake-ip-range",
+    "fake-ip-filter",
+    "default-nameserver",
+    "proxy-server-nameserver",
+    "nameserver-policy",
+    "edns-client-subnet",
+    "respect-rules",
+];
+
+/// Validate a parsed YAML [`Value`] against the known fields of [`Config`] and
+/// its [`DNS`] sub-section, returning an error listing the first unknown field
+/// encountered.
+///
+/// This is used by the **strict** config-parsing path.  Normal (lenient)
+/// parsing simply ignores unknown fields.
+pub fn check_unknown_fields(val: &Value) -> crate::Result<()> {
+    let mapping = match val.as_mapping() {
+        Some(m) => m,
+        None => return Ok(()),
+    };
+
+    for key in mapping.keys() {
+        if let Some(key_str) = key.as_str() {
+            if !KNOWN_CONFIG_FIELDS.contains(&key_str) {
+                return Err(crate::Error::InvalidConfig(format!(
+                    "unknown field `{key_str}` in config; \
+                     omit --strict-config to suppress this error"
+                )));
+            }
+        }
+    }
+
+    // Recurse into the dns sub-section if present.
+    if let Some(dns_val) = mapping.get("dns") {
+        if let Some(dns_map) = dns_val.as_mapping() {
+            for key in dns_map.keys() {
+                if let Some(key_str) = key.as_str() {
+                    if !KNOWN_DNS_FIELDS.contains(&key_str) {
+                        return Err(crate::Error::InvalidConfig(format!(
+                            "unknown field `{key_str}` in dns config; \
+                             omit --strict-config to suppress this error"
+                        )));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over HTTP/3).
 /// Both protocols share the same wire format. For DoH3, `hostname` acts as the
 /// QUIC SNI value presented to clients.
@@ -626,7 +740,7 @@ pub enum DNSListen {
 /// ```
 
 #[derive(Serialize, Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct DNS {
     /// When disabled, system DNS config will be used
@@ -898,16 +1012,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_unknown_top_level_field() {
+    fn parse_ignores_unknown_top_level_field() {
         let cfg = r#"
 port: 9090
 ports: 8080
 "#;
-        assert!(cfg.parse::<Config>().is_err(), "unknown fields should fail");
+        let parsed = cfg.parse::<Config>().expect("unknown top-level fields should be ignored");
+        assert_eq!(parsed.port.expect("port should be set"), Port(9090));
     }
 
     #[test]
-    fn parse_rejects_unknown_nested_dns_field() {
+    fn parse_ignores_unknown_nested_dns_field() {
         let cfg = r#"
 dns:
   enable: true
@@ -915,9 +1030,57 @@ dns:
     - 8.8.8.8
   nonexistent-field: 198.18.0.1/16
 "#;
+        let parsed = cfg
+            .parse::<Config>()
+            .expect("unknown dns fields should be ignored");
+        assert!(parsed.dns.enable);
+    }
+
+    #[test]
+    fn check_unknown_fields_rejects_unknown_top_level() {
+        let cfg = r#"
+port: 9090
+ports: 8080
+"#;
+        let val: serde_yaml::Value =
+            serde_yaml::from_str(cfg).expect("yaml should parse");
         assert!(
-            cfg.parse::<Config>().is_err(),
-            "unknown dns fields should fail"
+            super::check_unknown_fields(&val).is_err(),
+            "strict check should reject unknown top-level field"
+        );
+    }
+
+    #[test]
+    fn check_unknown_fields_rejects_unknown_dns_field() {
+        let cfg = r#"
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+  nonexistent-field: 198.18.0.1/16
+"#;
+        let val: serde_yaml::Value =
+            serde_yaml::from_str(cfg).expect("yaml should parse");
+        assert!(
+            super::check_unknown_fields(&val).is_err(),
+            "strict check should reject unknown dns field"
+        );
+    }
+
+    #[test]
+    fn check_unknown_fields_accepts_valid_config() {
+        let cfg = r#"
+port: 9090
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+"#;
+        let val: serde_yaml::Value =
+            serde_yaml::from_str(cfg).expect("yaml should parse");
+        assert!(
+            super::check_unknown_fields(&val).is_ok(),
+            "strict check should accept a fully valid config"
         );
     }
 

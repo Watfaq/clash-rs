@@ -86,6 +86,16 @@ struct Cli {
                 this if you are using clash verge."
     )]
     compatibility: bool,
+
+    #[clap(
+        long,
+        default_value = "false",
+        help = "Reject configuration files that contain unrecognised fields. By \
+                default clash-rs silently ignores unknown fields so that profiles \
+                shared with other clients (e.g. clash-for-android) load without \
+                errors."
+    )]
+    strict_config: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -142,7 +152,12 @@ fn main() -> anyhow::Result<()> {
     }
 
     if cli.test_config {
-        match clash::Config::File(file.clone()).try_parse() {
+        let result = if cli.strict_config {
+            clash::Config::File(file.clone()).try_parse_strict()
+        } else {
+            clash::Config::File(file.clone()).try_parse()
+        };
+        match result {
             Ok(_) => {
                 println!("configuration file {file} test is successful");
                 exit(0);
@@ -175,7 +190,11 @@ fn main() -> anyhow::Result<()> {
         )));
     }
 
-    let mut config = clash::Config::File(file.clone()).try_parse()?;
+    let mut config = if cli.strict_config {
+        clash::Config::File(file.clone()).try_parse_strict()?
+    } else {
+        clash::Config::File(file.clone()).try_parse()?
+    };
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
     if cli.compatibility {
