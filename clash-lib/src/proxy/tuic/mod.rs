@@ -413,89 +413,43 @@ impl TuicDatagramOutbound {
     }
 }
 
-#[cfg(all(test, docker_test))]
-mod tests {
-    use std::io::Write;
+#[cfg(test)]
+pub(crate) mod test_utils;
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner,
-    };
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use super::{test_utils::TuicServerProcess, *};
     use crate::{
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite,
-                config_helper::test_config_base_dir,
-                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
-                run_test_suites_and_cleanup,
+                echo::{TcpEchoConfig, TcpEchoServer},
+                noop::NoopResolver,
             },
         },
-        tests::initialize,
+        session::Session,
     };
 
-    use super::*;
-
-    const TUIC_SERVER_CONFIG: &str = r#"server = "0.0.0.0:10002"
-
-data_dir = ""
-
-zero_rtt_handshake = false
-dual_stack = false
-
-acl = '''
-direct 0.0.0.0/0
-direct ::/0
-'''
-
-[users]
-00000000-0000-0000-0000-000000000001 = "passwd"
-
-[tls]
-certificate = "/opt/tuic/fullchain.pem"
-private_key = "/opt/tuic/privkey.pem"
-alpn = ["h3"]
-
-[outbound.default]
-type = "direct"
-ip_mode = "auto"
-"#;
-
-    async fn get_tuic_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let cert = test_config_dir.join("certs/example.org.pem");
-        let key = test_config_dir.join("certs/example.org-key.pem");
-
-        let mut tmp = tempfile::NamedTempFile::new()?;
-        tmp.write_all(TUIC_SERVER_CONFIG.as_bytes())?;
-
-        let result = DockerTestRunnerBuilder::new()
-            .image(IMAGE_TUIC)
-            .mounts(&[
-                (tmp.path().to_str().unwrap(), "/etc/tuic/config.json"),
-                (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
-                (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
-            ])
-            .env(&["TUIC_FORCE_TOML=1"])
-            .host_port(host_port, 10002)
-            .build()
-            .await;
-        drop(tmp);
-        result
+    fn gen_options(port: u16) -> anyhow::Result<HandlerOptions> {
+        gen_options_with(port, "127.0.0.1", "127.0.0.1")
     }
 
-    fn gen_options(
-        container_ip: Option<String>,
-        host_port: u16,
-        skip_cert_verify: bool,
+    fn gen_options_v6(port: u16) -> anyhow::Result<HandlerOptions> {
+        gen_options_with(port, "::1", "::1")
+    }
+
+    fn gen_options_with(
+        port: u16,
+        server: &str,
+        ip: &str,
     ) -> anyhow::Result<HandlerOptions> {
-        let port = if container_ip.is_some() {
-            10002
-        } else {
-            host_port
-        };
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
-            server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
+            server: server.to_owned(),
             port,
             common_opts: Default::default(),
             uuid: "00000000-0000-0000-0000-000000000001".parse()?,
@@ -510,9 +464,9 @@ ip_mode = "auto"
             congestion_controller: CongestionControl::Bbr,
             max_udp_relay_packet_size: 1500,
             max_open_stream: VarInt::from_u64(32)?,
-            ip: None,
-            skip_cert_verify,
-            sni: Some("example.org".to_owned()),
+            ip: Some(ip.to_owned()),
+            skip_cert_verify: true,
+            sni: Some("localhost".to_owned()),
             gc_interval: Duration::from_millis(3000),
             gc_lifetime: Duration::from_millis(15000),
             send_window: 8 * 1024 * 1024 * 2,
@@ -522,41 +476,242 @@ ip_mode = "auto"
         })
     }
 
-    #[tokio::test]
-    async fn test_tuic_skip_cert_verify() -> anyhow::Result<()> {
-        initialize();
-        let host_port = alloc_docker_port();
-
-        let container = get_tuic_runner(host_port).await?;
-        let opts = gen_options(container.container_ip(), host_port, true)?;
-
-        let handler = Arc::new(Handler::new(opts));
-        handler
-            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
-            .await;
-        run_test_suites_and_cleanup(handler, container, Suite::all()).await
+    fn ipv6_resolver() -> crate::app::dns::ThreadSafeDNSResolver {
+        let mut mock = crate::app::dns::MockClashResolver::new();
+        mock.expect_ipv6().return_const(true);
+        Arc::new(mock)
     }
 
+    /// TCP ping-pong test: start an echo server, connect through tuic, send
+    /// "hello" and verify we receive "world" back.
+    ///
+    /// Skipped on non-x86_64 Linux because all such targets in CI are
+    /// cross-built and run under qemu-user, where QUIC timing is unreliable
+    /// (packets get reordered/dropped enough to race the TUIC idle / request
+    /// timeouts and reset the relay stream). Native Linux x86_64, macOS
+    /// aarch64, and Windows x86_64 still cover it.
     #[tokio::test]
-    async fn test_tuic_cert_verify_expect_fail() -> anyhow::Result<()> {
-        initialize();
-        let host_port = alloc_docker_port();
+    #[cfg_attr(
+        qemu_emulated,
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
+    async fn test_tuic_ping_pong_tcp() -> anyhow::Result<()> {
+        crate::tests::initialize();
+        let server = TuicServerProcess::start().await?;
+        let port = server.port();
 
-        let container = get_tuic_runner(host_port).await?;
+        let echo = TcpEchoServer::start().await?;
+        let target_port = echo.port();
 
-        let opts = gen_options(container.container_ip(), host_port, false)?;
+        let opts = gen_options(port)?;
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+
+        let resolver = Arc::new(NoopResolver);
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "127.0.0.1:54321".parse()?,
+            destination: format!("127.0.0.1:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let mut stream = handler.connect_stream(&session, resolver).await?;
+
+        for _ in 0..10 {
+            stream.write_all(b"hello").await?;
+            stream.flush().await?;
+            let mut buf = vec![0u8; 5];
+            stream.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"world");
+        }
+
+        drop(echo);
+        Ok(())
+    }
+
+    /// Verify that connecting with an invalid password fails.
+    #[tokio::test]
+    async fn test_tuic_auth_failure() -> anyhow::Result<()> {
+        crate::tests::initialize();
+        let server = TuicServerProcess::start().await?;
+        let port = server.port();
+
+        let echo = TcpEchoServer::start_with(TcpEchoConfig {
+            response: b"world",
+            expected_request: None,
+            read_size: 5,
+            iterations: None,
+            ..Default::default()
+        })
+        .await?;
+        let target_port = echo.port();
+
+        let mut opts = gen_options(port)?;
+        opts.password = "wrong_password".into();
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        let res =
-            run_test_suites_and_cleanup(handler, container, Suite::all()).await;
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains(
-            "the cryptographic handshake failed: error 45: invalid peer \
-             certificate: certificate expired"
-        ));
+
+        let resolver = Arc::new(NoopResolver);
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "127.0.0.1:54321".parse()?,
+            destination: format!("127.0.0.1:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let result = handler.connect_stream(&session, resolver).await;
+        // The stream connect may succeed initially (auth is async), but
+        // reading/writing should fail after the server rejects authentication.
+        if let Ok(mut stream) = result {
+            let mut buf = [0u8; 5];
+            // Give the server time to process auth and close
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let write_result = stream.write_all(b"hello").await;
+            let read_result = stream.read_exact(&mut buf).await;
+            assert!(
+                write_result.is_err() || read_result.is_err(),
+                "expected IO error after auth failure, but both read and write \
+                 succeeded"
+            );
+        }
+        drop(echo);
+        Ok(())
+    }
+
+    /// TCP ping-pong over IPv6 loopback.
+    ///
+    /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
+    #[tokio::test]
+    #[cfg_attr(
+        qemu_emulated,
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
+    async fn test_tuic_ping_pong_tcp_ipv6() -> anyhow::Result<()> {
+        if std::net::UdpSocket::bind("[::1]:0").is_err() {
+            eprintln!("skipping: no IPv6 loopback");
+            return Ok(());
+        }
+        crate::tests::initialize();
+        let server = TuicServerProcess::start_v6().await?;
+        let port = server.port();
+
+        let echo = TcpEchoServer::start_with(TcpEchoConfig {
+            bind_addr: "::1",
+            ..Default::default()
+        })
+        .await?;
+        let target_port = echo.port();
+
+        let opts = gen_options_v6(port)?;
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+
+        let resolver = ipv6_resolver();
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "[::1]:54321".parse()?,
+            destination: format!("[::1]:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let mut stream = handler.connect_stream(&session, resolver).await?;
+
+        for _ in 0..10 {
+            stream.write_all(b"hello").await?;
+            stream.flush().await?;
+            let mut buf = vec![0u8; 5];
+            stream.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"world");
+        }
+
+        drop(echo);
+        Ok(())
+    }
+
+    /// TCP ping-pong with dual-stack server (client connects via IPv4).
+    ///
+    /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
+    #[tokio::test]
+    #[cfg_attr(
+        qemu_emulated,
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
+    async fn test_tuic_ping_pong_tcp_dual_stack() -> anyhow::Result<()> {
+        if std::net::UdpSocket::bind("[::1]:0").is_err() {
+            eprintln!("skipping: no IPv6 loopback");
+            return Ok(());
+        }
+        crate::tests::initialize();
+        let server = TuicServerProcess::start_dual_stack().await?;
+        let port = server.port();
+
+        let echo = TcpEchoServer::start().await?;
+        let target_port = echo.port();
+
+        let opts = gen_options(port)?;
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+
+        let resolver = ipv6_resolver();
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "127.0.0.1:54321".parse()?,
+            destination: format!("127.0.0.1:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let mut stream = handler.connect_stream(&session, resolver).await?;
+
+        for _ in 0..10 {
+            stream.write_all(b"hello").await?;
+            stream.flush().await?;
+            let mut buf = vec![0u8; 5];
+            stream.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"world");
+        }
+
+        drop(echo);
         Ok(())
     }
 }

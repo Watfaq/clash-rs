@@ -231,6 +231,8 @@ tracing-test = "0.2"
 http-body-util = "0.1"
 reqwest = { version = "0.13", features = ["socks"] }
 sysinfo = { version = "0.39", features = ["network"]}
+moka = { version = "0.12", features = ["future"] }
+tuic-server = { tag = "v1.8.5", git = "https://github.com/Itsusinn/tuic.git" }
 
 [build-dependencies]
 prost-build = "0.14"
