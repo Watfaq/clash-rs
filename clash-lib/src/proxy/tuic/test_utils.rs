@@ -10,16 +10,29 @@ pub struct TuicServerProcess {
 }
 
 impl TuicServerProcess {
-    /// Start a tuic-server instance on a random port.
     pub async fn start() -> anyhow::Result<Self> {
-        // We use a channel to receive the actual bound port from the task.
-        let (port_tx, port_rx) = oneshot::channel();
+        Self::start_with_config("127.0.0.1:0", false, false).await
+    }
 
+    pub async fn start_v6() -> anyhow::Result<Self> {
+        Self::start_with_config("[::1]:0", false, false).await
+    }
+
+    pub async fn start_dual_stack() -> anyhow::Result<Self> {
+        Self::start_with_config("[::]:0", true, true).await
+    }
+
+    async fn start_with_config(
+        server_bind: &'static str,
+        dual_stack: bool,
+        udp_relay_ipv6: bool,
+    ) -> anyhow::Result<Self> {
+        let (port_tx, port_rx) = oneshot::channel();
         let (ready_tx, ready_rx) = oneshot::channel::<anyhow::Result<()>>();
 
         let handle = tokio::spawn(async move {
             let cfg = tuic_server::Config {
-                server: "127.0.0.1:0".parse().unwrap(),
+                server: server_bind.parse().unwrap(),
                 log_level: tuic_server::config::LogLevel::Info,
                 users: HashMap::from([(
                     "00000000-0000-0000-0000-000000000001".parse().unwrap(),
@@ -32,7 +45,7 @@ impl TuicServerProcess {
                     ..Default::default()
                 },
                 zero_rtt_handshake: false,
-                dual_stack: false,
+                dual_stack,
                 outbound: tuic_server::config::OutboundConfig {
                     default: tuic_server::config::OutboundRule {
                         kind: "direct".into(),
@@ -41,7 +54,7 @@ impl TuicServerProcess {
                     named: HashMap::new(),
                 },
                 acl: vec![],
-                udp_relay_ipv6: false,
+                udp_relay_ipv6,
                 experimental: tuic_server::config::ExperimentalConfig {
                     drop_loopback: false,
                     drop_private: false,
@@ -86,7 +99,6 @@ impl TuicServerProcess {
             }
         });
 
-        // Wait for the server to be ready (or for init to fail).
         let port = tokio::time::timeout(Duration::from_secs(5), port_rx)
             .await
             .map_err(|_| anyhow::anyhow!("tuic-server failed to report a port"))?

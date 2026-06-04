@@ -435,9 +435,21 @@ mod tests {
     };
 
     fn gen_options(port: u16) -> anyhow::Result<HandlerOptions> {
+        gen_options_with(port, "127.0.0.1", "127.0.0.1")
+    }
+
+    fn gen_options_v6(port: u16) -> anyhow::Result<HandlerOptions> {
+        gen_options_with(port, "::1", "::1")
+    }
+
+    fn gen_options_with(
+        port: u16,
+        server: &str,
+        ip: &str,
+    ) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
-            server: "127.0.0.1".to_owned(),
+            server: server.to_owned(),
             port,
             common_opts: Default::default(),
             uuid: "00000000-0000-0000-0000-000000000001".parse()?,
@@ -452,7 +464,7 @@ mod tests {
             congestion_controller: CongestionControl::Bbr,
             max_udp_relay_packet_size: 1500,
             max_open_stream: VarInt::from_u64(32)?,
-            ip: Some("127.0.0.1".to_owned()),
+            ip: Some(ip.to_owned()),
             skip_cert_verify: true,
             sni: Some("localhost".to_owned()),
             gc_interval: Duration::from_millis(3000),
@@ -462,6 +474,12 @@ mod tests {
             tls_cert: None,
             tls_key: None,
         })
+    }
+
+    fn ipv6_resolver() -> crate::app::dns::ThreadSafeDNSResolver {
+        let mut mock = crate::app::dns::MockClashResolver::new();
+        mock.expect_ipv6().return_const(true);
+        Arc::new(mock)
     }
 
     /// TCP ping-pong test: start an echo server, connect through tuic, send
@@ -523,6 +541,7 @@ mod tests {
             expected_request: None,
             read_size: 5,
             iterations: None,
+            ..Default::default()
         })
         .await?;
         let target_port = echo.port();
@@ -566,6 +585,110 @@ mod tests {
                  succeeded"
             );
         }
+        drop(echo);
+        Ok(())
+    }
+
+    /// TCP ping-pong over IPv6 loopback.
+    #[tokio::test]
+    async fn test_tuic_ping_pong_tcp_ipv6() -> anyhow::Result<()> {
+        if std::net::UdpSocket::bind("[::1]:0").is_err() {
+            eprintln!("skipping: no IPv6 loopback");
+            return Ok(());
+        }
+        crate::tests::initialize();
+        let server = TuicServerProcess::start_v6().await?;
+        let port = server.port();
+
+        let echo = TcpEchoServer::start_with(TcpEchoConfig {
+            bind_addr: "::1",
+            ..Default::default()
+        })
+        .await?;
+        let target_port = echo.port();
+
+        let opts = gen_options_v6(port)?;
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+
+        let resolver = ipv6_resolver();
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "[::1]:54321".parse()?,
+            destination: format!("[::1]:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let mut stream = handler.connect_stream(&session, resolver).await?;
+
+        for _ in 0..10 {
+            stream.write_all(b"hello").await?;
+            stream.flush().await?;
+            let mut buf = vec![0u8; 5];
+            stream.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"world");
+        }
+
+        drop(echo);
+        Ok(())
+    }
+
+    /// TCP ping-pong with dual-stack server (client connects via IPv4).
+    #[tokio::test]
+    async fn test_tuic_ping_pong_tcp_dual_stack() -> anyhow::Result<()> {
+        if std::net::UdpSocket::bind("[::1]:0").is_err() {
+            eprintln!("skipping: no IPv6 loopback");
+            return Ok(());
+        }
+        crate::tests::initialize();
+        let server = TuicServerProcess::start_dual_stack().await?;
+        let port = server.port();
+
+        let echo = TcpEchoServer::start().await?;
+        let target_port = echo.port();
+
+        let opts = gen_options(port)?;
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+
+        let resolver = ipv6_resolver();
+
+        let session = Session {
+            network: crate::session::Network::Tcp,
+            typ: crate::session::Type::Socks5,
+            source: "127.0.0.1:54321".parse()?,
+            destination: format!("127.0.0.1:{target_port}").parse()?,
+            resolved_ip: None,
+            so_mark: None,
+            iface: None,
+            country: None,
+            asn: None,
+            traffic_stats: None,
+            inbound_user: None,
+        };
+
+        let mut stream = handler.connect_stream(&session, resolver).await?;
+
+        for _ in 0..10 {
+            stream.write_all(b"hello").await?;
+            stream.flush().await?;
+            let mut buf = vec![0u8; 5];
+            stream.read_exact(&mut buf).await?;
+            assert_eq!(&buf, b"world");
+        }
+
         drop(echo);
         Ok(())
     }

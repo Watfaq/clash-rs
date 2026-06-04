@@ -9,6 +9,7 @@ pub struct TcpEchoConfig {
     pub expected_request: Option<&'static [u8]>,
     pub read_size: usize,
     pub iterations: Option<usize>,
+    pub bind_addr: &'static str,
 }
 
 impl Default for TcpEchoConfig {
@@ -18,6 +19,7 @@ impl Default for TcpEchoConfig {
             expected_request: Some(b"hello"),
             read_size: 5,
             iterations: Some(10),
+            bind_addr: "127.0.0.1",
         }
     }
 }
@@ -33,7 +35,8 @@ impl TcpEchoServer {
     }
 
     pub async fn start_with(config: TcpEchoConfig) -> anyhow::Result<Self> {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let bind_to = format!("{}:0", config.bind_addr);
+        let listener = tokio::net::TcpListener::bind(bind_to.as_str()).await?;
         let port = listener.local_addr()?.port();
 
         let handle = tokio::spawn(async move {
