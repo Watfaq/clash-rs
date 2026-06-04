@@ -492,7 +492,7 @@ mod tests {
     /// aarch64, and Windows x86_64 still cover it.
     #[tokio::test]
     #[cfg_attr(
-        all(target_os = "linux", not(target_arch = "x86_64")),
+        likely_qemu_emulated,
         ignore = "QUIC under qemu-user (cross test) is unreliable"
     )]
     async fn test_tuic_ping_pong_tcp() -> anyhow::Result<()> {
@@ -604,7 +604,7 @@ mod tests {
     /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
     #[tokio::test]
     #[cfg_attr(
-        all(target_os = "linux", not(target_arch = "x86_64")),
+        likely_qemu_emulated,
         ignore = "QUIC under qemu-user (cross test) is unreliable"
     )]
     async fn test_tuic_ping_pong_tcp_ipv6() -> anyhow::Result<()> {
@@ -664,7 +664,7 @@ mod tests {
     /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
     #[tokio::test]
     #[cfg_attr(
-        all(target_os = "linux", not(target_arch = "x86_64")),
+        likely_qemu_emulated,
         ignore = "QUIC under qemu-user (cross test) is unreliable"
     )]
     async fn test_tuic_ping_pong_tcp_dual_stack() -> anyhow::Result<()> {

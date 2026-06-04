@@ -5,6 +5,18 @@ fn main() -> anyhow::Result<()> {
         println!("cargo::rustc-cfg=docker_test");
     }
 
+    // Emit `--cfg likely_qemu_emulated` for Linux targets that are neither
+    // x86_64 nor x86 (i686). Every such target in our CI is `cross`-built
+    // and runs under qemu-user; QUIC and other timing-sensitive paths flake
+    // there. Tests can then write `#[cfg_attr(likely_qemu_emulated,
+    // ignore = "…")]` instead of repeating the long target predicate.
+    println!("cargo::rustc-check-cfg=cfg(likely_qemu_emulated)");
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    if target_os == "linux" && target_arch != "x86_64" && target_arch != "x86" {
+        println!("cargo::rustc-cfg=likely_qemu_emulated");
+    }
+
     build_dashboard()?;
 
     println!("cargo:rerun-if-changed=src/common/geodata/geodata.proto");

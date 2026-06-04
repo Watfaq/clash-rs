@@ -17,14 +17,14 @@ pub use docker_utils::*;
 /// The assumption "non-x86 Linux ⇒ qemu" holds as long as we don't add a
 /// native aarch64/armv7/riscv64 Linux CI runner; revisit if we do.
 ///
-/// Evaluated purely from `cfg`, so it's `const` and folds at compile time —
-/// the ignored tests are statically excluded on the affected targets.
+/// Backed by the `likely_qemu_emulated` rustc-cfg set in `build.rs`, so the
+/// same flag is available at attribute position:
+/// `#[cfg(likely_qemu_emulated)]` / `#[cfg_attr(likely_qemu_emulated, …)]`.
+/// Use the const fn for runtime branches; use the cfg flag for compile-time
+/// gating (e.g. `ignore`). They stay in sync because both come from build.rs.
 #[allow(dead_code)]
 pub const fn likely_qemu_emulated() -> bool {
-    cfg!(all(
-        target_os = "linux",
-        not(any(target_arch = "x86_64", target_arch = "x86"))
-    ))
+    cfg!(likely_qemu_emulated)
 }
 
 #[cfg(test)]
@@ -32,13 +32,16 @@ mod tests {
     use super::likely_qemu_emulated;
 
     #[test]
-    fn predicate_matches_target_arch() {
-        // Linux x86_64 / x86 (i686) and every non-Linux target: false.
-        // Linux on aarch64 / arm / riscv64 / mips / s390x / …: true.
-        let expected = cfg!(target_os = "linux")
+    fn predicate_matches_build_rs_emit() {
+        // build.rs emits `--cfg likely_qemu_emulated` iff target_os = linux
+        // AND target_arch is neither x86_64 nor x86 (i686). The const fn must
+        // agree with that emit so #[cfg(likely_qemu_emulated)] and the runtime
+        // call can't drift apart.
+        let expected_from_build = cfg!(target_os = "linux")
             && !cfg!(target_arch = "x86_64")
             && !cfg!(target_arch = "x86");
-        assert_eq!(likely_qemu_emulated(), expected);
+        assert_eq!(cfg!(likely_qemu_emulated), expected_from_build);
+        assert_eq!(likely_qemu_emulated(), expected_from_build);
     }
 
     /// Const eval: confirm it folds at compile time and can be used in
