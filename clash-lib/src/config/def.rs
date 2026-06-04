@@ -560,8 +560,8 @@ pub(crate) fn check_unknown_fields(s: &str) -> crate::Result<Config> {
         Ok(cfg)
     } else {
         Err(Error::InvalidConfig(format!(
-            "unknown field(s) in config: {}; \
-             omit --strict-config to suppress this error",
+            "unknown field(s) in config: {}; omit --strict-config to suppress this \
+             error",
             unknown.join(", ")
         )))
     }
@@ -941,7 +941,9 @@ mod tests {
 port: 9090
 ports: 8080
 "#;
-        let parsed = cfg.parse::<Config>().expect("unknown top-level fields should be ignored");
+        let parsed = cfg
+            .parse::<Config>()
+            .expect("unknown top-level fields should be ignored");
         assert_eq!(parsed.port.expect("port should be set"), Port(9090));
     }
 
