@@ -484,9 +484,18 @@ mod tests {
 
     /// TCP ping-pong test: start an echo server, connect through tuic, send
     /// "hello" and verify we receive "world" back.
+    ///
+    /// Skipped on non-x86_64 Linux because all such targets in CI are
+    /// cross-built and run under qemu-user, where QUIC timing is unreliable
+    /// (packets get reordered/dropped enough to race the TUIC idle / request
+    /// timeouts and reset the relay stream). Native Linux x86_64, macOS
+    /// aarch64, and Windows x86_64 still cover it.
     #[tokio::test]
+    #[cfg_attr(
+        all(target_os = "linux", not(target_arch = "x86_64")),
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
     async fn test_tuic_ping_pong_tcp() -> anyhow::Result<()> {
-        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp");
         crate::tests::initialize();
         let server = TuicServerProcess::start().await?;
         let port = server.port();
@@ -591,9 +600,14 @@ mod tests {
     }
 
     /// TCP ping-pong over IPv6 loopback.
+    ///
+    /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
     #[tokio::test]
+    #[cfg_attr(
+        all(target_os = "linux", not(target_arch = "x86_64")),
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
     async fn test_tuic_ping_pong_tcp_ipv6() -> anyhow::Result<()> {
-        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp_ipv6");
         if std::net::UdpSocket::bind("[::1]:0").is_err() {
             eprintln!("skipping: no IPv6 loopback");
             return Ok(());
@@ -646,9 +660,14 @@ mod tests {
     }
 
     /// TCP ping-pong with dual-stack server (client connects via IPv4).
+    ///
+    /// Skipped on non-x86_64 Linux — see `test_tuic_ping_pong_tcp`.
     #[tokio::test]
+    #[cfg_attr(
+        all(target_os = "linux", not(target_arch = "x86_64")),
+        ignore = "QUIC under qemu-user (cross test) is unreliable"
+    )]
     async fn test_tuic_ping_pong_tcp_dual_stack() -> anyhow::Result<()> {
-        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp_dual_stack");
         if std::net::UdpSocket::bind("[::1]:0").is_err() {
             eprintln!("skipping: no IPv6 loopback");
             return Ok(());
