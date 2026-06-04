@@ -1379,6 +1379,7 @@ dependencies = [
  "rustls-pemfile",
  "security-framework",
  "serde",
+ "serde_ignored",
  "serde_json",
  "serde_yaml",
  "serial_test",

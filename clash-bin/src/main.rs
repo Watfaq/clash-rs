@@ -78,14 +78,20 @@ struct Cli {
 
     #[clap(
         long,
-        value_parser,
-        action = clap::ArgAction::Set,
-        default_value_t = true,
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."
     )]
     compatibility: bool,
+
+    #[clap(
+        long,
+        help = "Reject configuration files that contain unrecognised fields. By \
+                default clash-rs silently ignores unknown fields so that profiles \
+                shared with other clients (e.g. clash-for-android) load without \
+                errors."
+    )]
+    strict_config: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -141,8 +147,17 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
+    let parse_config = || {
+        let cfg = clash::Config::File(file.clone());
+        if cli.strict_config {
+            cfg.try_parse_strict()
+        } else {
+            cfg.try_parse()
+        }
+    };
+
     if cli.test_config {
-        match clash::Config::File(file.clone()).try_parse() {
+        match parse_config() {
             Ok(_) => {
                 println!("configuration file {file} test is successful");
                 exit(0);
@@ -175,7 +190,7 @@ fn main() -> anyhow::Result<()> {
         )));
     }
 
-    let mut config = clash::Config::File(file.clone()).try_parse()?;
+    let mut config = parse_config()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
     if cli.compatibility {

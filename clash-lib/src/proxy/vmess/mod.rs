@@ -464,7 +464,7 @@ mod tests {
         let host_port = alloc_docker_port();
         let grpc_client = GrpcClient::new(
             "example.org".to_owned(),
-            "example!".to_owned().try_into()?,
+            "/example!".to_owned().try_into()?,
         );
         let container = get_grpc_runner(host_port).await?;
         let opts = HandlerOptions {

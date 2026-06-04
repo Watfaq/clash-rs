@@ -418,7 +418,7 @@ mod tests {
         let host_port = alloc_docker_port();
         let transport = transport::GrpcClient::new(
             "example.org".to_owned(),
-            "example"
+            "/example"
                 .to_owned()
                 .try_into()
                 .expect("invalid grpc service name"),

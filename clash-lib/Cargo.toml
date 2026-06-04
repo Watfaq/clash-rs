@@ -153,6 +153,7 @@ boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.g
 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+serde_ignored = "0.1"
 serde_json = "1"
 erased-serde = "0.4"
 
