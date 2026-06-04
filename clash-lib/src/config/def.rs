@@ -529,118 +529,45 @@ impl FromStr for Config {
     }
 }
 
-/// All known top-level field names for [`Config`] (including rename/alias
-/// variants).  Used by [`check_unknown_fields`] to detect typos when the caller
-/// requests strict validation.
+/// Validate that a YAML config source contains no unknown top-level or
+/// `dns`-section fields, by deserializing it through [`serde_ignored`] into the
+/// real [`Config`] type and inspecting which paths got dropped.
 ///
-/// **Keep this list in sync with the fields and `#[serde(...)]` attributes of
-/// [`Config`].**
-const KNOWN_CONFIG_FIELDS: &[&str] = &[
-    // port (rename_all kebab-case = "port"; alias = "http_port")
-    "port",
-    "http_port",
-    "socks-port",
-    "redir-port",
-    "tproxy-port",
-    "mixed-port",
-    "authentication",
-    "allow-lan",
-    "bind-address",
-    "mode",
-    "log-level",
-    "dns",
-    "profile",
-    "proxies",
-    "proxy-groups",
-    "rules",
-    "hosts",
-    "mmdb",
-    "mmdb-download-url",
-    "asn-mmdb",
-    "asn-mmdb-download-url",
-    "geosite",
-    "geosite-download-url",
-    "ipv6",
-    "external-controller",
-    // external-controller-ipc has platform-specific aliases
-    "external-controller-ipc",
-    "external-controller-unix",
-    "external-controller-pipe",
-    "external-ui",
-    "external-ui-url",
-    "secret",
-    "cors-allow-origins",
-    "interface",
-    "routing-mark",
-    "proxy-providers",
-    "rule-providers",
-    "experimental",
-    "tun",
-    "listeners",
-    "inbound-providers",
-];
-
-/// All known field names for the [`DNS`] sub-section (rename_all kebab-case).
+/// Inner structs (proxies, rules, listeners, ...) still carry
+/// `#[serde(deny_unknown_fields)]`, so typos inside them remain hard errors
+/// regardless of strict mode. This check exists to surface unknowns at the
+/// only two layers that intentionally accept extras by default: the top-level
+/// [`Config`] and its [`DNS`] sub-section.
 ///
-/// **Keep this list in sync with the fields of [`DNS`].**
-const KNOWN_DNS_FIELDS: &[&str] = &[
-    "enable",
-    "ipv6",
-    "use-hosts",
-    "nameserver",
-    "fallback",
-    "fallback-filter",
-    "listen",
-    "enhanced-mode",
-    "fake-ip-range",
-    "fake-ip-filter",
-    "default-nameserver",
-    "proxy-server-nameserver",
-    "nameserver-policy",
-    "edns-client-subnet",
-    "respect-rules",
-];
+/// Used by the **strict** config-parsing path. Normal (lenient) parsing
+/// simply ignores unknown fields at those two layers.
+pub fn check_unknown_fields(s: &str) -> crate::Result<()> {
+    let mut val: Value = serde_yaml::from_str(s).map_err(|e| {
+        Error::InvalidConfig(format!("couldn't parse config content: {e}"))
+    })?;
+    val.apply_merge().map_err(|e| {
+        Error::InvalidConfig(format!(
+            "failed to process anchors in config content: {e}"
+        ))
+    })?;
 
-/// Validate a parsed YAML [`Value`] against the known fields of [`Config`] and
-/// its [`DNS`] sub-section, returning an error listing the first unknown field
-/// encountered.
-///
-/// This is used by the **strict** config-parsing path.  Normal (lenient)
-/// parsing simply ignores unknown fields.
-pub fn check_unknown_fields(val: &Value) -> crate::Result<()> {
-    let mapping = match val.as_mapping() {
-        Some(m) => m,
-        None => return Ok(()),
-    };
+    let mut unknown: Vec<String> = Vec::new();
+    serde_ignored::deserialize::<_, _, Config>(val, |path| {
+        unknown.push(path.to_string());
+    })
+    .map_err(|e| {
+        Error::InvalidConfig(format!("could not parse config content: {e}"))
+    })?;
 
-    for key in mapping.keys() {
-        if let Some(key_str) = key.as_str() {
-            if !KNOWN_CONFIG_FIELDS.contains(&key_str) {
-                return Err(crate::Error::InvalidConfig(format!(
-                    "unknown field `{key_str}` in config; \
-                     omit --strict-config to suppress this error"
-                )));
-            }
-        }
+    if unknown.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::InvalidConfig(format!(
+            "unknown field(s) in config: {}; \
+             omit --strict-config to suppress this error",
+            unknown.join(", ")
+        )))
     }
-
-    // Recurse into the dns sub-section if present.
-    if let Some(dns_val) = mapping.get("dns") {
-        if let Some(dns_map) = dns_val.as_mapping() {
-            for key in dns_map.keys() {
-                if let Some(key_str) = key.as_str() {
-                    if !KNOWN_DNS_FIELDS.contains(&key_str) {
-                        return Err(crate::Error::InvalidConfig(format!(
-                            "unknown field `{key_str}` in dns config; \
-                             omit --strict-config to suppress this error"
-                        )));
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 /// Listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over HTTP/3).
@@ -1042,10 +969,8 @@ dns:
 port: 9090
 ports: 8080
 "#;
-        let val: serde_yaml::Value =
-            serde_yaml::from_str(cfg).expect("yaml should parse");
         assert!(
-            super::check_unknown_fields(&val).is_err(),
+            super::check_unknown_fields(cfg).is_err(),
             "strict check should reject unknown top-level field"
         );
     }
@@ -1059,10 +984,8 @@ dns:
     - 8.8.8.8
   nonexistent-field: 198.18.0.1/16
 "#;
-        let val: serde_yaml::Value =
-            serde_yaml::from_str(cfg).expect("yaml should parse");
         assert!(
-            super::check_unknown_fields(&val).is_err(),
+            super::check_unknown_fields(cfg).is_err(),
             "strict check should reject unknown dns field"
         );
     }
@@ -1076,10 +999,8 @@ dns:
   nameserver:
     - 8.8.8.8
 "#;
-        let val: serde_yaml::Value =
-            serde_yaml::from_str(cfg).expect("yaml should parse");
         assert!(
-            super::check_unknown_fields(&val).is_ok(),
+            super::check_unknown_fields(cfg).is_ok(),
             "strict check should accept a fully valid config"
         );
     }

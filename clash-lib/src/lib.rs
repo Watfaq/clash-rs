@@ -120,36 +120,18 @@ impl Config {
     ///
     /// Enable this via the `--strict-config` CLI flag.
     pub fn try_parse_strict(self) -> Result<InternalConfig> {
-        // Run the unknown-field check before consuming `self`.
         match &self {
             Config::File(file) => {
                 let content =
                     std::fs::read_to_string(file).map_err(Error::Io)?;
-                Self::validate_str(&content)?;
+                def::check_unknown_fields(&content)?;
             }
-            Config::Str(s) => {
-                Self::validate_str(s)?;
-            }
+            Config::Str(s) => def::check_unknown_fields(s)?,
             // Def/Internal are already structured Rust values — no YAML to
             // check for unknown fields.
             _ => {}
         }
         self.try_parse()
-    }
-
-    fn validate_str(s: &str) -> Result<()> {
-        let mut val: serde_yaml::Value =
-            serde_yaml::from_str(s).map_err(|e| {
-                Error::InvalidConfig(format!(
-                    "couldn't parse config content: {e}"
-                ))
-            })?;
-        val.apply_merge().map_err(|e| {
-            Error::InvalidConfig(format!(
-                "failed to process anchors in config content: {e}"
-            ))
-        })?;
-        def::check_unknown_fields(&val)
     }
 }
 
