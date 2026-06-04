@@ -120,18 +120,14 @@ impl Config {
     ///
     /// Enable this via the `--strict-config` CLI flag.
     pub fn try_parse_strict(self) -> Result<InternalConfig> {
-        match &self {
-            Config::File(file) => {
-                let content =
-                    std::fs::read_to_string(file).map_err(Error::Io)?;
-                def::check_unknown_fields(&content)?;
-            }
-            Config::Str(s) => def::check_unknown_fields(s)?,
+        let yaml = match self {
+            Config::File(file) => std::fs::read_to_string(file)?,
+            Config::Str(s) => s,
             // Def/Internal are already structured Rust values — no YAML to
             // check for unknown fields.
-            _ => {}
-        }
-        self.try_parse()
+            other => return other.try_parse(),
+        };
+        def::check_unknown_fields(&yaml)?.try_into()
     }
 }
 

@@ -89,7 +89,6 @@ struct Cli {
 
     #[clap(
         long,
-        default_value = "false",
         help = "Reject configuration files that contain unrecognised fields. By \
                 default clash-rs silently ignores unknown fields so that profiles \
                 shared with other clients (e.g. clash-for-android) load without \
@@ -151,13 +150,17 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
-    if cli.test_config {
-        let result = if cli.strict_config {
-            clash::Config::File(file.clone()).try_parse_strict()
+    let parse_config = || {
+        let cfg = clash::Config::File(file.clone());
+        if cli.strict_config {
+            cfg.try_parse_strict()
         } else {
-            clash::Config::File(file.clone()).try_parse()
-        };
-        match result {
+            cfg.try_parse()
+        }
+    };
+
+    if cli.test_config {
+        match parse_config() {
             Ok(_) => {
                 println!("configuration file {file} test is successful");
                 exit(0);
@@ -190,11 +193,7 @@ fn main() -> anyhow::Result<()> {
         )));
     }
 
-    let mut config = if cli.strict_config {
-        clash::Config::File(file.clone()).try_parse_strict()?
-    } else {
-        clash::Config::File(file.clone()).try_parse()?
-    };
+    let mut config = parse_config()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
     if cli.compatibility {

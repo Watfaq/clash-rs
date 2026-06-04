@@ -529,19 +529,16 @@ impl FromStr for Config {
     }
 }
 
-/// Validate that a YAML config source contains no unknown top-level or
-/// `dns`-section fields, by deserializing it through [`serde_ignored`] into the
-/// real [`Config`] type and inspecting which paths got dropped.
+/// Parse a YAML config source, validating that it contains no unknown
+/// top-level or `dns`-section fields. Returns the deserialized [`Config`] so
+/// the caller can convert it without a second parse pass.
 ///
 /// Inner structs (proxies, rules, listeners, ...) still carry
 /// `#[serde(deny_unknown_fields)]`, so typos inside them remain hard errors
 /// regardless of strict mode. This check exists to surface unknowns at the
 /// only two layers that intentionally accept extras by default: the top-level
 /// [`Config`] and its [`DNS`] sub-section.
-///
-/// Used by the **strict** config-parsing path. Normal (lenient) parsing
-/// simply ignores unknown fields at those two layers.
-pub fn check_unknown_fields(s: &str) -> crate::Result<()> {
+pub(crate) fn check_unknown_fields(s: &str) -> crate::Result<Config> {
     let mut val: Value = serde_yaml::from_str(s).map_err(|e| {
         Error::InvalidConfig(format!("couldn't parse config content: {e}"))
     })?;
@@ -552,7 +549,7 @@ pub fn check_unknown_fields(s: &str) -> crate::Result<()> {
     })?;
 
     let mut unknown: Vec<String> = Vec::new();
-    serde_ignored::deserialize::<_, _, Config>(val, |path| {
+    let cfg = serde_ignored::deserialize::<_, _, Config>(val, |path| {
         unknown.push(path.to_string());
     })
     .map_err(|e| {
@@ -560,7 +557,7 @@ pub fn check_unknown_fields(s: &str) -> crate::Result<()> {
     })?;
 
     if unknown.is_empty() {
-        Ok(())
+        Ok(cfg)
     } else {
         Err(Error::InvalidConfig(format!(
             "unknown field(s) in config: {}; \
