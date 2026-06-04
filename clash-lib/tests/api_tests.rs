@@ -1,9 +1,9 @@
+#[cfg(feature = "shadowsocks")]
+use crate::common::DripServer;
 use crate::common::{
     ClashInstance, alloc_ports, make_client_config_str, send_http_request,
     wait_port_ready,
 };
-#[cfg(feature = "shadowsocks")]
-use crate::common::DripServer;
 use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options};
 use http_body_util::BodyExt;

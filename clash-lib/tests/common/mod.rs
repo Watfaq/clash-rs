@@ -340,8 +340,7 @@ impl DripServer {
     /// Bind a hyper HTTP/1 server on 127.0.0.1:0 and spawn the accept loop.
     /// Returns once the listener is bound — the port is immediately usable.
     pub async fn start(delay: Duration, num_bytes: usize) -> std::io::Result<Self> {
-        use hyper::server::conn::http1;
-        use hyper::service::service_fn;
+        use hyper::{server::conn::http1, service::service_fn};
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let port = listener.local_addr()?.port();
@@ -367,8 +366,7 @@ impl DripServer {
                                 _ = token.cancelled() => {}
                                 _ = tokio::time::sleep(delay) => {}
                             }
-                            let body =
-                                Full::new(Bytes::from(vec![b'*'; num_bytes]));
+                            let body = Full::new(Bytes::from(vec![b'*'; num_bytes]));
                             Ok::<_, std::convert::Infallible>(
                                 Response::builder()
                                     .status(200)
