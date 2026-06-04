@@ -43,10 +43,7 @@ impl TryFrom<(Option<String>, &GrpcOpt, &CommonConfigOptions)> for GrpcClient {
         let (sni, x, common) = opt;
         let client = transport::GrpcClient::new(
             sni.as_ref().unwrap_or(&common.server).to_owned(),
-            x.grpc_service_name
-                .as_ref()
-                .map(|x| x.to_owned())
-                .unwrap_or_default()
+            format!("/{}", x.grpc_service_name.as_deref().unwrap_or_default())
                 .try_into()?,
         );
         Ok(client)

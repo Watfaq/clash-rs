@@ -37,7 +37,7 @@ impl Client {
             Uri::builder()
                 .scheme("https")
                 .authority(self.host.as_str())
-                .path_and_query(format!("/{}/Tun", self.path.as_str()))
+                .path_and_query(format!("{}/Tun", self.path.as_str()))
                 .build()
                 .map_err(map_io_error)?
         };

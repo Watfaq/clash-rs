@@ -40,7 +40,7 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Cache Rust dependencies
-        uses: Itsusinn/rust-cache@92e40e4
+        uses: Itsusinn/rust-cache@92e40e4e88556b42f44b1a0c0e417d27f4e30f90
         with:
           key: benchmark-${{ runner.os }}
 

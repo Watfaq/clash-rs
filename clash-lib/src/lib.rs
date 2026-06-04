@@ -1,4 +1,3 @@
-#![feature(cfg_version)]
 #![feature(ip)]
 #![feature(duration_millis_float)]
 
@@ -113,6 +112,22 @@ impl Config {
             }
             Config::Str(s) => s.parse::<def::Config>()?.try_into(),
         }
+    }
+
+    /// Like [`try_parse`] but additionally validates that the YAML source
+    /// contains no unknown top-level or `dns`-section fields, returning an
+    /// error when any unrecognised key is found.
+    ///
+    /// Enable this via the `--strict-config` CLI flag.
+    pub fn try_parse_strict(self) -> Result<InternalConfig> {
+        let yaml = match self {
+            Config::File(file) => std::fs::read_to_string(file)?,
+            Config::Str(s) => s,
+            // Def/Internal are already structured Rust values — no YAML to
+            // check for unknown fields.
+            other => return other.try_parse(),
+        };
+        def::check_unknown_fields(&yaml)?.try_into()
     }
 }
 

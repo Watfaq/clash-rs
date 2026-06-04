@@ -363,7 +363,7 @@ impl Display for LogLevel {
 /// ...
 /// ```
 #[derive(Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct Config {
     /// The HTTP proxy port
@@ -529,6 +529,44 @@ impl FromStr for Config {
     }
 }
 
+/// Parse a YAML config source, validating that it contains no unknown
+/// top-level or `dns`-section fields. Returns the deserialized [`Config`] so
+/// the caller can convert it without a second parse pass.
+///
+/// Inner structs (proxies, rules, listeners, ...) still carry
+/// `#[serde(deny_unknown_fields)]`, so typos inside them remain hard errors
+/// regardless of strict mode. This check exists to surface unknowns at the
+/// only two layers that intentionally accept extras by default: the top-level
+/// [`Config`] and its [`DNS`] sub-section.
+pub(crate) fn check_unknown_fields(s: &str) -> crate::Result<Config> {
+    let mut val: Value = serde_yaml::from_str(s).map_err(|e| {
+        Error::InvalidConfig(format!("couldn't parse config content: {e}"))
+    })?;
+    val.apply_merge().map_err(|e| {
+        Error::InvalidConfig(format!(
+            "failed to process anchors in config content: {e}"
+        ))
+    })?;
+
+    let mut unknown: Vec<String> = Vec::new();
+    let cfg = serde_ignored::deserialize::<_, _, Config>(val, |path| {
+        unknown.push(path.to_string());
+    })
+    .map_err(|e| {
+        Error::InvalidConfig(format!("could not parse config content: {e}"))
+    })?;
+
+    if unknown.is_empty() {
+        Ok(cfg)
+    } else {
+        Err(Error::InvalidConfig(format!(
+            "unknown field(s) in config: {}; omit --strict-config to suppress this \
+             error",
+            unknown.join(", ")
+        )))
+    }
+}
+
 /// Listen configuration for DoH (DNS over HTTPS) and DoH3 (DNS over HTTP/3).
 /// Both protocols share the same wire format. For DoH3, `hostname` acts as the
 /// QUIC SNI value presented to clients.
@@ -626,7 +664,7 @@ pub enum DNSListen {
 /// ```
 
 #[derive(Serialize, Deserialize, Educe)]
-#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+#[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct DNS {
     /// When disabled, system DNS config will be used
@@ -898,16 +936,46 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_unknown_top_level_field() {
+    fn parse_ignores_unknown_top_level_field() {
         let cfg = r#"
 port: 9090
 ports: 8080
 "#;
-        assert!(cfg.parse::<Config>().is_err(), "unknown fields should fail");
+        let parsed = cfg
+            .parse::<Config>()
+            .expect("unknown top-level fields should be ignored");
+        assert_eq!(parsed.port.expect("port should be set"), Port(9090));
     }
 
     #[test]
-    fn parse_rejects_unknown_nested_dns_field() {
+    fn parse_ignores_unknown_nested_dns_field() {
+        let cfg = r#"
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+  nonexistent-field: 198.18.0.1/16
+"#;
+        let parsed = cfg
+            .parse::<Config>()
+            .expect("unknown dns fields should be ignored");
+        assert!(parsed.dns.enable);
+    }
+
+    #[test]
+    fn check_unknown_fields_rejects_unknown_top_level() {
+        let cfg = r#"
+port: 9090
+ports: 8080
+"#;
+        assert!(
+            super::check_unknown_fields(cfg).is_err(),
+            "strict check should reject unknown top-level field"
+        );
+    }
+
+    #[test]
+    fn check_unknown_fields_rejects_unknown_dns_field() {
         let cfg = r#"
 dns:
   enable: true
@@ -916,8 +984,23 @@ dns:
   nonexistent-field: 198.18.0.1/16
 "#;
         assert!(
-            cfg.parse::<Config>().is_err(),
-            "unknown dns fields should fail"
+            super::check_unknown_fields(cfg).is_err(),
+            "strict check should reject unknown dns field"
+        );
+    }
+
+    #[test]
+    fn check_unknown_fields_accepts_valid_config() {
+        let cfg = r#"
+port: 9090
+dns:
+  enable: true
+  nameserver:
+    - 8.8.8.8
+"#;
+        assert!(
+            super::check_unknown_fields(cfg).is_ok(),
+            "strict check should accept a fully valid config"
         );
     }
 
