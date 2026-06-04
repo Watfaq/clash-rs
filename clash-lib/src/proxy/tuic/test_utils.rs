@@ -136,3 +136,67 @@ impl Drop for TuicServerProcess {
         }
     }
 }
+
+/// Detect that the test binary is running under qemu-user emulation (i.e.
+/// `cross test` on a non-native target). QUIC under qemu-user is unreliable
+/// — packet timing, MTU discovery and timers all drift enough that the TUIC
+/// stream ping-pong races against the idle / request timeouts and the stream
+/// gets reset mid-relay. We use this to skip the relay tests on cross-built
+/// targets while keeping native arch coverage (Linux x86_64, macOS aarch64).
+///
+/// The signal: under qemu-user the binary's compile-time `target_arch` differs
+/// from the kernel's reported `utsname.machine`. Native runs match.
+#[cfg(unix)]
+pub fn running_under_qemu_user() -> bool {
+    use std::ffi::CStr;
+
+    // SAFETY: `uname` writes into a zeroed `utsname` and returns 0 on success.
+    let mut uts = unsafe { std::mem::zeroed::<libc::utsname>() };
+    if unsafe { libc::uname(&mut uts) } != 0 {
+        return false;
+    }
+    let machine_ptr = uts.machine.as_ptr() as *const std::os::raw::c_char;
+    let host = match unsafe { CStr::from_ptr(machine_ptr) }.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let target = std::env::consts::ARCH;
+    !arch_matches(target, host)
+}
+
+#[cfg(not(unix))]
+pub fn running_under_qemu_user() -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn arch_matches(target: &str, host: &str) -> bool {
+    match target {
+        "x86_64" => host == "x86_64" || host == "amd64",
+        "x86" => host == "i386" || host == "i686",
+        "aarch64" => host == "aarch64" || host == "arm64",
+        "arm" => host.starts_with("arm"),
+        "riscv64" => host == "riscv64",
+        "powerpc64" => host == "ppc64" || host == "ppc64le",
+        "powerpc" => host == "ppc",
+        "mips" => host == "mips",
+        "mips64" => host == "mips64",
+        "s390x" => host == "s390x",
+        _ => target == host,
+    }
+}
+
+/// Skip the current test (with an explanatory message) when running under
+/// qemu-user. Returns `true` if the caller should bail out early.
+#[macro_export]
+macro_rules! skip_under_qemu_user {
+    ($name:expr) => {{
+        if $crate::proxy::tuic::test_utils::running_under_qemu_user() {
+            eprintln!(
+                "skipping {} under qemu-user emulation (QUIC timing unreliable)",
+                $name
+            );
+            return Ok(());
+        }
+    }};
+}

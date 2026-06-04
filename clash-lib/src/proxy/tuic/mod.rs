@@ -486,6 +486,7 @@ mod tests {
     /// "hello" and verify we receive "world" back.
     #[tokio::test]
     async fn test_tuic_ping_pong_tcp() -> anyhow::Result<()> {
+        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp");
         crate::tests::initialize();
         let server = TuicServerProcess::start().await?;
         let port = server.port();
@@ -592,6 +593,7 @@ mod tests {
     /// TCP ping-pong over IPv6 loopback.
     #[tokio::test]
     async fn test_tuic_ping_pong_tcp_ipv6() -> anyhow::Result<()> {
+        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp_ipv6");
         if std::net::UdpSocket::bind("[::1]:0").is_err() {
             eprintln!("skipping: no IPv6 loopback");
             return Ok(());
@@ -646,6 +648,7 @@ mod tests {
     /// TCP ping-pong with dual-stack server (client connects via IPv4).
     #[tokio::test]
     async fn test_tuic_ping_pong_tcp_dual_stack() -> anyhow::Result<()> {
+        crate::skip_under_qemu_user!("test_tuic_ping_pong_tcp_dual_stack");
         if std::net::UdpSocket::bind("[::1]:0").is_err() {
             eprintln!("skipping: no IPv6 loopback");
             return Ok(());
