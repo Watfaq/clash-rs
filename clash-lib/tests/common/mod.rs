@@ -1,12 +1,9 @@
-use bytes::Bytes;
 use futures::TryFutureExt;
-use http_body_util::Full;
-use hyper::{Response, body::Incoming};
+use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
 use std::{
     net::{Shutdown, TcpStream},
     sync::atomic::{AtomicU16, Ordering},
-    time::Duration,
 };
 
 /// Backward-compatible wrapper used by integration_tests.rs.
@@ -318,78 +315,5 @@ impl Socks5UdpSession {
         };
 
         (pkt[pos..].to_vec(), src)
-    }
-}
-
-// ── Local "drip" HTTP server ─────────────────────────────────────────────────
-
-/// RAII guard for a local HTTP server bound to 127.0.0.1 on a random port.
-/// Each request blocks for `delay` before returning a body of `num_bytes` of
-/// `b'*'`. The blocking keeps the connection alive long enough for the
-/// /connections API to observe it.
-///
-/// Cancelled on drop.
-#[allow(dead_code)]
-pub struct DripServer {
-    pub port: u16,
-    token: tokio_util::sync::CancellationToken,
-}
-
-#[allow(dead_code)]
-impl DripServer {
-    /// Bind a hyper HTTP/1 server on 127.0.0.1:0 and spawn the accept loop.
-    /// Returns once the listener is bound — the port is immediately usable.
-    pub async fn start(delay: Duration, num_bytes: usize) -> std::io::Result<Self> {
-        use hyper::{server::conn::http1, service::service_fn};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let port = listener.local_addr()?.port();
-        let token = tokio_util::sync::CancellationToken::new();
-        let cancel = token.clone();
-
-        tokio::spawn(async move {
-            loop {
-                let (stream, _) = tokio::select! {
-                    _ = cancel.cancelled() => break,
-                    accept = listener.accept() => match accept {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    },
-                };
-                let io = TokioIo::new(stream);
-                let conn_cancel = cancel.clone();
-                tokio::spawn(async move {
-                    let svc = service_fn(move |_req| {
-                        let token = conn_cancel.clone();
-                        async move {
-                            tokio::select! {
-                                _ = token.cancelled() => {}
-                                _ = tokio::time::sleep(delay) => {}
-                            }
-                            let body = Full::new(Bytes::from(vec![b'*'; num_bytes]));
-                            Ok::<_, std::convert::Infallible>(
-                                Response::builder()
-                                    .status(200)
-                                    .header(
-                                        "content-type",
-                                        "application/octet-stream",
-                                    )
-                                    .body(body)
-                                    .unwrap(),
-                            )
-                        }
-                    });
-                    let _ = http1::Builder::new().serve_connection(io, svc).await;
-                });
-            }
-        });
-
-        Ok(Self { port, token })
-    }
-}
-
-impl Drop for DripServer {
-    fn drop(&mut self) {
-        self.token.cancel();
     }
 }

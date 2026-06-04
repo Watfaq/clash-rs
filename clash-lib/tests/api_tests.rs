@@ -1,5 +1,3 @@
-#[cfg(feature = "shadowsocks")]
-use crate::common::DripServer;
 use crate::common::{
     ClashInstance, alloc_ports, make_client_config_str, send_http_request,
     wait_port_ready,
@@ -290,14 +288,6 @@ async fn test_connections_returns_proxy_chain_names() {
     // Allocate unique ports for the client (7-port block)
     let client_base = alloc_ports(CLIENT_PORT_BLOCK);
 
-    // Spin up a local HTTP server that delays the response so the connection
-    // stays open long enough for the /connections poll to observe it. Using a
-    // local server keeps the test hermetic — no flaky external dependency.
-    let drip = DripServer::start(Duration::from_secs(3), 500)
-        .await
-        .expect("Failed to start drip server");
-    let drip_port = drip.port;
-
     // Build server config dynamically from server.yaml
     let server_config_str = {
         let tpl = std::fs::read_to_string(wd_server.join("server.yaml"))
@@ -307,15 +297,9 @@ async fn test_connections_returns_proxy_chain_names() {
     };
 
     // Build client config dynamically: template substitution + SS server port
-    // and swap the upstream-domain rule for one that matches our local drip
-    // server's destination port, so the `test 🌏` chain still fires.
     let client_config_str = make_client_config_str(client_base)
         .replace("127.0.0.1:8901", &format!("127.0.0.1:{}", server_base + 1))
-        .replace("port: 8901", &format!("port: {}", server_base + 1))
-        .replace(
-            "DOMAIN,httpbin.yba.dev,test 🌏",
-            &format!("DST-PORT,{},test 🌏", drip_port),
-        );
+        .replace("port: 8901", &format!("port: {}", server_base + 1));
 
     // Start server instance with RAII guard
     let _server = ClashInstance::start(
@@ -360,7 +344,7 @@ async fn test_connections_returns_proxy_chain_names() {
             .expect("Failed to build reqwest client");
 
         let response = client
-            .get(format!("http://127.0.0.1:{}/", drip_port))
+            .get("https://httpbin.yba.dev/drip?duration=2&delay=1&numbytes=500")
             .send()
             .await
             .expect("Failed to send request through proxy");
