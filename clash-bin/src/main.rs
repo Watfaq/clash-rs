@@ -117,12 +117,11 @@ fn main() -> anyhow::Result<()> {
         .collect();
     let mut cli = Cli::parse_from(args);
 
-    // Allow turning on compatibility mode via env var as well as `--compatibility`.
-    // Accepts `1` or `true` (case-insensitive). Useful for environments where
-    // the CLI is fixed (containers, init systems, GUI launchers).
-    if !cli.compatibility && env_truthy("CLASH_RS_COMPATIBILITY_MODE") {
-        cli.compatibility = true;
-    }
+    // Either `--compatibility` OR `CLASH_RS_COMPATIBILITY_MODE=1|true` enables
+    // compatibility mode. The env var is useful when the command line is fixed
+    // (containers, init systems, GUI launchers).
+    cli.compatibility =
+        cli.compatibility || env_truthy("CLASH_RS_COMPATIBILITY_MODE");
 
     if cli.version {
         println!(
