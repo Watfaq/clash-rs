@@ -111,12 +111,12 @@ impl Runner for ApiRunner {
 
         let origins: AllowOrigin =
             if let Some(origins) = &controller_cfg.cors_allow_origins {
-                let has_wildcard =
-                    origins.iter().any(|origin| origin.trim() == "*");
+                let has_wildcard = origins.iter().any(|origin| origin.trim() == "*");
                 if has_wildcard {
                     if origins.iter().any(|origin| origin.trim() != "*") {
                         warn!(
-                            "CORS origin '*' enables all origins; ignoring additional configured origins"
+                            "CORS origin '*' enables all origins; ignoring \
+                             additional configured origins"
                         );
                     }
                     Any.into()
