@@ -111,17 +111,21 @@ impl Runner for ApiRunner {
 
         let origins: AllowOrigin =
             if let Some(origins) = &controller_cfg.cors_allow_origins {
-                origins
-                    .iter()
-                    .filter_map(|v| match v.parse() {
-                        Ok(origin) => Some(origin),
-                        Err(e) => {
-                            warn!("ignored invalid CORS origin '{}': {}", v, e);
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .into()
+                if origins.iter().any(|origin| origin.trim() == "*") {
+                    Any.into()
+                } else {
+                    origins
+                        .iter()
+                        .filter_map(|v| match v.parse() {
+                            Ok(origin) => Some(origin),
+                            Err(e) => {
+                                warn!("ignored invalid CORS origin '{}': {}", v, e);
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .into()
+                }
             } else {
                 Any.into()
             };

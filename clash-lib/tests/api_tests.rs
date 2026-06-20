@@ -62,6 +62,49 @@ async fn get_allow_lan(port: u16) -> bool {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn test_wildcard_cors_allow_origins_does_not_panic() {
+    let port_base = alloc_ports(CLIENT_PORT_BLOCK);
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_str = make_client_config_str(port_base).replacen(
+        "secret: \"clash-rs\"",
+        "secret: \"\"",
+        1,
+    );
+    let config_str = format!("{}\ncors-allow-origins:\n  - \"*\"\n", config_str);
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::Str(config_str),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+            config_path: None,
+        },
+        (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
+    )
+    .expect("Failed to start client with wildcard CORS origins");
+
+    let version_url = format!("http://127.0.0.1:{}/version", port_base);
+    let req = hyper::Request::builder()
+        .uri(&version_url)
+        .header(http::header::ORIGIN, "https://example.com")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let res = send_http_request(version_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(res.status(), http::StatusCode::OK);
+    assert_eq!(
+        res.headers()
+            .get(http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .and_then(|v| v.to_str().ok()),
+        Some("*")
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn test_config_reload_via_payload() {
     let wd =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
