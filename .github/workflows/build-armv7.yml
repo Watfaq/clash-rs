@@ -4,13 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: ["master"]
-    paths:
-      - "clash-bin/**"
-      - "clash-lib/**"
-      - "clash-dns/**"
-      - "clash-netstack/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
 
 permissions:
   contents: write
