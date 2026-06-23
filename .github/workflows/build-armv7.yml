@@ -35,27 +35,14 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Patch Cross.toml (remove nodejs pre-build)
+      - name: Remove nodejs pre-build from Cross.toml
         run: |
-          python3 -c "
-          import os
-          content = '''[build.dockerfile]
-file = \".cross/Dockerfile\"
-
-[build.env]
-volumes = [\"/var/run/docker.sock=/var/run/docker.sock\", \"/tmp=/tmp\"]
-passthrough = [\"CLASH_GIT_REF\", \"CLASH_GIT_SHA\", \"GITHUB_REF\", \"GITHUB_SHA\", \"RUSTFLAGS\", \"RUST_LOG\", \"CLASH_DOCKER_TEST\", \"SENTRY_DSN\", \"RUSTC_BOOTSTRAP\", \"TS_AUTH_KEY\", \"RUSTC_WRAPPER\", \"SCCACHE_DIR\"]
-
-[target.mips-unknown-linux-musl]
-image = \"ghcr.io/cross-rs/mips-unknown-linux-musl:edge\"
-
-[target.mipsel-unknown-linux-musl]
-image = \"ghcr.io/cross-rs/mipsel-unknown-linux-musl:edge\"
-'''
-          with open('Cross.toml', 'w') as f:
-              f.write(content)
-          print(open('Cross.toml').read())
-          "
+          # Delete the [build] section's pre-build key (lines between [build] and [build.env])
+          sed -i '/^\[build\]/,/^\[build\.env\]/{/pre-build/d; /^\s*$/d}' Cross.toml
+          # Also remove the leftover array bracket and string on next line
+          sed -i '/^\[build\]/,/^\[build\.env\]/{/apt-get.*nodejs/d; /^\s*\]/d}' Cross.toml
+          echo "--- Patched Cross.toml ---"
+          cat Cross.toml
 
       - name: Build clash-rs (armv7 gnueabi, no dashboard)
         run: |
@@ -95,27 +82,12 @@ image = \"ghcr.io/cross-rs/mipsel-unknown-linux-musl:edge\"
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Patch Cross.toml (remove nodejs pre-build)
+      - name: Remove nodejs pre-build from Cross.toml
         run: |
-          python3 -c "
-          import os
-          content = '''[build.dockerfile]
-file = \".cross/Dockerfile\"
-
-[build.env]
-volumes = [\"/var/run/docker.sock=/var/run/docker.sock\", \"/tmp=/tmp\"]
-passthrough = [\"CLASH_GIT_REF\", \"CLASH_GIT_SHA\", \"GITHUB_REF\", \"GITHUB_SHA\", \"RUSTFLAGS\", \"RUST_LOG\", \"CLASH_DOCKER_TEST\", \"SENTRY_DSN\", \"RUSTC_BOOTSTRAP\", \"TS_AUTH_KEY\", \"RUSTC_WRAPPER\", \"SCCACHE_DIR\"]
-
-[target.mips-unknown-linux-musl]
-image = \"ghcr.io/cross-rs/mips-unknown-linux-musl:edge\"
-
-[target.mipsel-unknown-linux-musl]
-image = \"ghcr.io/cross-rs/mipsel-unknown-linux-musl:edge\"
-'''
-          with open('Cross.toml', 'w') as f:
-              f.write(content)
-          print(open('Cross.toml').read())
-          "
+          sed -i '/^\[build\]/,/^\[build\.env\]/{/pre-build/d; /^\s*$/d}' Cross.toml
+          sed -i '/^\[build\]/,/^\[build\.env\]/{/apt-get.*nodejs/d; /^\s*\]/d}' Cross.toml
+          echo "--- Patched Cross.toml ---"
+          cat Cross.toml
 
       - name: Build clash-rs (armv7 musleabihf, no dashboard)
         run: |
