@@ -1,0 +1,99 @@
+name: Build ARMv7 for Router
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master"]
+    paths:
+      - "clash-bin/**"
+      - "clash-lib/**"
+      - "clash-dns/**"
+      - "clash-netstack/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTC_BOOTSTRAP: "1"
+
+jobs:
+  build-armv7:
+    name: Build armv7-unknown-linux-gnueabi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabi
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build clash-rs (armv7 gnueabi)
+        run: |
+          cross build --release \
+            --target armv7-unknown-linux-gnueabi \
+            -p clash-rs \
+            -F plus
+
+      - name: Rename binary
+        run: |
+          mv target/armv7-unknown-linux-gnueabi/release/clash-rs \
+             clash-rs-armv7-unknown-linux-gnueabi-${{ steps.sha.outputs.short }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clash-rs-armv7-gnueabi
+          path: clash-rs-armv7-unknown-linux-gnueabi-${{ steps.sha.outputs.short }}
+          retention-days: 30
+
+  build-armv7-musl:
+    name: Build armv7-unknown-linux-musleabihf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build clash-rs (armv7 musleabihf)
+        run: |
+          cross build --release \
+            --target armv7-unknown-linux-musleabihf \
+            -p clash-rs \
+            -F plus
+
+      - name: Rename binary
+        run: |
+          mv target/armv7-unknown-linux-musleabihf/release/clash-rs \
+             clash-rs-armv7-unknown-linux-musleabihf-${{ steps.sha.outputs.short }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clash-rs-armv7-musleabihf
+          path: clash-rs-armv7-unknown-linux-musleabihf-${{ steps.sha.outputs.short }}
+          retention-days: 30
