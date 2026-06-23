@@ -42,12 +42,19 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Build clash-rs (armv7 gnueabi)
+      - name: Patch Cross.toml for armv7 (skip nodejs)
+        run: |
+          # Remove the pre-build nodejs install which fails on armv7 (glibc too old)
+          sed -i '/pre-build/d' Cross.toml
+          cat Cross.toml
+
+      - name: Build clash-rs (armv7 gnueabi, no dashboard)
         run: |
           cross build --release \
             --target armv7-unknown-linux-gnueabi \
             -p clash-rs \
-            -F plus
+            --no-default-features \
+            -F standard,ring
 
       - name: Rename binary
         run: |
@@ -79,12 +86,18 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Build clash-rs (armv7 musleabihf)
+      - name: Patch Cross.toml for armv7 (skip nodejs)
+        run: |
+          sed -i '/pre-build/d' Cross.toml
+          cat Cross.toml
+
+      - name: Build clash-rs (armv7 musleabihf, no dashboard)
         run: |
           cross build --release \
             --target armv7-unknown-linux-musleabihf \
             -p clash-rs \
-            -F plus
+            --no-default-features \
+            -F standard,ring
 
       - name: Rename binary
         run: |
