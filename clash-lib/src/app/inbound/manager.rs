@@ -285,45 +285,32 @@ impl InboundManager {
                              '{listener_name}'"
                         );
 
-                        // For Shadowsocks and AnyTLS, create a watch channel so
-                        // future user-list updates can be pushed without a restart.
+                        // For Shadowsocks, AnyTLS, and Hysteria2, create a watch
+                        // channel so future user-list updates can be pushed
+                        // without a restart.
                         #[cfg(feature = "shadowsocks")]
-                        let (users_rx, users_tx) =
-                            if let InboundOpts::Shadowsocks { users, .. } = &opts {
+                        let (users_rx, users_tx) = match &opts {
+                            InboundOpts::Shadowsocks { users, .. }
+                            | InboundOpts::Anytls { users, .. }
+                            | InboundOpts::Hysteria2 { users, .. } => {
                                 let (tx, rx) =
                                     tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
-                            } else if let InboundOpts::Anytls { users, .. } = &opts {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            } else if let InboundOpts::Hysteria2 { users, .. } =
-                                &opts
-                            {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            } else {
-                                (None, None)
-                            };
+                            }
+                            _ => (None, None),
+                        };
                         #[cfg(not(feature = "shadowsocks"))]
-                        let (users_rx, users_tx) = if let InboundOpts::Anytls {
-                            users,
-                            ..
-                        } = &opts
-                        {
-                            let (tx, rx) =
-                                tokio::sync::watch::channel(users.clone());
-                            (Some(rx), Some(tx))
-                        } else if let InboundOpts::Hysteria2 { users, .. } = &opts {
-                            let (tx, rx) =
-                                tokio::sync::watch::channel(users.clone());
-                            (Some(rx), Some(tx))
-                        } else {
-                            (
+                        let (users_rx, users_tx) = match &opts {
+                            InboundOpts::Anytls { users, .. }
+                            | InboundOpts::Hysteria2 { users, .. } => {
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
+                                (Some(rx), Some(tx))
+                            }
+                            _ => (
                                 None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
                                 None,
-                            )
+                            ),
                         };
 
                         let handle = build_network_listeners(
@@ -390,33 +377,27 @@ impl InboundManager {
             let cancellation_token = cancellation_token.clone();
             let name = opts.common_opts().name.clone();
 
-            // For AnyTLS (and Shadowsocks), create a watch channel so user-list
-            // updates can be pushed without a full restart.
+            // For AnyTLS, Hysteria2 (and Shadowsocks), create a watch channel so
+            // user-list updates can be pushed without a full restart.
             #[cfg(feature = "shadowsocks")]
-            let (users_rx, users_tx) =
-                if let InboundOpts::Shadowsocks { users, .. } = opts {
+            let (users_rx, users_tx) = match opts {
+                InboundOpts::Shadowsocks { users, .. }
+                | InboundOpts::Anytls { users, .. }
+                | InboundOpts::Hysteria2 { users, .. } => {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
-                } else if let InboundOpts::Anytls { users, .. } = opts {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                } else if let InboundOpts::Hysteria2 { users, .. } = opts {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                } else {
-                    (None, None)
-                };
+                }
+                _ => (None, None),
+            };
             #[cfg(not(feature = "shadowsocks"))]
-            let (users_rx, users_tx) =
-                if let InboundOpts::Anytls { users, .. } = opts {
+            let (users_rx, users_tx) = match opts {
+                InboundOpts::Anytls { users, .. }
+                | InboundOpts::Hysteria2 { users, .. } => {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
-                } else if let InboundOpts::Hysteria2 { users, .. } = opts {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                } else {
-                    (None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>, None)
-                };
+                }
+                _ => (None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>, None),
+            };
 
             entry.users_tx = users_tx;
             entry.handle = build_network_listeners(
