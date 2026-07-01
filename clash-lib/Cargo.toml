@@ -126,13 +126,13 @@ chacha20poly1305 = "0.10"
 aead = { version = "0.5", features = ["std"] }
 aes = "0.9"
 blake3 = { version = "1", optional = true }
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 cfb-mode = "0.9"
 const-fnv1a-hash = "1"
 
 filetime = "0.2"
 axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+tower-http = { version = "0.7", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Dashboard auto-download
@@ -174,16 +174,16 @@ rand = "0.10"
 tracing = "0.1"
 
 shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher", "aead-cipher-extra"], git = "https://github.com/shadowsocks/shadowsocks-rust.git", rev = "c4d8d18527289d12470cad1ce718754c908a75fe" }
-maxminddb = "0.28"
+maxminddb = "0.29"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls"] }
+arti-client = { version = "0.44", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.44", optional = true, default-features = false, features = ["tokio", "rustls"] }
 
 
 # tuic
-tuic-core= { tag = "v1.8.5", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
+tuic-core= { tag = "v1.8.10", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio"] }
@@ -218,7 +218,7 @@ etherparse = {version = "0.20", optional = true }
 tempfile = "3.27"
 
 [dev-dependencies]
-mockall = "0.14.0"
+mockall = "0.15.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.1"
 bollard = "0.21"
@@ -232,7 +232,7 @@ http-body-util = "0.1"
 reqwest = { version = "0.13", features = ["socks"] }
 sysinfo = { version = "0.39", features = ["network"]}
 moka = { version = "0.12", features = ["future"] }
-tuic-server = { tag = "v1.8.5", git = "https://github.com/Itsusinn/tuic.git" }
+tuic-server = { tag = "v1.8.10", git = "https://github.com/Itsusinn/tuic.git" }
 
 [build-dependencies]
 prost-build = "0.14"
