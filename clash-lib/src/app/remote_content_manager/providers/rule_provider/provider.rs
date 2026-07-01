@@ -114,6 +114,8 @@ pub struct RuleProviderImpl {
     behavior: RuleSetBehavior,
     format: RuleSetFormat,
     inline_rules: Option<Vec<String>>,
+    /// Whether to enable real-time file-system event watching.
+    watch: bool,
 
     mmdb: Option<MmdbLookup>,
     geodata: Option<GeoDataLookup>,
@@ -131,6 +133,7 @@ impl RuleProviderImpl {
         mmdb: Option<MmdbLookup>,
         geodata: Option<GeoDataLookup>,
         inline_rules: Option<Vec<String>>,
+        watch: bool,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
@@ -239,12 +242,12 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = if let Some(interval) = interval
-            && let Some(vehicle) = vehicle
+        let fetcher = if let Some(vehicle) = vehicle
+            && (interval.is_some() || watch)
         {
             Some(Fetcher::new(
                 name.clone(),
-                interval,
+                interval.unwrap_or_default(),
                 vehicle,
                 parser,
                 Some(updater),
@@ -260,6 +263,7 @@ impl RuleProviderImpl {
             behavior,
             format,
             inline_rules,
+            watch,
 
             mmdb,
             geodata,
@@ -343,6 +347,16 @@ impl Provider for RuleProviderImpl {
             let ele = fetcher.initial().await.map_err(map_io_error)?;
             if let Some(updater) = fetcher.on_update.as_ref() {
                 updater(ele).await; // Directly pass RuleContent
+            }
+            if self.watch {
+                fetcher.start_watch().await.map_err(|e| {
+                    std::io::Error::other(format!(
+                        "failed to start file watcher for rule provider '{}': \
+                         {}",
+                        self.name(),
+                        e
+                    ))
+                })?;
             }
         } else {
             trace!("initializing inline rule provider {}", self.name());
@@ -485,7 +499,7 @@ mod tests {
         common::{geodata::MockGeoDataLookupTrait, mmdb::MockMmdbLookupTrait},
         session::{Session, SocksAddr},
     };
-    use std::{path::Path, sync::Arc, time::Duration};
+    use std::{io::Seek, path::Path, sync::Arc, time::Duration};
     use tokio_test::assert_ok;
 
     #[tokio::test]
@@ -502,6 +516,7 @@ mod tests {
             Some(Arc::new(mock_mmdb)),
             Some(Arc::new(mock_geodata)),
             Some(vec!["DOMAIN-SUFFIX, google.com".to_owned()]),
+            false,
         );
 
         assert_ok!(provider.initialize().await);
@@ -548,6 +563,7 @@ mod tests {
             Some(Arc::new(mock_mmdb)),
             Some(Arc::new(mock_geodata)),
             Some(vec!["+.google.com".to_owned()]),
+            false,
         );
 
         assert_ok!(provider.initialize().await);
@@ -556,5 +572,92 @@ mod tests {
             destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
             ..Default::default()
         }));
+    }
+
+    /// Verify that `watch: true` on a real local file initializes without
+    /// error and that the provider content is updated when the file changes on
+    /// disk.
+    #[tokio::test]
+    async fn test_file_provider_watch() {
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+
+        // Write initial content to a temporary file.  Using `NamedTempFile`
+        // ensures the file is removed even if the test panics.
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write as _;
+        write!(tmp, "payload:\n  - twitter.com\n").unwrap();
+        tmp.flush().unwrap();
+
+        // Use the real file vehicle so that notify can watch the actual path.
+        let vehicle = Arc::new(
+            crate::app::remote_content_manager::providers::file_vehicle::Vehicle::new(
+                tmp.path().to_str().unwrap(),
+            ),
+        );
+
+        let provider = Arc::new(RuleProviderImpl::new(
+            "watch-test".to_string(),
+            RuleSetBehavior::Domain,
+            RuleSetFormat::Yaml,
+            None, // no polling interval — rely purely on file watching
+            Some(vehicle),
+            Some(Arc::new(mock_mmdb)),
+            Some(Arc::new(mock_geodata)),
+            None,
+            true, // enable watching
+        ));
+
+        assert_ok!(provider.initialize().await);
+
+        // Initial content: twitter.com should match.
+        let sess_twitter = Session {
+            destination: SocksAddr::Domain("twitter.com".to_owned(), 443),
+            ..Default::default()
+        };
+        assert!(
+            provider.search(&sess_twitter),
+            "twitter.com should match after initial load"
+        );
+        // google.com should NOT match yet.
+        let sess_google = Session {
+            destination: SocksAddr::Domain("google.com".to_owned(), 443),
+            ..Default::default()
+        };
+        assert!(
+            !provider.search(&sess_google),
+            "google.com should NOT match before file update"
+        );
+
+        // Overwrite the file — the watcher should pick this up.
+        tmp.as_file_mut()
+            .set_len(0)
+            .expect("truncate tmp file");
+        tmp.as_file_mut().seek(std::io::SeekFrom::Start(0)).unwrap();
+        write!(tmp.as_file_mut(), "payload:\n  - google.com\n").unwrap();
+        tmp.as_file_mut().sync_all().unwrap();
+
+        // Give the OS watcher + debounce time to fire and the async task time
+        // to apply the update (generous timeout for slow CI machines).
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if provider.search(&sess_google) {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                panic!("provider did not reload within 5 s after file change");
+            }
+        }
+
+        assert!(
+            provider.search(&sess_google),
+            "google.com should match after file update"
+        );
+        assert!(
+            !provider.search(&sess_twitter),
+            "twitter.com should NOT match after file update"
+        );
     }
 }

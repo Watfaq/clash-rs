@@ -221,6 +221,7 @@ impl Router {
                         mmdb.clone(),
                         geodata.clone(),
                         http.inline_rules,
+                        false,
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -235,15 +236,20 @@ impl Router {
 
                     // Default to yaml if not specified
                     let format = file.format.unwrap_or_default();
+                    // When watch is enabled without an explicit interval we
+                    // still pass None so no polling loop is started; watching
+                    // alone handles live reloads.
+                    let interval = file.interval.map(Duration::from_secs);
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         file.behavior,
                         format,
-                        Some(Duration::from_secs(file.interval.unwrap_or_default())),
+                        interval,
                         Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
                         file.inline_rules,
+                        file.watch,
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -259,6 +265,7 @@ impl Router {
                         mmdb.clone(),
                         geodata.clone(),
                         Some(inline.inline_rules),
+                        false,
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));

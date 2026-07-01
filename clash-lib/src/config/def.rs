@@ -868,6 +868,12 @@ pub struct FileRuleProviderDef {
     /// Polling interval in seconds to detect file changes. `None` disables
     /// polling.
     pub interval: Option<u64>,
+    /// Enable real-time file watching via OS file-system events. When `true`
+    /// the provider reloads the file immediately when it is modified on disk,
+    /// without waiting for the polling `interval`. Can be used together with
+    /// `interval` or as a standalone alternative. Defaults to `false`.
+    #[serde(default)]
+    pub watch: bool,
     /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
     /// Rule set file format. Defaults to `yaml` when absent.
