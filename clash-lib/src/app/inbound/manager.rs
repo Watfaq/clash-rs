@@ -240,6 +240,16 @@ impl InboundManager {
                                     users.len()
                                 );
                             }
+                            if let (InboundOpts::Hysteria2 { users, .. }, Some(tx)) =
+                                (&opts, &entry.users_tx)
+                                && tx.send(users.clone()).is_ok()
+                            {
+                                info!(
+                                    "inbound provider {provider_name}: hysteria2 \
+                                     user list updated in place ({} users)",
+                                    users.len()
+                                );
+                            }
                             new_handles.insert(opts, entry);
                         } else {
                             opts_to_start.push(opts);
@@ -287,6 +297,12 @@ impl InboundManager {
                                 let (tx, rx) =
                                     tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
+                            } else if let InboundOpts::Hysteria2 { users, .. } =
+                                &opts
+                            {
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
+                                (Some(rx), Some(tx))
                             } else {
                                 (None, None)
                             };
@@ -296,6 +312,10 @@ impl InboundManager {
                             ..
                         } = &opts
                         {
+                            let (tx, rx) =
+                                tokio::sync::watch::channel(users.clone());
+                            (Some(rx), Some(tx))
+                        } else if let InboundOpts::Hysteria2 { users, .. } = &opts {
                             let (tx, rx) =
                                 tokio::sync::watch::channel(users.clone());
                             (Some(rx), Some(tx))
@@ -380,12 +400,18 @@ impl InboundManager {
                 } else if let InboundOpts::Anytls { users, .. } = opts {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
+                } else if let InboundOpts::Hysteria2 { users, .. } = opts {
+                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
+                    (Some(rx), Some(tx))
                 } else {
                     (None, None)
                 };
             #[cfg(not(feature = "shadowsocks"))]
             let (users_rx, users_tx) =
                 if let InboundOpts::Anytls { users, .. } = opts {
+                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
+                    (Some(rx), Some(tx))
+                } else if let InboundOpts::Hysteria2 { users, .. } = opts {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
                 } else {

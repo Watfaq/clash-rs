@@ -1,6 +1,7 @@
 mod codec;
 mod congestion;
 mod datagram;
+pub mod inbound;
 mod salamander;
 mod udp_hop;
 

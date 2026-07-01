@@ -23,6 +23,146 @@ pub struct Hy2TcpResp {
     pub msg: String,
 }
 
+/// Server-side codec for reading TCP relay requests from the client.
+///
+/// ### Client → Server format
+///
+/// ```text
+/// [varint] Request ID (must be 0x401)
+/// [varint] Address length
+/// [bytes]  Address string "host:port"
+/// [varint] Padding length
+/// [bytes]  Random padding (skipped)
+/// ```
+pub struct Hy2TcpReqCodec;
+
+/// Parsed TCP relay request from the client.
+pub struct Hy2TcpReq {
+    pub addr: SocksAddr,
+}
+
+impl Decoder for Hy2TcpReqCodec {
+    type Error = std::io::Error;
+    type Item = Hy2TcpReq;
+
+    fn decode(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> Result<Option<Self::Item>, Self::Error> {
+        if src.is_empty() {
+            return Ok(None);
+        }
+        let mut tmp = src.clone();
+        // Request ID
+        let req_id = VarInt::decode(&mut tmp)
+            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?;
+        const EXPECTED_REQ_ID: u64 = 0x401;
+        if req_id.into_inner() != EXPECTED_REQ_ID {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "unexpected hysteria2 TCP request ID: {:#x}",
+                    req_id.into_inner()
+                ),
+            ));
+        }
+        // Address length + bytes
+        let addr_len = VarInt::decode(&mut tmp)
+            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?
+            .into_inner() as usize;
+        if tmp.remaining() < addr_len {
+            return Ok(None);
+        }
+        let addr_bytes: Vec<u8> = tmp.split_to(addr_len).into();
+        // Padding length + bytes
+        let padding_len = VarInt::decode(&mut tmp)
+            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?
+            .into_inner() as usize;
+        if tmp.remaining() < padding_len {
+            return Ok(None);
+        }
+        tmp.advance(padding_len);
+
+        // Commit: advance src by amount consumed
+        let consumed = src.remaining() - tmp.remaining();
+        src.advance(consumed);
+
+        let addr = to_socksaddr_from_bytes(&addr_bytes)?;
+        Ok(Some(Hy2TcpReq { addr }))
+    }
+}
+
+fn to_socksaddr_from_bytes(bytes: &[u8]) -> std::io::Result<SocksAddr> {
+    let addr_str = std::str::from_utf8(bytes).map_err(|_| {
+        std::io::Error::new(ErrorKind::InvalidInput, "Invalid UTF-8 in address")
+    })?;
+    let (host, port_str) = addr_str.rsplit_once(':').ok_or_else(|| {
+        std::io::Error::new(
+            ErrorKind::InvalidInput,
+            "Address must be in host:port format",
+        )
+    })?;
+    let port = port_str.parse::<u16>().map_err(|_| {
+        std::io::Error::new(ErrorKind::InvalidInput, "Invalid port number")
+    })?;
+    if let Ok(sock_addr) = std::net::SocketAddr::from_str(addr_str) {
+        Ok(SocksAddr::Ip(sock_addr))
+    } else {
+        Ok(SocksAddr::Domain(host.to_string(), port))
+    }
+}
+
+/// Encodes a server TCP response.
+///
+/// ### Server → Client format
+///
+/// ```text
+/// [uint8]  Status (0x00 = OK, 0x01 = Error)
+/// [varint] Message length
+/// [bytes]  Message string
+/// [varint] Padding length
+/// [bytes]  Random padding
+/// ```
+pub struct Hy2TcpRespEncoder;
+
+pub struct Hy2TcpRespMsg {
+    pub status: u8,
+    pub msg: String,
+}
+
+impl Hy2TcpRespMsg {
+    pub fn ok() -> Self {
+        Self {
+            status: 0x00,
+            msg: String::new(),
+        }
+    }
+}
+
+impl Encoder<Hy2TcpRespMsg> for Hy2TcpRespEncoder {
+    type Error = std::io::Error;
+
+    fn encode(
+        &mut self,
+        item: Hy2TcpRespMsg,
+        buf: &mut BytesMut,
+    ) -> Result<(), Self::Error> {
+        let pad = padding(64..=512);
+        let msg_bytes = item.msg.into_bytes();
+        let msg_var = VarInt::from_u32(msg_bytes.len() as u32);
+        let pad_var = VarInt::from_u32(pad.len() as u32);
+        buf.reserve(
+            1 + var_size(msg_var) + msg_bytes.len() + var_size(pad_var) + pad.len(),
+        );
+        buf.put_u8(item.status);
+        msg_var.encode(buf);
+        buf.put_slice(&msg_bytes);
+        pad_var.encode(buf);
+        buf.put_slice(&pad);
+        Ok(())
+    }
+}
+
 impl Decoder for Hy2TcpCodec {
     type Error = std::io::Error;
     type Item = Hy2TcpResp;
