@@ -36,7 +36,7 @@ use crate::{
         hysteria2::codec::{Hy2TcpReqCodec, Hy2TcpRespEncoder, Hy2TcpRespMsg},
         inbound::InboundHandlerTrait,
     },
-    session::{Network, Session, Type},
+    session::{Network, Session, SocksAddr, Type},
 };
 
 use super::codec::{Defragger, Fragments, HysUdpPacket, padding};
@@ -517,6 +517,7 @@ async fn handle_udp_datagrams(
                 conn: conn.clone(),
                 session_id,
                 src_addr,
+                inbound_user: inbound_user.clone(),
                 sessions: Arc::clone(&sessions),
             };
 
@@ -593,7 +594,11 @@ struct Hysteria2InboundDatagram {
     rx: mpsc::Receiver<HysUdpPacket>,
     conn: Connection,
     session_id: u32,
+    /// Remote address of the QUIC client (source of all packets in this
+    /// session).
     src_addr: SocketAddr,
+    /// Authenticated user name for this session (if any).
+    inbound_user: Option<String>,
     sessions: Arc<Mutex<HashMap<u32, mpsc::Sender<HysUdpPacket>>>>,
 }
 
@@ -626,9 +631,9 @@ impl Stream for Hysteria2InboundDatagram {
         match self.rx.poll_recv(cx) {
             Poll::Ready(Some(pkt)) => Poll::Ready(Some(UdpPacket {
                 data: pkt.data,
-                src_addr: pkt.addr.clone(),
+                src_addr: SocksAddr::Ip(self.src_addr),
                 dst_addr: pkt.addr,
-                inbound_user: None,
+                inbound_user: self.inbound_user.clone(),
             })),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
