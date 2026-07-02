@@ -2,6 +2,11 @@ use crate::common::utils::default_bool_true;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
+#[cfg(feature = "shadowquic")]
+use std::hash::Hash;
+
+#[cfg(feature = "shadowquic")]
+use shadowquic::config::CongestionControl as SQCongestionControl;
 
 use super::config::BindAddress;
 
@@ -13,6 +18,23 @@ use super::config::BindAddress;
 pub struct InboundUser {
     pub name: String,
     pub password: String,
+}
+
+#[cfg(feature = "shadowquic")]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct ShadowQuicInboundUser {
+    pub username: String,
+    pub password: String,
+}
+
+#[cfg(feature = "shadowquic")]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct ShadowQuicJlsUpstream {
+    pub addr: String,
+    #[serde(default)]
+    pub rate_limit: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -98,6 +120,50 @@ pub enum InboundOpts {
         #[serde(default)]
         fallback: Option<String>,
     },
+    #[cfg(feature = "shadowquic")]
+    #[serde(alias = "shadowquic")]
+    ShadowQuic {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        #[serde(default)]
+        username: Option<String>,
+        #[serde(default)]
+        password: Option<String>,
+        #[serde(default)]
+        users: Vec<ShadowQuicInboundUser>,
+        #[serde(default)]
+        server_name: Option<String>,
+        jls_upstream: ShadowQuicJlsUpstream,
+        #[serde(default)]
+        alpn: Option<Vec<String>>,
+        #[serde(default)]
+        zero_rtt: Option<bool>,
+        #[serde(default)]
+        congestion_control: Option<SQCongestionControl>,
+        #[serde(default)]
+        initial_mtu: Option<u16>,
+        #[serde(default)]
+        min_mtu: Option<u16>,
+        #[serde(default)]
+        gso: Option<bool>,
+        #[serde(default)]
+        mtu_discovery: Option<bool>,
+        #[serde(default)]
+        blackhole_detection: Option<bool>,
+    },
+}
+
+#[cfg(feature = "shadowquic")]
+fn debug_eq<T: std::fmt::Debug>(a: &Option<T>, b: &Option<T>) -> bool {
+    format!("{a:?}") == format!("{b:?}")
+}
+
+#[cfg(feature = "shadowquic")]
+fn debug_hash<T: std::fmt::Debug, H: std::hash::Hasher>(
+    value: &Option<T>,
+    state: &mut H,
+) {
+    format!("{value:?}").hash(state);
 }
 
 /// Equality and hashing for `InboundOpts` intentionally exclude the `users`
@@ -194,6 +260,56 @@ impl PartialEq for InboundOpts {
                     ..
                 },
             ) => a == b && pa == pb && ca == cb && pka == pkb && fa == fb,
+            #[cfg(feature = "shadowquic")]
+            (
+                InboundOpts::ShadowQuic {
+                    common_opts: a,
+                    username: ua,
+                    password: pa,
+                    users: users_a,
+                    server_name: sna,
+                    jls_upstream: jlsa,
+                    alpn: alpna,
+                    zero_rtt: zra,
+                    congestion_control: cca,
+                    initial_mtu: ima,
+                    min_mtu: mma,
+                    gso: gsoa,
+                    mtu_discovery: mda,
+                    blackhole_detection: bha,
+                },
+                InboundOpts::ShadowQuic {
+                    common_opts: b,
+                    username: ub,
+                    password: pb,
+                    users: users_b,
+                    server_name: snb,
+                    jls_upstream: jlsb,
+                    alpn: alpnb,
+                    zero_rtt: zrb,
+                    congestion_control: ccb,
+                    initial_mtu: imb,
+                    min_mtu: mmb,
+                    gso: gsob,
+                    mtu_discovery: mdb,
+                    blackhole_detection: bhb,
+                },
+            ) => {
+                a == b
+                    && ua == ub
+                    && pa == pb
+                    && users_a == users_b
+                    && sna == snb
+                    && jlsa == jlsb
+                    && alpna == alpnb
+                    && zra == zrb
+                    && debug_eq(cca, ccb)
+                    && ima == imb
+                    && mma == mmb
+                    && gsoa == gsob
+                    && mda == mdb
+                    && bha == bhb
+            }
             _ => false,
         }
     }
@@ -259,6 +375,38 @@ impl std::hash::Hash for InboundOpts {
                 fallback.hash(state);
                 // `users` intentionally excluded — handled via watch channel
             }
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::ShadowQuic {
+                common_opts,
+                username,
+                password,
+                users,
+                server_name,
+                jls_upstream,
+                alpn,
+                zero_rtt,
+                congestion_control,
+                initial_mtu,
+                min_mtu,
+                gso,
+                mtu_discovery,
+                blackhole_detection,
+            } => {
+                common_opts.hash(state);
+                username.hash(state);
+                password.hash(state);
+                users.hash(state);
+                server_name.hash(state);
+                jls_upstream.hash(state);
+                alpn.hash(state);
+                zero_rtt.hash(state);
+                debug_hash(congestion_control, state);
+                initial_mtu.hash(state);
+                min_mtu.hash(state);
+                gso.hash(state);
+                mtu_discovery.hash(state);
+                blackhole_detection.hash(state);
+            }
         }
     }
 }
@@ -277,6 +425,8 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::ShadowQuic { common_opts, .. } => common_opts,
         }
     }
 
@@ -293,6 +443,8 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::ShadowQuic { common_opts, .. } => common_opts,
         }
     }
 
@@ -309,6 +461,8 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { .. } => "shadowsocks",
             InboundOpts::Anytls { .. } => "anytls",
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::ShadowQuic { .. } => "shadowquic",
         }
     }
 }

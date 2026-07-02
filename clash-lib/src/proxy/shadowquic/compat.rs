@@ -5,6 +5,7 @@ use futures::{Sink, SinkExt, Stream};
 use shadowquic::msgs::socks5::SocksAddr as SQAddr;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::PollSender;
+use tracing::warn;
 
 use crate::{
     common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
@@ -33,9 +34,10 @@ impl Sink<UdpPacket> for UdpSessionWrapper {
         self: std::pin::Pin<&mut Self>,
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
+        let dst = to_sq_socks_addr(item.dst_addr)?;
         self.get_mut()
             .s
-            .start_send_unpin((item.data.into(), to_sq_socks_addr(item.dst_addr)))
+            .start_send_unpin((item.data.into(), dst))
             .map_err(new_io_error)
     }
 
@@ -62,11 +64,22 @@ impl Stream for UdpSessionWrapper {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         self.r.poll_recv(cx).map(|x| {
-            x.map(|x| UdpPacket {
-                data: x.0.into(),
-                src_addr: to_clash_socks_addr(x.1),
-                dst_addr: self.src_addr.clone(),
-                inbound_user: None,
+            x.and_then(|x| {
+                let src_addr = match to_clash_socks_addr(x.1) {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        warn!(
+                            "shadowquic outbound dropped UDP packet with invalid source: {e}"
+                        );
+                        return None;
+                    }
+                };
+                Some(UdpPacket {
+                    data: x.0.into(),
+                    src_addr,
+                    dst_addr: self.src_addr.clone(),
+                    inbound_user: None,
+                })
             })
         })
     }

@@ -1,12 +1,15 @@
 use std::{
     fs::{self, metadata},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
+use notify::{
+    Event, EventKind, RecursiveMode, Watcher, event::ModifyKind, recommended_watcher,
+};
 use tokio::sync::RwLock;
 use tracing::{info, trace, warn};
 
@@ -23,13 +26,14 @@ struct Inner {
 
 pub struct Fetcher<U, P> {
     name: String,
-    interval: Duration,
+    interval: Option<Duration>,
     vehicle: ThreadSafeProviderVehicle,
-    ticker_interval: Duration,
     inner: Arc<RwLock<Inner>>,
     parser: Arc<P>,
     pub on_update: Option<Arc<U>>,
 }
+
+const FILE_WATCH_DEBOUNCE_DELAY: Duration = Duration::from_millis(10);
 
 impl<T, U, P> Fetcher<U, P>
 where
@@ -39,7 +43,7 @@ where
 {
     pub fn new(
         name: String,
-        interval: Duration,
+        interval: Option<Duration>,
         vehicle: ThreadSafeProviderVehicle,
         parser: P,
         on_update: Option<U>,
@@ -48,7 +52,6 @@ where
             name,
             interval,
             vehicle,
-            ticker_interval: interval,
             inner: Arc::new(tokio::sync::RwLock::new(Inner {
                 updated_at: SystemTime::UNIX_EPOCH,
                 hash: [0; 16],
@@ -84,10 +87,12 @@ where
                 let content = fs::read(&vehicle_path)?;
                 is_local = true;
                 inner.updated_at = meta.modified()?;
-                immediately_update = SystemTime::now()
-                    .duration_since(inner.updated_at)
-                    .expect("wrong system clock")
-                    > self.interval;
+                immediately_update = self.interval.is_some_and(|interval| {
+                    SystemTime::now()
+                        .duration_since(inner.updated_at)
+                        .expect("wrong system clock")
+                        > interval
+                });
                 content
             }
             Err(_) => self.vehicle.read().await?,
@@ -122,12 +127,15 @@ where
 
         drop(inner);
 
-        if !self.ticker_interval.is_zero() {
-            self.pull_loop(
-                immediately_update,
-                tokio::time::interval(self.ticker_interval),
-            )
-            .await;
+        match (self.vehicle_type(), self.interval) {
+            (ProviderVehicleType::File, None) => {
+                self.watch_loop().await;
+            }
+            (_, Some(interval)) if !interval.is_zero() => {
+                self.pull_loop(immediately_update, tokio::time::interval(interval))
+                    .await;
+            }
+            _ => {}
         }
 
         Ok(items)
@@ -138,6 +146,7 @@ where
             self.inner.clone(),
             self.vehicle.clone(),
             self.parser.clone(),
+            true,
         )
         .await
     }
@@ -146,6 +155,7 @@ where
         inner: Arc<RwLock<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
         parser: Arc<P>,
+        touch_on_same: bool,
     ) -> anyhow::Result<(T, bool)> {
         let mut this = inner.write().await;
         let content = vehicle.read().await?;
@@ -158,7 +168,9 @@ where
 
         if hash == this.hash {
             this.updated_at = now;
-            filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
+            if touch_on_same {
+                filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
+            }
             return Ok((proxies, true));
         }
 
@@ -208,16 +220,17 @@ where
                 trace!("fetcher {} tick", &name);
 
                 let update = || async move {
-                    let (elm, same) =
-                        match Fetcher::<U, P>::update_inner(inner, vehicle, parser)
-                            .await
-                        {
-                            Ok((elm, same)) => (elm, same),
-                            Err(e) => {
-                                warn!("{} update failed: {}", &name, e);
-                                return;
-                            }
-                        };
+                    let (elm, same) = match Fetcher::<U, P>::update_inner(
+                        inner, vehicle, parser, true,
+                    )
+                    .await
+                    {
+                        Ok((elm, same)) => (elm, same),
+                        Err(e) => {
+                            warn!("{} update failed: {}", &name, e);
+                            return;
+                        }
+                    };
 
                     if same {
                         trace!("fetcher {} no update", &name);
@@ -242,6 +255,133 @@ where
 
         self.inner.write().await.thread_handle = thread_handle;
     }
+
+    async fn watch_loop(&self) {
+        let inner = self.inner.clone();
+        let vehicle = self.vehicle.clone();
+        let parser = self.parser.clone();
+        let on_update = self.on_update.clone();
+        let name = self.name.clone();
+        let watch_path = PathBuf::from(self.vehicle.path());
+
+        let thread_handle = Some(tokio::spawn(async move {
+            let parent = watch_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| PathBuf::from("."));
+
+            let (tx, mut rx) =
+                tokio::sync::mpsc::unbounded_channel::<notify::Result<Event>>();
+            let mut watcher = match recommended_watcher(move |res| {
+                let _ = tx.send(res);
+            }) {
+                Ok(watcher) => watcher,
+                Err(e) => {
+                    warn!("fetcher {} file watcher failed to start: {}", name, e);
+                    return;
+                }
+            };
+
+            if let Err(e) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
+                warn!(
+                    "fetcher {} failed to watch {}: {}",
+                    name,
+                    parent.display(),
+                    e
+                );
+                return;
+            }
+
+            info!(
+                "fetcher {} watching {} for file changes",
+                name,
+                watch_path.display()
+            );
+
+            while let Some(event) = rx.recv().await {
+                match event {
+                    Ok(event) if event_touches_path(&event, &watch_path) => {
+                        tokio::time::sleep(FILE_WATCH_DEBOUNCE_DELAY).await;
+                        while matches!(
+                            rx.try_recv(),
+                            Ok(Ok(ref event))
+                                if event_touches_path(event, &watch_path)
+                        ) {}
+
+                        let inner = inner.clone();
+                        let vehicle = vehicle.clone();
+                        let parser = parser.clone();
+                        let on_update = on_update.clone();
+                        let name = name.clone();
+
+                        let (elm, same) = match Fetcher::<U, P>::update_inner(
+                            inner, vehicle, parser, false,
+                        )
+                        .await
+                        {
+                            Ok((elm, same)) => (elm, same),
+                            Err(e) => {
+                                warn!("{} update failed: {}", &name, e);
+                                continue;
+                            }
+                        };
+
+                        if same {
+                            trace!("fetcher {} no update", &name);
+                            continue;
+                        }
+
+                        if let Some(on_update) = on_update {
+                            info!("fetcher {} updated", &name);
+                            on_update(elm).await;
+                        }
+                    }
+                    Ok(event) => {
+                        trace!("fetcher {} ignored file event: {:?}", name, event);
+                    }
+                    Err(e) => {
+                        warn!("fetcher {} file watcher event failed: {}", name, e);
+                    }
+                }
+            }
+        }));
+
+        self.inner.write().await.thread_handle = thread_handle;
+    }
+}
+
+fn event_touches_path(event: &Event, target: &Path) -> bool {
+    if !is_reload_event(event.kind) {
+        return false;
+    }
+
+    event
+        .paths
+        .iter()
+        .any(|path| same_watched_path(path, target))
+}
+
+fn is_reload_event(kind: EventKind) -> bool {
+    kind.is_create()
+        || kind.is_remove()
+        || matches!(
+            kind,
+            EventKind::Modify(
+                ModifyKind::Any
+                    | ModifyKind::Data(_)
+                    | ModifyKind::Metadata(_)
+                    | ModifyKind::Name(_)
+                    | ModifyKind::Other
+            )
+        )
+}
+
+fn same_watched_path(path: &Path, target: &Path) -> bool {
+    if path == target {
+        return true;
+    }
+
+    path.file_name() == target.file_name() && path.parent() == target.parent()
 }
 
 #[cfg(test)]
@@ -249,10 +389,10 @@ mod tests {
     use std::{path::Path, sync::Arc, time::Duration};
 
     use futures::future::BoxFuture;
-    use tokio::time::sleep;
+    use tokio::time::{sleep, timeout};
 
     use crate::app::remote_content_manager::providers::{
-        MockProviderVehicle, ProviderVehicleType,
+        MockProviderVehicle, ProviderVehicleType, file_vehicle,
     };
 
     use super::Fetcher;
@@ -295,7 +435,7 @@ mod tests {
 
         let mut f = Fetcher::new(
             "test_fetcher".to_string(),
-            Duration::from_secs(1),
+            Some(Duration::from_secs(1)),
             Arc::new(mock_vehicle),
             parser,
             Some(updater),
@@ -318,5 +458,48 @@ mod tests {
         assert!(parsed.len() > 5);
         assert_eq!(parsed[0], vec![1, 2, 3]);
         assert_eq!(parsed[1], vec![4, 5, 6]);
+    }
+
+    #[tokio::test]
+    async fn test_file_fetcher_watches_without_interval() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("rules.yaml");
+        std::fs::write(&file_path, b"payload-one").unwrap();
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(8);
+        let parser = move |i: &[u8]| -> anyhow::Result<String> {
+            Ok(std::str::from_utf8(i)?.to_owned())
+        };
+        let updater = move |input: String| -> BoxFuture<'static, ()> {
+            let tx = tx.clone();
+            Box::pin(async move {
+                tx.send(input).await.unwrap();
+            })
+        };
+
+        let mut f = Fetcher::new(
+            "watch_fetcher".to_string(),
+            None,
+            Arc::new(file_vehicle::Vehicle::new(file_path.to_str().unwrap())),
+            parser,
+            Some(updater),
+        );
+
+        let initial = f.initial().await.unwrap();
+        assert_eq!(initial, "payload-one");
+
+        sleep(Duration::from_millis(100)).await;
+
+        let temp_path = file_path.with_file_name("rules.yaml.tmp");
+        std::fs::write(&temp_path, b"payload-two").unwrap();
+        std::fs::rename(&temp_path, &file_path).unwrap();
+
+        let updated = timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        f.destroy().await;
+
+        assert_eq!(updated, "payload-two");
     }
 }
