@@ -1,5 +1,5 @@
 use aes::cipher::KeyIvInit;
-use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
+use aes_gcm::{AeadInOut as _, KeyInit};
 use anyhow::{Ok, anyhow};
 
 pub fn aes_cfb_encrypt(
@@ -69,16 +69,20 @@ pub fn aes_gcm_encrypt(
     match key.len() {
         16 => {
             let cipher = aes_gcm::Aes128Gcm::new_from_slice(key)?;
+            let nonce = aes_gcm::aead::Nonce::<aes_gcm::Aes128Gcm>::try_from(nonce)
+                .expect("invalid nonce length");
             cipher.encrypt_in_place(
-                nonce.into(),
+                &nonce,
                 associated_data.unwrap_or_default(),
                 &mut buffer,
             )?;
         }
         32 => {
             let cipher = aes_gcm::Aes256Gcm::new_from_slice(key)?;
+            let nonce = aes_gcm::aead::Nonce::<aes_gcm::Aes256Gcm>::try_from(nonce)
+                .expect("invalid nonce length");
             cipher.encrypt_in_place(
-                nonce.into(),
+                &nonce,
                 associated_data.unwrap_or_default(),
                 &mut buffer,
             )?;
@@ -99,16 +103,20 @@ pub fn aes_gcm_decrypt(
     match key.len() {
         16 => {
             let cipher = aes_gcm::Aes128Gcm::new_from_slice(key)?;
+            let nonce = aes_gcm::aead::Nonce::<aes_gcm::Aes128Gcm>::try_from(nonce)
+                .expect("invalid nonce length");
             cipher.decrypt_in_place(
-                nonce.into(),
+                &nonce,
                 associated_data.unwrap_or_default(),
                 &mut buffer,
             )?;
         }
         32 => {
             let cipher = aes_gcm::Aes256Gcm::new_from_slice(key)?;
+            let nonce = aes_gcm::aead::Nonce::<aes_gcm::Aes256Gcm>::try_from(nonce)
+                .expect("invalid nonce length");
             cipher.decrypt_in_place(
-                nonce.into(),
+                &nonce,
                 associated_data.unwrap_or_default(),
                 &mut buffer,
             )?;
@@ -119,17 +127,114 @@ pub fn aes_gcm_decrypt(
     Ok(buffer)
 }
 
-pub trait AeadCipherHelper: AeadInPlace {
+pub trait AeadCipherHelper {
     fn new_with_slice(key: &[u8]) -> Self;
     /// it's up to the caller to ensure that the buffer is large enough
-    /// i.e. buffer.len() >= plaintext.len() + Self::TagSize::to_usize()
+    /// i.e. buffer.len() >= plaintext.len() + TagSize
+    fn encrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    );
+
+    fn decrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<(), aes_gcm::Error>;
+}
+
+impl AeadCipherHelper for aes_gcm::Aes128Gcm {
+    fn new_with_slice(key: &[u8]) -> Self {
+        aes_gcm::Aes128Gcm::new_from_slice(key).expect("invalid key length")
+    }
+
     fn encrypt_in_place_with_slice(
         &self,
         nonce: &[u8],
         aad: &[u8],
         buffer: &mut [u8],
     ) {
-        let tag_pos = buffer.len() - Self::TagSize::to_usize();
+        let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
+        let tag_pos = buffer.len() - 16;
+        let (msg, tag) = buffer.split_at_mut(tag_pos);
+        let x = self
+            .encrypt_inout_detached(&nonce, aad, msg.into())
+            .expect("encryption failure!");
+        tag.copy_from_slice(x.as_slice());
+    }
+
+    fn decrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<(), aes_gcm::Error> {
+        let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
+        let tag_pos = buffer.len() - 16;
+        let (msg, tag) = buffer.split_at_mut(tag_pos);
+        let tag =
+            aes_gcm::aead::Tag::<Self>::try_from(&*tag).expect("invalid tag length");
+        self.decrypt_inout_detached(&nonce, aad, msg.into(), &tag)
+    }
+}
+
+impl AeadCipherHelper for aes_gcm::Aes256Gcm {
+    fn new_with_slice(key: &[u8]) -> Self {
+        aes_gcm::Aes256Gcm::new_from_slice(key).expect("invalid key length")
+    }
+
+    fn encrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) {
+        let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
+        let tag_pos = buffer.len() - 16;
+        let (msg, tag) = buffer.split_at_mut(tag_pos);
+        let x = self
+            .encrypt_inout_detached(&nonce, aad, msg.into())
+            .expect("encryption failure!");
+        tag.copy_from_slice(x.as_slice());
+    }
+
+    fn decrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<(), aes_gcm::Error> {
+        let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
+        let tag_pos = buffer.len() - 16;
+        let (msg, tag) = buffer.split_at_mut(tag_pos);
+        let tag =
+            aes_gcm::aead::Tag::<Self>::try_from(&*tag).expect("invalid tag length");
+        self.decrypt_inout_detached(&nonce, aad, msg.into(), &tag)
+    }
+}
+
+impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
+    fn new_with_slice(key: &[u8]) -> Self {
+        use chacha20poly1305::KeyInit as _;
+        chacha20poly1305::ChaCha20Poly1305::new_from_slice(key)
+            .expect("invalid key length")
+    }
+
+    fn encrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) {
+        use chacha20poly1305::aead::AeadInPlace as _;
+        let tag_pos = buffer.len() - 16;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
             .encrypt_in_place_detached(nonce.into(), aad, msg)
@@ -143,32 +248,16 @@ pub trait AeadCipherHelper: AeadInPlace {
         aad: &[u8],
         buffer: &mut [u8],
     ) -> Result<(), aes_gcm::Error> {
-        let tag_pos = buffer.len() - Self::TagSize::to_usize();
+        use chacha20poly1305::aead::AeadInPlace as _;
+        let tag_pos = buffer.len() - 16;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         self.decrypt_in_place_detached(
             nonce.into(),
             aad,
             msg,
-            aes_gcm::aead::Tag::<Self>::from_slice(tag),
+            chacha20poly1305::aead::Tag::<Self>::from_slice(tag),
         )
-    }
-}
-
-impl AeadCipherHelper for aes_gcm::Aes128Gcm {
-    fn new_with_slice(key: &[u8]) -> Self {
-        aes_gcm::Aes128Gcm::new(key.into())
-    }
-}
-
-impl AeadCipherHelper for aes_gcm::Aes256Gcm {
-    fn new_with_slice(key: &[u8]) -> Self {
-        aes_gcm::Aes256Gcm::new(key.into())
-    }
-}
-
-impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
-    fn new_with_slice(key: &[u8]) -> Self {
-        chacha20poly1305::ChaCha20Poly1305::new(key.into())
+        .map_err(|_| aes_gcm::Error)
     }
 }
 #[cfg(test)]
