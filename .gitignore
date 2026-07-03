@@ -44,4 +44,3 @@ benchmark-comment.md
 !bench/baseline-*.json
 __pycache__/
 .claude
-target/

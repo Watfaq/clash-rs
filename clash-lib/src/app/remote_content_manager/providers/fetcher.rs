@@ -33,7 +33,8 @@ pub struct Fetcher<U, P> {
     pub on_update: Option<Arc<U>>,
 }
 
-const FILE_WATCH_DEBOUNCE_DELAY: Duration = Duration::from_millis(10);
+const FILE_WATCH_DEBOUNCE_DELAY: Duration = Duration::from_millis(150);
+const FILE_WATCH_FALLBACK_INTERVAL: Duration = Duration::from_secs(60);
 
 impl<T, U, P> Fetcher<U, P>
 where
@@ -129,7 +130,18 @@ where
 
         match (self.vehicle_type(), self.interval) {
             (ProviderVehicleType::File, None) => {
-                self.watch_loop().await;
+                if !self.watch_loop().await {
+                    warn!(
+                        "fetcher {} falling back to periodic polling every {} seconds",
+                        self.name,
+                        FILE_WATCH_FALLBACK_INTERVAL.as_secs()
+                    );
+                    self.pull_loop(
+                        immediately_update,
+                        tokio::time::interval(FILE_WATCH_FALLBACK_INTERVAL),
+                    )
+                    .await;
+                }
             }
             (_, Some(interval)) if !interval.is_zero() => {
                 self.pull_loop(immediately_update, tokio::time::interval(interval))
@@ -256,41 +268,42 @@ where
         self.inner.write().await.thread_handle = thread_handle;
     }
 
-    async fn watch_loop(&self) {
+    async fn watch_loop(&self) -> bool {
         let inner = self.inner.clone();
         let vehicle = self.vehicle.clone();
         let parser = self.parser.clone();
         let on_update = self.on_update.clone();
         let name = self.name.clone();
         let watch_path = PathBuf::from(self.vehicle.path());
+        let parent = watch_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        let (tx, mut rx) =
+            tokio::sync::mpsc::unbounded_channel::<notify::Result<Event>>();
+        let mut watcher = match recommended_watcher(move |res| {
+            let _ = tx.send(res);
+        }) {
+            Ok(watcher) => watcher,
+            Err(e) => {
+                warn!("fetcher {} file watcher failed to start: {}", name, e);
+                return false;
+            }
+        };
+
+        if let Err(e) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
+            warn!(
+                "fetcher {} failed to watch {}: {}",
+                name,
+                parent.display(),
+                e
+            );
+            return false;
+        }
 
         let thread_handle = Some(tokio::spawn(async move {
-            let parent = watch_path
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| PathBuf::from("."));
-
-            let (tx, mut rx) =
-                tokio::sync::mpsc::unbounded_channel::<notify::Result<Event>>();
-            let mut watcher = match recommended_watcher(move |res| {
-                let _ = tx.send(res);
-            }) {
-                Ok(watcher) => watcher,
-                Err(e) => {
-                    warn!("fetcher {} file watcher failed to start: {}", name, e);
-                    return;
-                }
-            };
-
-            if let Err(e) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
-                warn!(
-                    "fetcher {} failed to watch {}: {}",
-                    name,
-                    parent.display(),
-                    e
-                );
-                return;
-            }
+            let _watcher = watcher;
 
             info!(
                 "fetcher {} watching {} for file changes",
@@ -302,11 +315,24 @@ where
                 match event {
                     Ok(event) if event_touches_path(&event, &watch_path) => {
                         tokio::time::sleep(FILE_WATCH_DEBOUNCE_DELAY).await;
-                        while matches!(
-                            rx.try_recv(),
-                            Ok(Ok(ref event))
-                                if event_touches_path(event, &watch_path)
-                        ) {}
+                        while let Ok(event) = rx.try_recv() {
+                            match event {
+                                Ok(event)
+                                    if event_touches_path(&event, &watch_path) => {}
+                                Ok(event) => {
+                                    trace!(
+                                        "fetcher {} ignored file event: {:?}",
+                                        name, event
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "fetcher {} file watcher event failed: {}",
+                                        name, e
+                                    );
+                                }
+                            }
+                        }
 
                         let inner = inner.clone();
                         let vehicle = vehicle.clone();
@@ -347,6 +373,7 @@ where
         }));
 
         self.inner.write().await.thread_handle = thread_handle;
+        true
     }
 }
 

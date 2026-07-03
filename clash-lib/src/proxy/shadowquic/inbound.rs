@@ -251,7 +251,16 @@ where
         let (send, mut recv, id) = conn.accept_bi().await?;
         debug!(stream_id = id, "shadowquic inbound bistream accepted");
 
-        let req = SQReq::decode(&mut recv).await?;
+        let req = match SQReq::decode(&mut recv).await {
+            Ok(req) => req,
+            Err(e) => {
+                warn!(
+                    stream_id = id,
+                    "shadowquic inbound failed to decode request: {e}"
+                );
+                continue;
+            }
+        };
         let dispatcher = dispatcher.clone();
         let state = state.clone();
         let conn = conn.clone();
@@ -695,25 +704,29 @@ impl Stream for ShadowQuicInboundDatagram {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        self.request_rx.poll_recv(cx).map(|item| {
-            item.and_then(|(data, dst)| {
-                let dst_addr = match to_clash_socks_addr(dst) {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        warn!(
-                            "shadowquic inbound dropped UDP packet with invalid destination: {e}"
-                        );
-                        return None;
-                    }
-                };
-                Some(UdpPacket {
-                    data: data.to_vec(),
-                    src_addr: SocksAddr::Ip(self.source),
-                    dst_addr,
-                    inbound_user: self.inbound_user.clone(),
-                })
-            })
-        })
+        loop {
+            match self.request_rx.poll_recv(cx) {
+                Poll::Ready(Some((data, dst))) => {
+                    let dst_addr = match to_clash_socks_addr(dst) {
+                        Ok(addr) => addr,
+                        Err(e) => {
+                            warn!(
+                                "shadowquic inbound dropped UDP packet with invalid destination: {e}"
+                            );
+                            continue;
+                        }
+                    };
+                    return Poll::Ready(Some(UdpPacket {
+                        data: data.to_vec(),
+                        src_addr: SocksAddr::Ip(self.source),
+                        dst_addr,
+                        inbound_user: self.inbound_user.clone(),
+                    }));
+                }
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
     }
 }
 

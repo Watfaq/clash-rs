@@ -63,24 +63,32 @@ impl Stream for UdpSessionWrapper {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        self.r.poll_recv(cx).map(|x| {
-            x.and_then(|x| {
-                let src_addr = match to_clash_socks_addr(x.1) {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        warn!(
-                            "shadowquic outbound dropped UDP packet with invalid source: {e}"
-                        );
-                        return None;
-                    }
-                };
-                Some(UdpPacket {
-                    data: x.0.into(),
-                    src_addr,
-                    dst_addr: self.src_addr.clone(),
-                    inbound_user: None,
-                })
-            })
-        })
+        loop {
+            match self.r.poll_recv(cx) {
+                std::task::Poll::Ready(Some((data, src))) => {
+                    let src_addr = match to_clash_socks_addr(src) {
+                        Ok(addr) => addr,
+                        Err(e) => {
+                            warn!(
+                                "shadowquic outbound dropped UDP packet with invalid source: {e}"
+                            );
+                            continue;
+                        }
+                    };
+                    return std::task::Poll::Ready(Some(UdpPacket {
+                        data: data.into(),
+                        src_addr,
+                        dst_addr: self.src_addr.clone(),
+                        inbound_user: None,
+                    }));
+                }
+                std::task::Poll::Ready(None) => {
+                    return std::task::Poll::Ready(None);
+                }
+                std::task::Poll::Pending => {
+                    return std::task::Poll::Pending;
+                }
+            }
+        }
     }
 }
