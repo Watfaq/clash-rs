@@ -1484,6 +1484,7 @@ dependencies = [
  "moka",
  "murmur3",
  "network-interface",
+ "notify",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
@@ -11746,7 +11747,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",

@@ -764,7 +764,8 @@ rule-providers:
   local-domain-rules:
     type: file
     path: ./rule-set.yaml
-    interval: 86400
+    # Omit interval to use file-system notifications; set interval for polling.
+    # Use interval: 0 to disable automatic reload and preserve load-once behavior.
     behavior: domain
     format: yaml                    # yaml (default) | text | mrs
 

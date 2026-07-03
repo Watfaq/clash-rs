@@ -131,6 +131,7 @@ cfb-mode = "0.9"
 const-fnv1a-hash = "1"
 
 filetime = "0.2"
+notify = "8"
 axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }

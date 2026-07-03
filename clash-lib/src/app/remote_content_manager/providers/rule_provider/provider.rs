@@ -239,9 +239,7 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = if let Some(interval) = interval
-            && let Some(vehicle) = vehicle
-        {
+        let fetcher = if let Some(vehicle) = vehicle {
             Some(Fetcher::new(
                 name.clone(),
                 interval,

@@ -219,7 +219,8 @@ impl ProxySetProvider {
             },
         );
 
-        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
+        let fetcher =
+            Fetcher::new(name, Some(interval), vehicle, parser, Some(updater));
         Ok(Self { fetcher, hc, inner })
     }
 }

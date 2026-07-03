@@ -57,7 +57,13 @@ impl InboundSetProvider {
         let updater: InboundUpdater = Box::new(move |opts| on_update(opts));
 
         Ok(Self {
-            fetcher: Fetcher::new(name, interval, vehicle, parser, Some(updater)),
+            fetcher: Fetcher::new(
+                name,
+                Some(interval),
+                vehicle,
+                parser,
+                Some(updater),
+            ),
         })
     }
 

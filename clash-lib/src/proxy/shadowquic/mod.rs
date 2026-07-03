@@ -13,6 +13,7 @@ use shadowquic::{
 use tokio::sync::{OnceCell, RwLock};
 use tokio_util::sync::PollSender;
 mod compat;
+pub mod inbound;
 use crate::{
     app::{
         dispatcher::{
@@ -154,7 +155,7 @@ impl OutboundHandler for Handler {
         let conn = self.prepare_conn(sess, resolver).await?;
         let conn = shadowquic::squic::outbound::connect_tcp(
             &conn,
-            to_sq_socks_addr(sess.destination.clone()),
+            to_sq_socks_addr(sess.destination.clone())?,
         )
         .await
         .map_err(|x| {
@@ -231,22 +232,32 @@ impl PlainProxyAPIResponse for Handler {
     }
 }
 
-fn to_sq_socks_addr(x: SocksAddr) -> SQAddr {
+fn to_sq_socks_addr(x: SocksAddr) -> io::Result<SQAddr> {
     match x {
-        SocksAddr::Ip(socket_addr) => SQAddr::from(socket_addr),
-        SocksAddr::Domain(host, port) => SQAddr::from_domain(host, port),
+        SocksAddr::Ip(socket_addr) => Ok(SQAddr::from(socket_addr)),
+        SocksAddr::Domain(host, port) => {
+            if host.len() > u8::MAX as usize {
+                return Err(new_io_error(format!(
+                    "shadowquic domain name too long: {host}"
+                )));
+            }
+            Ok(SQAddr::from_domain(host, port))
+        }
     }
 }
-fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
+fn to_clash_socks_addr(x: SQAddr) -> io::Result<SocksAddr> {
     match x.addr {
         shadowquic::msgs::socks5::AddrOrDomain::V4(ip) => {
-            SocksAddr::Ip(SocketAddr::new(ip.into(), x.port))
+            Ok(SocksAddr::Ip(SocketAddr::new(ip.into(), x.port)))
         }
         shadowquic::msgs::socks5::AddrOrDomain::V6(ip) => {
-            SocksAddr::Ip(SocketAddr::new(ip.into(), x.port))
+            Ok(SocksAddr::Ip(SocketAddr::new(ip.into(), x.port)))
         }
         shadowquic::msgs::socks5::AddrOrDomain::Domain(domain) => {
-            SocksAddr::Domain(String::from_utf8(domain.contents).unwrap(), x.port)
+            let domain = String::from_utf8(domain.contents).map_err(|_| {
+                new_io_error("shadowquic received invalid UTF-8 domain name")
+            })?;
+            Ok(SocksAddr::Domain(domain, x.port))
         }
     }
 }

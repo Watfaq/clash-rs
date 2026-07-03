@@ -20,6 +20,10 @@ use crate::Dispatcher;
 use futures::future::BoxFuture;
 use tracing::{error, info, warn};
 
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic::inbound::{
+    InboundOptions as ShadowQuicInboundOptions, ShadowQuicInbound,
+};
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
 use std::sync::Arc;
@@ -224,5 +228,46 @@ fn build_handler(
                 }
             }
         }
+        #[cfg(feature = "shadowquic")]
+        InboundOpts::ShadowQuic {
+            common_opts,
+            username,
+            password,
+            users,
+            server_name,
+            jls_upstream,
+            alpn,
+            zero_rtt,
+            congestion_control,
+            initial_mtu,
+            min_mtu,
+            gso,
+            mtu_discovery,
+            blackhole_detection,
+        } => match ShadowQuicInbound::new(ShadowQuicInboundOptions {
+            addr: (common_opts.listen.0, common_opts.port).into(),
+            allow_lan: common_opts.allow_lan,
+            dispatcher,
+            fw_mark: common_opts.fw_mark,
+            username: username.clone(),
+            password: password.clone(),
+            users: users.clone(),
+            server_name: server_name.clone(),
+            jls_upstream: jls_upstream.clone(),
+            alpn: alpn.clone(),
+            zero_rtt: *zero_rtt,
+            congestion_control: congestion_control.clone(),
+            initial_mtu: *initial_mtu,
+            min_mtu: *min_mtu,
+            gso: *gso,
+            mtu_discovery: *mtu_discovery,
+            blackhole_detection: *blackhole_detection,
+        }) {
+            Ok(h) => Some(Arc::new(h)),
+            Err(e) => {
+                warn!("shadowquic inbound failed to init: {e}");
+                None
+            }
+        },
     }
 }

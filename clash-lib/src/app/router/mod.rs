@@ -239,7 +239,9 @@ impl Router {
                         name.clone(),
                         file.behavior,
                         format,
-                        Some(Duration::from_secs(file.interval.unwrap_or_default())),
+                        // None enables file-system notifications; Some(0)
+                        // preserves load-once behavior.
+                        file.interval.map(Duration::from_secs),
                         Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
