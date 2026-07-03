@@ -351,8 +351,7 @@ impl Provider for RuleProviderImpl {
             if self.watch {
                 fetcher.start_watch().await.map_err(|e| {
                     std::io::Error::other(format!(
-                        "failed to start file watcher for rule provider '{}': \
-                         {}",
+                        "failed to start file watcher for rule provider '{}': {}",
                         self.name(),
                         e
                     ))
@@ -630,9 +629,7 @@ mod tests {
         );
 
         // Overwrite the file — the watcher should pick this up.
-        tmp.as_file_mut()
-            .set_len(0)
-            .expect("truncate tmp file");
+        tmp.as_file_mut().set_len(0).expect("truncate tmp file");
         tmp.as_file_mut().seek(std::io::SeekFrom::Start(0)).unwrap();
         write!(tmp.as_file_mut(), "payload:\n  - google.com\n").unwrap();
         tmp.as_file_mut().sync_all().unwrap();
