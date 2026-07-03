@@ -2,6 +2,9 @@ use aes::cipher::KeyIvInit;
 use aes_gcm::{AeadInOut as _, KeyInit};
 use anyhow::{Ok, anyhow};
 
+/// GCM and Poly1305 authentication tag size in bytes
+const AEAD_TAG_SIZE: usize = 16;
+
 pub fn aes_cfb_encrypt(
     key: &[u8],
     iv: &[u8],
@@ -159,7 +162,7 @@ impl AeadCipherHelper for aes_gcm::Aes128Gcm {
     ) {
         let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
             .expect("invalid nonce length");
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
             .encrypt_inout_detached(&nonce, aad, msg.into())
@@ -175,7 +178,7 @@ impl AeadCipherHelper for aes_gcm::Aes128Gcm {
     ) -> Result<(), aes_gcm::Error> {
         let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
             .expect("invalid nonce length");
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let tag =
             aes_gcm::aead::Tag::<Self>::try_from(&*tag).expect("invalid tag length");
@@ -196,7 +199,7 @@ impl AeadCipherHelper for aes_gcm::Aes256Gcm {
     ) {
         let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
             .expect("invalid nonce length");
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
             .encrypt_inout_detached(&nonce, aad, msg.into())
@@ -212,7 +215,7 @@ impl AeadCipherHelper for aes_gcm::Aes256Gcm {
     ) -> Result<(), aes_gcm::Error> {
         let nonce = aes_gcm::aead::Nonce::<Self>::try_from(nonce)
             .expect("invalid nonce length");
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let tag =
             aes_gcm::aead::Tag::<Self>::try_from(&*tag).expect("invalid tag length");
@@ -234,7 +237,7 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
         buffer: &mut [u8],
     ) {
         use chacha20poly1305::aead::AeadInPlace as _;
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
             .encrypt_in_place_detached(nonce.into(), aad, msg)
@@ -249,7 +252,7 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
         buffer: &mut [u8],
     ) -> Result<(), aes_gcm::Error> {
         use chacha20poly1305::aead::AeadInPlace as _;
-        let tag_pos = buffer.len() - 16;
+        let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         self.decrypt_in_place_detached(
             nonce.into(),
