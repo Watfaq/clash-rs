@@ -1,6 +1,6 @@
 use std::{
     fs::{self, metadata},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -8,6 +8,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, trace, warn};
 
 use crate::common::utils;
@@ -17,9 +18,6 @@ use super::{ProviderVehicleType, ThreadSafeProviderVehicle};
 struct Inner {
     updated_at: SystemTime,
     hash: [u8; 16],
-
-    thread_handle: Option<tokio::task::JoinHandle<()>>,
-    watcher_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 pub struct Fetcher<U, P> {
@@ -30,6 +28,15 @@ pub struct Fetcher<U, P> {
     inner: Arc<RwLock<Inner>>,
     parser: Arc<P>,
     pub on_update: Option<Arc<U>>,
+    /// Cancels the background polling and file-watch tasks when the fetcher is
+    /// dropped, so a config reload does not leak tasks or OS watches.
+    cancel_token: CancellationToken,
+}
+
+impl<U, P> Drop for Fetcher<U, P> {
+    fn drop(&mut self) {
+        self.cancel_token.cancel();
+    }
 }
 
 impl<T, U, P> Fetcher<U, P>
@@ -53,11 +60,10 @@ where
             inner: Arc::new(tokio::sync::RwLock::new(Inner {
                 updated_at: SystemTime::UNIX_EPOCH,
                 hash: [0; 16],
-                thread_handle: None,
-                watcher_handle: None,
             })),
             parser: Arc::new(parser),
             on_update: on_update.map(|f| Arc::new(f)),
+            cancel_token: CancellationToken::new(),
         }
     }
 
@@ -160,7 +166,14 @@ where
 
         if hash == this.hash {
             this.updated_at = now;
-            filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
+            // Only refresh the mtime of a *cache* file (http vehicle) so the
+            // startup staleness check stays accurate. For a `File` vehicle the
+            // path is the user's own source file: touching its mtime is
+            // pointless and would re-trigger the file watcher in an endless
+            // read → touch → event loop.
+            if vehicle.typ() != ProviderVehicleType::File {
+                filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
+            }
             return Ok((proxies, true));
         }
 
@@ -183,107 +196,150 @@ where
 
     #[cfg(test)]
     pub async fn destroy(&mut self) {
-        let mut inner = self.inner.write().await;
-        if let Some(handle) = inner.thread_handle.take() {
-            handle.abort();
+        self.cancel_token.cancel();
+    }
+
+    /// Run one update cycle and, when the content changed, invoke `on_update`.
+    /// Shared by the polling loop and the file watcher so their reload
+    /// semantics can never diverge.
+    async fn run_update(
+        inner: Arc<RwLock<Inner>>,
+        vehicle: ThreadSafeProviderVehicle,
+        parser: Arc<P>,
+        on_update: Option<Arc<U>>,
+        name: &str,
+    ) {
+        let (elm, same) =
+            match Fetcher::<U, P>::update_inner(inner, vehicle, parser).await {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!("{} update failed: {}", name, e);
+                    return;
+                }
+            };
+
+        if same {
+            trace!("fetcher {} no update", name);
+            return;
         }
-        if let Some(handle) = inner.watcher_handle.take() {
-            handle.abort();
+
+        if let Some(on_update) = on_update {
+            info!("fetcher {} updated", name);
+            on_update(elm).await;
         }
     }
 
     /// Start a file-system event watcher for the provider's local file.
     ///
-    /// When the file is modified or recreated on disk the provider content is
-    /// reloaded immediately, regardless of any polling `interval`. A small
-    /// debounce delay (50 ms) is applied to coalesce rapid successive events.
+    /// When the file changes on disk the provider content is reloaded
+    /// immediately. The parent directory is watched (rather than the file
+    /// itself) so that atomic-save editors — which replace the file's inode via
+    /// write-temp-then-rename (vim, VS Code, `sed -i`) — keep working; events
+    /// are filtered down to the target file name. A short debounce coalesces
+    /// bursts of writes into a single reload.
     ///
     /// Only meaningful when the vehicle is of type `File`; for other vehicle
     /// types this is a no-op.
     pub async fn start_watch(&self) -> anyhow::Result<()> {
-        use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
+        use notify::{
+            EventKind, RecursiveMode, Watcher, event::ModifyKind,
+            recommended_watcher,
+        };
 
         if self.vehicle_type() != ProviderVehicleType::File {
             return Ok(());
         }
 
-        let path = self.vehicle.path().to_owned();
+        let file_path = PathBuf::from(self.vehicle.path());
+        // Watch the containing directory so the watch survives inode
+        // replacement; fall back to the file itself if it has no parent.
+        let watch_dir = file_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| file_path.clone());
+        let watch_name = file_path.file_name().map(ToOwned::to_owned);
+
         let inner = self.inner.clone();
         let vehicle = self.vehicle.clone();
         let parser = self.parser.clone();
         let on_update = self.on_update.clone();
         let name = self.name.clone();
+        let cancel_token = self.cancel_token.clone();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
 
         let mut watcher =
             recommended_watcher(move |result: notify::Result<notify::Event>| {
-                if let Ok(event) = result
-                    && matches!(
-                        event.kind,
-                        EventKind::Modify(_) | EventKind::Create(_)
-                    )
-                {
-                    let _ = tx.try_send(());
+                let Ok(event) = result else { return };
+                // Ignore metadata-only changes: they carry no new content and,
+                // for a self-touch, would otherwise feed the reload loop.
+                let relevant = matches!(
+                    event.kind,
+                    EventKind::Create(_)
+                        | EventKind::Modify(
+                            ModifyKind::Data(_) | ModifyKind::Name(_)
+                        )
+                        | EventKind::Remove(_)
+                );
+                if !relevant {
+                    return;
                 }
+                // Only react to events that concern our specific file.
+                if let Some(want) = &watch_name
+                    && !event.paths.iter().any(|p| p.file_name() == Some(want))
+                {
+                    return;
+                }
+                let _ = tx.try_send(());
             })
             .map_err(|e| {
-                anyhow::anyhow!("failed to create file watcher for {}: {}", path, e)
-            })?;
-
-        watcher
-            .watch(
-                std::path::Path::new(self.vehicle.path()),
-                RecursiveMode::NonRecursive,
-            )
-            .map_err(|e| {
                 anyhow::anyhow!(
-                    "failed to watch file {}: {}",
-                    self.vehicle.path(),
+                    "failed to create file watcher for {}: {}",
+                    file_path.display(),
                     e
                 )
             })?;
 
-        let handle = tokio::spawn(async move {
+        watcher
+            .watch(&watch_dir, RecursiveMode::NonRecursive)
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "failed to watch directory {}: {}",
+                    watch_dir.display(),
+                    e
+                )
+            })?;
+
+        tokio::spawn(async move {
             // The watcher must be kept alive inside the task so that the OS
             // kernel continues to deliver events.
             let _watcher = watcher;
 
-            while rx.recv().await.is_some() {
-                // Debounce: wait briefly and drain any queued events so that
-                // we trigger at most one reload per burst of writes.
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                while rx.try_recv().is_ok() {}
+            loop {
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    recv = rx.recv() => {
+                        if recv.is_none() {
+                            break;
+                        }
+                        // Debounce: wait briefly and drain queued events so a
+                        // burst of writes triggers at most one reload.
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        while rx.try_recv().is_ok() {}
 
-                let (elm, same) = match Fetcher::<U, P>::update_inner(
-                    inner.clone(),
-                    vehicle.clone(),
-                    parser.clone(),
-                )
-                .await
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("{} file watch update failed: {}", &name, e);
-                        continue;
+                        Fetcher::<U, P>::run_update(
+                            inner.clone(),
+                            vehicle.clone(),
+                            parser.clone(),
+                            on_update.clone(),
+                            &name,
+                        )
+                        .await;
                     }
-                };
-
-                if !same {
-                    if let Some(on_update) = &on_update {
-                        info!("fetcher {} updated via file watch", &name);
-                        on_update(elm).await;
-                    }
-                } else {
-                    trace!(
-                        "fetcher {} file changed but content is identical",
-                        &name
-                    );
                 }
             }
         });
-
-        self.inner.write().await.watcher_handle = Some(handle);
 
         Ok(())
     }
@@ -298,51 +354,30 @@ where
         let parser = self.parser.clone();
         let on_update = self.on_update.clone();
         let name = self.name.clone();
+        let cancel_token = self.cancel_token.clone();
         let fire_immediately = immediately_update;
 
-        let thread_handle = Some(tokio::spawn(async move {
+        tokio::spawn(async move {
+            let run = |()| {
+                Fetcher::<U, P>::run_update(
+                    inner.clone(),
+                    vehicle.clone(),
+                    parser.clone(),
+                    on_update.clone(),
+                    &name,
+                )
+            };
+
+            if fire_immediately {
+                run(()).await;
+            }
             loop {
-                let inner = inner.clone();
-                let vehicle = vehicle.clone();
-                let parser = parser.clone();
-                let name = name.clone();
-                let on_update = on_update.clone();
-                trace!("fetcher {} tick", &name);
-
-                let update = || async move {
-                    let (elm, same) =
-                        match Fetcher::<U, P>::update_inner(inner, vehicle, parser)
-                            .await
-                        {
-                            Ok((elm, same)) => (elm, same),
-                            Err(e) => {
-                                warn!("{} update failed: {}", &name, e);
-                                return;
-                            }
-                        };
-
-                    if same {
-                        trace!("fetcher {} no update", &name);
-                        return;
-                    }
-
-                    if let Some(on_update) = on_update {
-                        info!("fetcher {} updated", &name);
-                        on_update(elm).await;
-                    }
-                };
-
-                if fire_immediately {
-                    update().await;
-                    ticker.tick().await;
-                } else {
-                    ticker.tick().await;
-                    update().await;
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = ticker.tick() => run(()).await,
                 }
             }
-        }));
-
-        self.inner.write().await.thread_handle = thread_handle;
+        });
     }
 }
 

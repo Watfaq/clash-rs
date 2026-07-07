@@ -226,7 +226,7 @@ aws-lc-rs = { version = "1", default-features = false, optional = true }
 # tproxy
 etherparse = {version = "0.20", optional = true }
 tempfile = "3.27"
-notify = "6"
+notify = "8"
 
 [dev-dependencies]
 mockall = "0.15.0"

@@ -865,15 +865,10 @@ pub struct HttpRuleProviderDef {
 pub struct FileRuleProviderDef {
     /// Path to the rule set file, relative to the working directory.
     pub path: String,
-    /// Polling interval in seconds to detect file changes. `None` disables
-    /// polling.
+    /// Optional polling interval in seconds. Local files are already
+    /// live-reloaded via OS file-system events, so this is only an occasional
+    /// fallback; `None` disables polling.
     pub interval: Option<u64>,
-    /// Enable real-time file watching via OS file-system events. When `true`
-    /// the provider reloads the file immediately when it is modified on disk,
-    /// without waiting for the polling `interval`. Can be used together with
-    /// `interval` or as a standalone alternative. Defaults to `false`.
-    #[serde(default)]
-    pub watch: bool,
     /// How to interpret the rule entries: `domain`, `ipcidr`, or `classical`.
     pub behavior: RuleSetBehavior,
     /// Rule set file format. Defaults to `yaml` when absent.

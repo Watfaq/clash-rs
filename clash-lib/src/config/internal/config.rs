@@ -224,8 +224,6 @@ pub struct HttpRuleProvider {
 pub struct FileRuleProvider {
     pub path: String,
     pub interval: Option<u64>,
-    /// Enable real-time file watching via OS file-system events.
-    pub watch: bool,
     pub behavior: RuleSetBehavior,
     pub format: Option<RuleSetFormat>,
     #[serde(alias = "payload")]

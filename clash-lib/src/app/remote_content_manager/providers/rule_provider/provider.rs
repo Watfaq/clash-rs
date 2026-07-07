@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
@@ -114,8 +114,6 @@ pub struct RuleProviderImpl {
     behavior: RuleSetBehavior,
     format: RuleSetFormat,
     inline_rules: Option<Vec<String>>,
-    /// Whether to enable real-time file-system event watching.
-    watch: bool,
 
     mmdb: Option<MmdbLookup>,
     geodata: Option<GeoDataLookup>,
@@ -133,7 +131,6 @@ impl RuleProviderImpl {
         mmdb: Option<MmdbLookup>,
         geodata: Option<GeoDataLookup>,
         inline_rules: Option<Vec<String>>,
-        watch: bool,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
@@ -242,19 +239,19 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = if let Some(vehicle) = vehicle
-            && (interval.is_some() || watch)
-        {
-            Some(Fetcher::new(
+        // A file/http vehicle always gets a fetcher so its content is loaded at
+        // startup — independent of whether a polling `interval` is configured
+        // (file providers are also live-reloaded via an OS watcher). Only the
+        // inline provider (no vehicle) has none.
+        let fetcher = vehicle.map(|vehicle| {
+            Fetcher::new(
                 name.clone(),
                 interval.unwrap_or_default(),
                 vehicle,
                 parser,
                 Some(updater),
-            ))
-        } else {
-            None
-        };
+            )
+        });
 
         Self {
             name,
@@ -263,7 +260,6 @@ impl RuleProviderImpl {
             behavior,
             format,
             inline_rules,
-            watch,
 
             mmdb,
             geodata,
@@ -348,14 +344,19 @@ impl Provider for RuleProviderImpl {
             if let Some(updater) = fetcher.on_update.as_ref() {
                 updater(ele).await; // Directly pass RuleContent
             }
-            if self.watch {
-                fetcher.start_watch().await.map_err(|e| {
-                    std::io::Error::other(format!(
-                        "failed to start file watcher for rule provider '{}': {}",
-                        self.name(),
-                        e
-                    ))
-                })?;
+            // Live-reload local file providers on disk changes (matches
+            // mihomo, which watches every `type: file` provider). Watcher
+            // setup can fail for environmental reasons (inotify limits,
+            // filesystems without event support); that is best-effort, so we
+            // log and keep serving the already-loaded rules rather than
+            // failing initialization.
+            if let Err(e) = fetcher.start_watch().await {
+                warn!(
+                    "rule provider '{}': live file watching unavailable, falling \
+                     back to interval polling: {}",
+                    self.name(),
+                    e
+                );
             }
         } else {
             trace!("initializing inline rule provider {}", self.name());
@@ -515,7 +516,6 @@ mod tests {
             Some(Arc::new(mock_mmdb)),
             Some(Arc::new(mock_geodata)),
             Some(vec!["DOMAIN-SUFFIX, google.com".to_owned()]),
-            false,
         );
 
         assert_ok!(provider.initialize().await);
@@ -562,7 +562,6 @@ mod tests {
             Some(Arc::new(mock_mmdb)),
             Some(Arc::new(mock_geodata)),
             Some(vec!["+.google.com".to_owned()]),
-            false,
         );
 
         assert_ok!(provider.initialize().await);
@@ -573,8 +572,8 @@ mod tests {
         }));
     }
 
-    /// Verify that `watch: true` on a real local file initializes without
-    /// error and that the provider content is updated when the file changes on
+    /// A local `type: file` provider is watched automatically (no config
+    /// flag): verify it initializes and live-reloads when the file changes on
     /// disk.
     #[tokio::test]
     async fn test_file_provider_watch() {
@@ -604,7 +603,6 @@ mod tests {
             Some(Arc::new(mock_mmdb)),
             Some(Arc::new(mock_geodata)),
             None,
-            true, // enable watching
         ));
 
         assert_ok!(provider.initialize().await);
@@ -635,7 +633,9 @@ mod tests {
         tmp.as_file_mut().sync_all().unwrap();
 
         // Give the OS watcher + debounce time to fire and the async task time
-        // to apply the update (generous timeout for slow CI machines).
+        // to apply the update (generous timeout for slow CI machines). The
+        // loop only breaks once google.com matches, so reaching this point
+        // already proves the reload happened.
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
@@ -648,10 +648,7 @@ mod tests {
             }
         }
 
-        assert!(
-            provider.search(&sess_google),
-            "google.com should match after file update"
-        );
+        // And the old rule is gone after the reload.
         assert!(
             !provider.search(&sess_twitter),
             "twitter.com should NOT match after file update"

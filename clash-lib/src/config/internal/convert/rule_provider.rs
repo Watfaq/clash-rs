@@ -37,7 +37,6 @@ pub(super) fn convert(
                     RuleProviderDef::File(FileRuleProvider {
                         path: f.path,
                         interval: f.interval,
-                        watch: f.watch,
                         behavior: f.behavior,
                         format: f.format,
                         inline_rules: f.inline_rules,
