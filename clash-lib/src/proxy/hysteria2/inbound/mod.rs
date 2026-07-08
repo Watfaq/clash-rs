@@ -25,7 +25,7 @@ use quinn::{Connection, Endpoint, ServerConfig};
 use quinn_proto::crypto::rustls::QuicServerConfig;
 use tokio::sync::{Mutex, mpsc};
 use tokio_util::codec::{FramedRead, FramedWrite};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::{
     Dispatcher,
@@ -35,11 +35,17 @@ use crate::{
         datagram::UdpPacket,
         hysteria2::codec::{Hy2TcpReqCodec, Hy2TcpRespEncoder, Hy2TcpRespMsg},
         inbound::InboundHandlerTrait,
+        utils::ToCanonical,
     },
     session::{Network, Session, SocksAddr, Type},
 };
 
 use super::codec::{Defragger, Fragments, HysUdpPacket, padding};
+
+/// The `h3` server connection type over a Quinn transport. Held for the
+/// lifetime of a QUIC connection so its `Drop` (which closes the connection)
+/// does not fire until we are done proxying.
+type H3ServerConnection = h3::server::Connection<H3QuinnConnection, Bytes>;
 
 /// Build a QUIC `ServerConfig` (TLS + h3 ALPN) from optional PEM cert/key.
 ///
@@ -214,7 +220,11 @@ impl InboundHandlerTrait for Hysteria2Inbound {
                         }
                     };
 
-                    let src_addr = conn.remote_address();
+                    // Canonicalize so an IPv4-mapped IPv6 client (e.g.
+                    // ::ffff:127.0.0.1 on a dual-stack listener) compares equal
+                    // to the plain IPv4 local address, matching the other
+                    // inbounds' allow_lan handling.
+                    let src_addr = conn.remote_address().to_canonical();
                     if !self.allow_lan
                         && !local_ip.is_unspecified()
                         && src_addr.ip() != local_ip
@@ -269,7 +279,7 @@ async fn handle_connection(
     fw_mark: Option<u32>,
     user_map: Arc<HashMap<String, String>>,
 ) {
-    let inbound_user = match authenticate(&conn, &user_map).await {
+    let (inbound_user, _h3_conn) = match authenticate(&conn, &user_map).await {
         Ok(u) => u,
         Err(e) => {
             debug!("hysteria2 inbound auth failed from {src_addr}: {e}");
@@ -277,14 +287,16 @@ async fn handle_connection(
             return;
         }
     };
+    // `_h3_conn` is intentionally kept in scope: dropping it closes the QUIC
+    // connection (h3's `Drop` impl), which would kill the proxy streams below.
 
     debug!(
         "hysteria2 inbound {src_addr}: authenticated, user={:?}",
         inbound_user
     );
 
-    // UDP session demultiplexer: session_id → sender for incoming datagrams
-    let udp_sessions: Arc<Mutex<HashMap<u32, mpsc::Sender<HysUdpPacket>>>> =
+    // UDP session demultiplexer: session_id → per-session state
+    let udp_sessions: Arc<Mutex<HashMap<u32, UdpSession>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
     // Spawn UDP datagram receiver task
@@ -336,11 +348,15 @@ async fn handle_connection(
 
 /// Perform HTTP/3 authentication on the first request of the connection.
 ///
-/// Returns the authenticated user name (may be empty string for unnamed users).
+/// Returns the authenticated user name (may be `None` for unnamed users) plus
+/// the live `h3` server connection. The caller MUST keep that connection alive
+/// for the duration of the QUIC connection: `h3::server::Connection`'s `Drop`
+/// closes the underlying QUIC connection, which would otherwise tear down every
+/// subsequent proxy stream/datagram immediately after auth.
 async fn authenticate(
     conn: &Connection,
     user_map: &HashMap<String, String>,
-) -> anyhow::Result<Option<String>> {
+) -> anyhow::Result<(Option<String>, H3ServerConnection)> {
     use h3::server::RequestResolver;
 
     let h3_conn = H3QuinnConnection::new(conn.clone());
@@ -353,14 +369,21 @@ async fn authenticate(
 
     let (req, mut stream) = resolver.resolve_request().await?;
 
+    // `http::HeaderMap::get` is case-insensitive, so a single lookup covers any
+    // header casing the client uses.
     let provided_password = req
         .headers()
         .get("hysteria-auth")
-        .or_else(|| req.headers().get("Hysteria-Auth"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+        .and_then(|v| v.to_str().ok());
 
-    if let Some(user_name) = user_map.get(provided_password) {
+    // An empty/missing auth header must never authenticate, even if the server
+    // was (mis)configured with an empty password — otherwise the listener is an
+    // open relay.
+    let matched = provided_password
+        .filter(|p| !p.is_empty())
+        .and_then(|p| user_map.get(p));
+
+    if let Some(user_name) = matched {
         // Send 233 success response
         let resp = http::Response::builder()
             .status(233)
@@ -379,7 +402,7 @@ async fn authenticate(
         } else {
             Some(user_name.clone())
         };
-        Ok(name)
+        Ok((name, h3_server))
     } else {
         // Send 401 failure response
         let resp = http::Response::builder()
@@ -432,11 +455,16 @@ async fn handle_tcp_stream(
         "hysteria2 inbound TCP: src={src_addr} dest={dest} user={inbound_user:?}"
     );
 
-    // Recombine send + recv into a stream for the dispatcher
-    let recv = framed_recv.into_inner();
+    // Recombine send + recv into a stream for the dispatcher. `into_parts`
+    // (not `into_inner`) preserves any payload bytes the client pipelined into
+    // the same read as the request frame; `into_inner` would discard them and
+    // corrupt the first bytes of the proxied connection.
+    let parts = framed_recv.into_parts();
+    let recv = parts.io;
+    let prefix = parts.read_buf.freeze();
     let send = framed_send.into_inner();
 
-    let stream = HystServerStream { send, recv };
+    let stream = HystServerStream { send, recv, prefix };
 
     let sess = Session {
         network: Network::Tcp,
@@ -451,6 +479,17 @@ async fn handle_tcp_stream(
     dispatcher.dispatch_stream(sess, Box::new(stream)).await;
 }
 
+/// Per-UDP-session state kept by the datagram demultiplexer: the fragment
+/// reassembler plus (once the first complete packet has been dispatched) the
+/// channel that feeds the dispatched session. Both are dropped together when
+/// the session is removed, so neither leaks.
+struct UdpSession {
+    defragger: Defragger,
+    /// `None` until a complete packet has been assembled and the session
+    /// dispatched; `Some` afterwards.
+    tx: Option<mpsc::Sender<HysUdpPacket>>,
+}
+
 /// Handle incoming QUIC datagrams as UDP proxy sessions.
 async fn handle_udp_datagrams(
     conn: Connection,
@@ -458,10 +497,8 @@ async fn handle_udp_datagrams(
     dispatcher: Arc<Dispatcher>,
     fw_mark: Option<u32>,
     inbound_user: Option<String>,
-    sessions: Arc<Mutex<HashMap<u32, mpsc::Sender<HysUdpPacket>>>>,
+    sessions: Arc<Mutex<HashMap<u32, UdpSession>>>,
 ) {
-    let mut defraggers: HashMap<u32, Defragger> = HashMap::new();
-
     loop {
         let data = match conn.read_datagram().await {
             Ok(d) => d,
@@ -484,66 +521,81 @@ async fn handle_udp_datagrams(
         };
 
         let session_id = pkt.session_id;
-        let defragger = defraggers.entry(session_id).or_default();
-        let full_pkt = match defragger.feed(pkt) {
+
+        // Reassemble under the lock (never held across an await). The defragger
+        // lives in the session entry, so it is evicted together with the
+        // session and cannot leak.
+        let mut guard = sessions.lock().await;
+        let session = guard.entry(session_id).or_insert_with(|| UdpSession {
+            defragger: Defragger::default(),
+            tx: None,
+        });
+
+        let full_pkt = match session.defragger.feed(pkt) {
             Some(p) => p,
             None => continue, // still waiting for more fragments
         };
 
-        let dest = full_pkt.addr.clone();
+        if let Some(tx) = &session.tx {
+            // Existing dispatched session: `try_send`, not `send().await`, so a
+            // single stalled destination cannot head-of-line-block datagram
+            // delivery for every other session on this connection.
+            match tx.try_send(full_pkt) {
+                Ok(()) => {}
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    guard.remove(&session_id);
+                }
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    trace!(
+                        "hysteria2 inbound {src_addr}: udp session {session_id} \
+                         queue full, dropping datagram"
+                    );
+                }
+            }
+            continue;
+        }
 
-        // Check if we already have a session for this session_id
-        let sender = {
-            let guard = sessions.lock().await;
-            guard.get(&session_id).cloned()
+        // First complete packet for this session: dispatch it.
+        let dest = full_pkt.addr.clone();
+        let (tx, rx) = mpsc::channel::<HysUdpPacket>(64);
+        let _ = tx.try_send(full_pkt);
+        session.tx = Some(tx);
+        drop(guard);
+
+        let datagram = Hysteria2InboundDatagram {
+            rx,
+            conn: conn.clone(),
+            session_id,
+            src_addr,
+            inbound_user: inbound_user.clone(),
+            sessions: Arc::clone(&sessions),
         };
 
-        if let Some(tx) = sender {
-            // Route the packet to the existing session
-            if tx.send(full_pkt).await.is_err() {
-                // Session closed, remove it
-                sessions.lock().await.remove(&session_id);
-            }
-        } else {
-            // New session: create datagram abstraction and dispatch
-            let (tx, rx) = mpsc::channel::<HysUdpPacket>(64);
-            sessions.lock().await.insert(session_id, tx.clone());
+        let sess = Session {
+            network: Network::Udp,
+            typ: Type::Hysteria2,
+            source: src_addr,
+            so_mark: fw_mark,
+            destination: dest,
+            inbound_user: inbound_user.clone(),
+            ..Default::default()
+        };
 
-            // Feed the first packet
-            let _ = tx.send(full_pkt).await;
-
-            let datagram = Hysteria2InboundDatagram {
-                rx,
-                conn: conn.clone(),
-                session_id,
-                src_addr,
-                inbound_user: inbound_user.clone(),
-                sessions: Arc::clone(&sessions),
-            };
-
-            let sess = Session {
-                network: Network::Udp,
-                typ: Type::Hysteria2,
-                source: src_addr,
-                so_mark: fw_mark,
-                destination: dest,
-                inbound_user: inbound_user.clone(),
-                ..Default::default()
-            };
-
-            let dispatcher = dispatcher.clone();
-            tokio::spawn(async move {
-                let _ = dispatcher.dispatch_datagram(sess, Box::new(datagram)).await;
-            });
-        }
+        let dispatcher = dispatcher.clone();
+        tokio::spawn(async move {
+            let _ = dispatcher.dispatch_datagram(sess, Box::new(datagram)).await;
+        });
     }
 }
 
 /// A `quinn::SendStream` + `quinn::RecvStream` combined into a single
-/// bidirectional async I/O object for the dispatcher.
+/// bidirectional async I/O object for the dispatcher. `prefix` holds any bytes
+/// that were read past the request frame during decoding and must be delivered
+/// before reading further from the QUIC stream.
 struct HystServerStream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,
+    prefix: Bytes,
 }
 
 impl tokio::io::AsyncRead for HystServerStream {
@@ -552,7 +604,14 @@ impl tokio::io::AsyncRead for HystServerStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().recv).poll_read(cx, buf)
+        let this = self.get_mut();
+        if !this.prefix.is_empty() {
+            let n = this.prefix.len().min(buf.remaining());
+            buf.put_slice(&this.prefix[..n]);
+            let _ = this.prefix.split_to(n);
+            return Poll::Ready(Ok(()));
+        }
+        Pin::new(&mut this.recv).poll_read(cx, buf)
     }
 }
 
@@ -599,7 +658,7 @@ struct Hysteria2InboundDatagram {
     src_addr: SocketAddr,
     /// Authenticated user name for this session (if any).
     inbound_user: Option<String>,
-    sessions: Arc<Mutex<HashMap<u32, mpsc::Sender<HysUdpPacket>>>>,
+    sessions: Arc<Mutex<HashMap<u32, UdpSession>>>,
 }
 
 impl std::fmt::Debug for Hysteria2InboundDatagram {
@@ -653,11 +712,16 @@ impl Sink<UdpPacket> for Hysteria2InboundDatagram {
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         let this = self.get_mut();
-        let dst = item.dst_addr;
+        // The address embedded in the reply datagram must be the *upstream*
+        // source (where the packet came from), which the dispatcher places in
+        // `src_addr`. `dst_addr` here is the QUIC client itself; sending that
+        // would make every reply look like it originated from the client and
+        // break client-side UDP session correlation (e.g. DNS).
+        let reply_addr = item.src_addr;
         let max_size = this.conn.max_datagram_size().unwrap_or(1200);
         let pkt_id: u16 = rand::random();
         let frags =
-            Fragments::new(this.session_id, pkt_id, dst, max_size, item.data);
+            Fragments::new(this.session_id, pkt_id, reply_addr, max_size, item.data);
         for frag in frags {
             this.conn
                 .send_datagram(frag)

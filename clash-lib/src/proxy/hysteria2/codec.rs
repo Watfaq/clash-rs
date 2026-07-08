@@ -53,9 +53,15 @@ impl Decoder for Hy2TcpReqCodec {
             return Ok(None);
         }
         let mut tmp = src.clone();
+        // A `VarInt::decode` error here means the buffer does not yet hold the
+        // full varint (quinn's only decode error is `UnexpectedEnd`). Since the
+        // request may arrive split across QUIC reads — especially given the up
+        // to 512 bytes of trailing padding — treat that as "need more bytes"
+        // (`Ok(None)`) rather than a fatal protocol error that drops the stream.
         // Request ID
-        let req_id = VarInt::decode(&mut tmp)
-            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?;
+        let Ok(req_id) = VarInt::decode(&mut tmp) else {
+            return Ok(None);
+        };
         const EXPECTED_REQ_ID: u64 = 0x401;
         if req_id.into_inner() != EXPECTED_REQ_ID {
             return Err(std::io::Error::new(
@@ -67,17 +73,19 @@ impl Decoder for Hy2TcpReqCodec {
             ));
         }
         // Address length + bytes
-        let addr_len = VarInt::decode(&mut tmp)
-            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?
-            .into_inner() as usize;
+        let Ok(addr_len) = VarInt::decode(&mut tmp) else {
+            return Ok(None);
+        };
+        let addr_len = addr_len.into_inner() as usize;
         if tmp.remaining() < addr_len {
             return Ok(None);
         }
         let addr_bytes: Vec<u8> = tmp.split_to(addr_len).into();
         // Padding length + bytes
-        let padding_len = VarInt::decode(&mut tmp)
-            .map_err(|_| std::io::Error::from(ErrorKind::InvalidData))?
-            .into_inner() as usize;
+        let Ok(padding_len) = VarInt::decode(&mut tmp) else {
+            return Ok(None);
+        };
+        let padding_len = padding_len.into_inner() as usize;
         if tmp.remaining() < padding_len {
             return Ok(None);
         }
@@ -87,28 +95,8 @@ impl Decoder for Hy2TcpReqCodec {
         let consumed = src.remaining() - tmp.remaining();
         src.advance(consumed);
 
-        let addr = to_socksaddr_from_bytes(&addr_bytes)?;
+        let addr = to_socksaddr(&addr_bytes)?;
         Ok(Some(Hy2TcpReq { addr }))
-    }
-}
-
-fn to_socksaddr_from_bytes(bytes: &[u8]) -> std::io::Result<SocksAddr> {
-    let addr_str = std::str::from_utf8(bytes).map_err(|_| {
-        std::io::Error::new(ErrorKind::InvalidInput, "Invalid UTF-8 in address")
-    })?;
-    let (host, port_str) = addr_str.rsplit_once(':').ok_or_else(|| {
-        std::io::Error::new(
-            ErrorKind::InvalidInput,
-            "Address must be in host:port format",
-        )
-    })?;
-    let port = port_str.parse::<u16>().map_err(|_| {
-        std::io::Error::new(ErrorKind::InvalidInput, "Invalid port number")
-    })?;
-    if let Ok(sock_addr) = std::net::SocketAddr::from_str(addr_str) {
-        Ok(SocksAddr::Ip(sock_addr))
-    } else {
-        Ok(SocksAddr::Domain(host.to_string(), port))
     }
 }
 
@@ -305,6 +293,13 @@ impl HysUdpPacket {
         let frag_count = buf.get_u8();
         let addr_len =
             VarInt::decode(buf).map_err(|_| anyhow!(""))?.into_inner() as usize;
+        // `addr_len` is attacker-controlled; guard against an oversized value
+        // so `split_to` cannot panic on a malformed datagram.
+        if buf.remaining() < addr_len {
+            return Err(anyhow!(
+                "hysteria2 udp packet: address length out of bounds"
+            ));
+        }
         let addr: Vec<u8> = buf.split_to(addr_len).into();
         let data = buf.split().to_vec();
         Ok(Self {
@@ -379,7 +374,11 @@ where
         let addr_var = VarInt::from_u32(addr.len() as u32);
 
         let fixed_size = 4 + 2 + 1 + 1 + addr.len() + var_size(addr_var);
-        let max_data_size = max_pkt_size - fixed_size;
+        // `max_pkt_size` comes from the peer-advertised max datagram size and
+        // `fixed_size` grows with the (attacker-influenced) address length.
+        // Clamp to at least 1 so the `div_ceil` below can neither underflow nor
+        // divide by zero when the header does not fit the advertised datagram.
+        let max_data_size = max_pkt_size.saturating_sub(fixed_size).max(1);
         // TODO: report warning when frag_total > u8::MAX
         let frag_total = payload.as_ref().len().div_ceil(max_data_size) as u8;
 
@@ -406,7 +405,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.next_frag_id < self.frag_total {
-            let max_payload_size = self.max_pkt_size - self.fixed_size;
+            let max_payload_size =
+                self.max_pkt_size.saturating_sub(self.fixed_size).max(1);
             let next_frag_end = (self.next_frag_start + max_payload_size)
                 .min(self.payload.as_ref().len());
             let payload =
@@ -519,4 +519,33 @@ fn test_decode_addr() {
     let addr_bytes = addr.to_string().into_bytes();
     let decoded_addr = to_socksaddr(&addr_bytes).unwrap();
     assert_eq!(addr, decoded_addr);
+}
+
+#[test]
+fn udp_decode_oversized_addr_len_does_not_panic() {
+    // header (session_id, pkt_id, frag_id, frag_count) + a varint addr_len of
+    // 63 (single-byte varint) but no address bytes following. Must return Err,
+    // not panic in `split_to`.
+    let mut buf = BytesMut::new();
+    buf.put_u32(1); // session_id
+    buf.put_u16(1); // pkt_id
+    buf.put_u8(0); // frag_id
+    buf.put_u8(1); // frag_count
+    buf.put_u8(63); // varint addr_len = 63, but zero address bytes follow
+    let err = HysUdpPacket::decode(&mut buf);
+    assert!(err.is_err(), "oversized addr_len must be a decode error");
+}
+
+#[test]
+fn tcp_req_codec_waits_for_partial_frame() {
+    // A truncated request (only the first byte of the 2-byte request-ID varint)
+    // must yield Ok(None) so the framed reader waits for more bytes, rather
+    // than erroring and dropping the stream.
+    let mut req = BytesMut::new();
+    const REQ_ID: VarInt = VarInt::from_u32(0x401);
+    REQ_ID.encode(&mut req);
+    // keep only the first byte of the (2-byte) request-id varint
+    let mut partial = BytesMut::from(&req[..1]);
+    let out = Hy2TcpReqCodec.decode(&mut partial).unwrap();
+    assert!(out.is_none(), "partial frame should decode to None");
 }
