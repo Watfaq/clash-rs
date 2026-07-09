@@ -250,7 +250,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -261,7 +261,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2479,7 +2479,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2874,7 +2874,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2956,6 +2956,7 @@ dependencies = [
  "foldhash 0.2.0",
  "libm",
  "portable-atomic",
+ "rand 0.9.4",
  "siphasher",
 ]
 
@@ -4066,7 +4067,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.56.0",
 ]
 
 [[package]]
@@ -5282,7 +5283,7 @@ dependencies = [
  "identity-hash",
  "lru-slab",
  "rand 0.10.1",
- "rand_pcg",
+ "rand_pcg 0.10.2",
  "ring",
  "rustc-hash 2.1.2",
  "rustls",
@@ -5350,7 +5351,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6726,7 +6727,7 @@ dependencies = [
 [[package]]
 name = "quinn"
 version = "0.12.0"
-source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#b87bf72a644f42592ebb64caf4303f86d260a538"
+source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#ce60e5b5c115db2a6053f4e0ca7fc52103cb76b9"
 dependencies = [
  "bytes",
  "cfg_aliases",
@@ -6798,15 +6799,15 @@ dependencies = [
 [[package]]
 name = "quinn-proto"
 version = "0.12.0"
-source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#b87bf72a644f42592ebb64caf4303f86d260a538"
+source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#ce60e5b5c115db2a6053f4e0ca7fc52103cb76b9"
 dependencies = [
  "aws-lc-rs",
  "bytes",
  "fastbloom",
- "getrandom 0.4.2",
+ "getrandom 0.3.4",
  "lru-slab",
- "rand 0.10.1",
- "rand_pcg",
+ "rand 0.9.4",
+ "rand_pcg 0.9.0",
  "ring",
  "rustc-hash 2.1.2",
  "rustls",
@@ -6858,13 +6859,13 @@ dependencies = [
 [[package]]
 name = "quinn-udp"
 version = "0.6.1"
-source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#b87bf72a644f42592ebb64caf4303f86d260a538"
+source = "git+https://github.com/Tipuch/quinn.git?branch=bbrv3#ce60e5b5c115db2a6053f4e0ca7fc52103cb76b9"
 dependencies = [
  "cfg_aliases",
  "libc",
  "socket2 0.6.4",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6877,7 +6878,7 @@ dependencies = [
  "libc",
  "socket2 0.6.4",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7012,6 +7013,15 @@ dependencies = [
  "libc",
  "rand_core 0.10.1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b48ac3f7ffaab7fac4d2376632268aa5f89abdb55f7ebf8f4d11fffccb2320f7"
+dependencies = [
+ "rand_core 0.9.5",
 ]
 
 [[package]]
@@ -7561,7 +7571,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7673,7 +7683,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8006,7 +8016,7 @@ checksum = "dcc7fe48e34d02a97bc8e6253b8b91e5a47fe2c47eaacb5149cefbb69922eaf0"
 dependencies = [
  "ahash",
  "annotate-snippets",
- "base64 0.22.1",
+ "base64 0.21.7",
  "encoding_rs_io",
  "getrandom 0.3.4",
  "granit-parser",
@@ -8603,7 +8613,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9066,7 +9076,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -11220,8 +11230,8 @@ dependencies = [
 
 [[package]]
 name = "tuic-core"
-version = "1.8.10"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.10#3e893406ec8308ebe60667f164edfa68c01ebdde"
+version = "1.8.5"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.5#e4ae97bca5d5386ae964f09631e72c3bd392ca6b"
 dependencies = [
  "bytes",
  "eyre",
@@ -11240,8 +11250,8 @@ dependencies = [
 
 [[package]]
 name = "tuic-server"
-version = "1.8.10"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.10#3e893406ec8308ebe60667f164edfa68c01ebdde"
+version = "1.8.5"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.8.5#e4ae97bca5d5386ae964f09631e72c3bd392ca6b"
 dependencies = [
  "arc-swap",
  "aws-lc-rs",
@@ -11899,7 +11909,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

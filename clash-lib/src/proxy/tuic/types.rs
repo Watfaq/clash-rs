@@ -15,6 +15,7 @@ use tokio::sync::RwLock as AsyncRwLock;
 use tracing::debug;
 use tuic_core::quinn::{
     Connection as InnerConnection, Endpoint as QuinnEndpoint, QuinnConnection,
+    ZeroRttAccepted,
 };
 use uuid::Uuid;
 
@@ -69,22 +70,22 @@ impl TuicEndpoint {
             );
 
             let conn = self.ep.connect(remote_addr, self.server.server_name())?;
-            let (conn, is_0rtt) = if self.zero_rtt_handshake {
+            let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
                 match conn.into_0rtt() {
-                    Ok(conn) => (conn, true),
-                    Err(conn) => (conn.await?, false),
+                    Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
+                    Err(conn) => (conn.await?, None),
                 }
             } else {
-                (conn.await?, false)
+                (conn.await?, None)
             };
 
-            anyhow::Ok((conn, is_0rtt))
+            anyhow::Ok((conn, zero_rtt_accepted))
         };
 
-        let (conn, is_0rtt) = connect_to.await?;
+        let (conn, zero_rtt_accepted) = connect_to.await?;
         Ok(TuicConnection::new(
             conn,
-            is_0rtt,
+            zero_rtt_accepted,
             self.udp_relay_mode,
             self.uuid,
             self.password.clone(),
@@ -124,7 +125,7 @@ impl TuicConnection {
     #[allow(clippy::too_many_arguments)]
     fn new(
         conn: QuinnConnection,
-        is_0rtt: bool,
+        zero_rtt_accepted: Option<ZeroRttAccepted>,
         udp_relay_mode: UdpRelayMode,
         uuid: Uuid,
         password: Arc<[u8]>,
@@ -148,7 +149,7 @@ impl TuicConnection {
         };
         let conn = Arc::new(conn);
         tokio::spawn(conn.clone().init(
-            is_0rtt,
+            zero_rtt_accepted,
             heartbeat,
             gc_interval,
             gc_lifetime,
@@ -159,7 +160,7 @@ impl TuicConnection {
 
     async fn init(
         self: Arc<Self>,
-        is_0rtt: bool,
+        zero_rtt_accepted: Option<ZeroRttAccepted>,
         heartbeat: Duration,
         gc_interval: Duration,
         gc_lifetime: Duration,
@@ -167,7 +168,7 @@ impl TuicConnection {
         tracing::info!("connection established");
 
         // TODO check the cancellation safety of tuic_auth
-        tokio::spawn(self.clone().tuic_auth(is_0rtt));
+        tokio::spawn(self.clone().tuic_auth(zero_rtt_accepted));
         tokio::spawn(self.clone().cyclical_tasks(
             heartbeat,
             gc_interval,
