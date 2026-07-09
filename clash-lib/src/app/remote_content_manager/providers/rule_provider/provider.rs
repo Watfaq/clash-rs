@@ -626,25 +626,27 @@ mod tests {
             "google.com should NOT match before file update"
         );
 
-        // Overwrite the file — the watcher should pick this up.
-        tmp.as_file_mut().set_len(0).expect("truncate tmp file");
-        tmp.as_file_mut().seek(std::io::SeekFrom::Start(0)).unwrap();
-        write!(tmp.as_file_mut(), "payload:\n  - google.com\n").unwrap();
-        tmp.as_file_mut().sync_all().unwrap();
-
-        // Give the OS watcher + debounce time to fire and the async task time
-        // to apply the update (generous timeout for slow CI machines). The
-        // loop only breaks once google.com matches, so reaching this point
-        // already proves the reload happened.
+        // Give the OS watcher time to register, then overwrite the file and
+        // wait for the live reload. The watcher is set up asynchronously inside
+        // the task spawned by `initialize()`, and OS backends (macOS FSEvents,
+        // Windows ReadDirectoryChangesW) can have multi-second latency, so we
+        // re-write on each iteration: this both defeats the setup race (a write
+        // that lands before the watch is registered is simply retried) and
+        // keeps nudging slow/coalescing backends until the reload is observed.
         let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+            tokio::time::Instant::now() + std::time::Duration::from_secs(15);
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tmp.as_file_mut().set_len(0).expect("truncate tmp file");
+            tmp.as_file_mut().seek(std::io::SeekFrom::Start(0)).unwrap();
+            write!(tmp.as_file_mut(), "payload:\n  - google.com\n").unwrap();
+            tmp.as_file_mut().sync_all().unwrap();
+
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             if provider.search(&sess_google) {
                 break;
             }
             if tokio::time::Instant::now() >= deadline {
-                panic!("provider did not reload within 5 s after file change");
+                panic!("provider did not reload within 15 s after file change");
             }
         }
 

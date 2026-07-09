@@ -241,10 +241,7 @@ where
     /// Only meaningful when the vehicle is of type `File`; for other vehicle
     /// types this is a no-op.
     pub async fn start_watch(&self) -> anyhow::Result<()> {
-        use notify::{
-            EventKind, RecursiveMode, Watcher, event::ModifyKind,
-            recommended_watcher,
-        };
+        use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
 
         if self.vehicle_type() != ProviderVehicleType::File {
             return Ok(());
@@ -272,21 +269,24 @@ where
         let mut watcher =
             recommended_watcher(move |result: notify::Result<notify::Event>| {
                 let Ok(event) = result else { return };
-                // Ignore metadata-only changes: they carry no new content and,
-                // for a self-touch, would otherwise feed the reload loop.
-                let relevant = matches!(
-                    event.kind,
-                    EventKind::Create(_)
-                        | EventKind::Modify(
-                            ModifyKind::Data(_) | ModifyKind::Name(_)
-                        )
-                        | EventKind::Remove(_)
-                );
-                if !relevant {
+                // Accept any content-affecting event. We deliberately do NOT
+                // restrict to `Modify(Data)`: the backends differ (macOS
+                // FSEvents and Windows ReadDirectoryChangesW frequently report
+                // `Modify(Any)` / `Modify(Metadata)` for an ordinary write), so
+                // a narrow filter would miss real changes on those platforms.
+                // Over-triggering is harmless — `update_inner` re-reads, sees an
+                // unchanged hash, and does nothing (and no longer touches the
+                // file's mtime for `File` vehicles, so there is no feedback
+                // loop).
+                if matches!(event.kind, EventKind::Access(_)) {
                     return;
                 }
-                // Only react to events that concern our specific file.
+                // Only react to events that concern our specific file. Some
+                // backends emit directory-scoped events with no path (or the
+                // directory path itself); accept those rather than risk missing
+                // the change.
                 if let Some(want) = &watch_name
+                    && !event.paths.is_empty()
                     && !event.paths.iter().any(|p| p.file_name() == Some(want))
                 {
                     return;
