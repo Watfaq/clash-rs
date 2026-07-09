@@ -377,7 +377,7 @@ async fn authenticate(
         .and_then(|v| v.to_str().ok());
 
     // An empty/missing auth header must never authenticate, even if the server
-    // was (mis)configured with an empty password — otherwise the listener is an
+    // was configured with an empty password — otherwise the listener is an
     // open relay.
     let matched = provided_password
         .filter(|p| !p.is_empty())
