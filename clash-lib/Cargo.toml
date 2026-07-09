@@ -132,7 +132,11 @@ const-fnv1a-hash = "1"
 
 filetime = "0.2"
 axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.7", features = ["fs", "trace", "cors"] }
+# Held at 0.6: tower-http 0.7's `serve_dir` (pulled in by the `fs` feature, used
+# for the dashboard's ServeDir) imports `std::sync::atomic::AtomicU64`, which
+# does not exist on 32-bit targets — it breaks the mips/mipsel builds. Bump once
+# tower-http uses portable-atomic (or the `fs` feature is dropped).
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Dashboard auto-download
