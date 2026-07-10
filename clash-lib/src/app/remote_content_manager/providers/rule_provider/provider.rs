@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
@@ -239,19 +239,18 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = if let Some(interval) = interval
-            && let Some(vehicle) = vehicle
-        {
-            Some(Fetcher::new(
+        // A file/http vehicle always gets a fetcher so its content loads at
+        // startup, regardless of `interval` (file providers also live-reload
+        // via the watcher). Only inline providers (no vehicle) have none.
+        let fetcher = vehicle.map(|vehicle| {
+            Fetcher::new(
                 name.clone(),
-                interval,
+                interval.unwrap_or_default(),
                 vehicle,
                 parser,
                 Some(updater),
-            ))
-        } else {
-            None
-        };
+            )
+        });
 
         Self {
             name,
@@ -343,6 +342,17 @@ impl Provider for RuleProviderImpl {
             let ele = fetcher.initial().await.map_err(map_io_error)?;
             if let Some(updater) = fetcher.on_update.as_ref() {
                 updater(ele).await; // Directly pass RuleContent
+            }
+            // Auto-watch local file providers. Best-effort: watcher setup can
+            // fail (inotify limits, unsupported filesystems), so log and keep
+            // serving the loaded rules instead of failing init.
+            if let Err(e) = fetcher.start_watch().await {
+                warn!(
+                    "rule provider '{}': live file watching unavailable, falling \
+                     back to interval polling: {}",
+                    self.name(),
+                    e
+                );
             }
         } else {
             trace!("initializing inline rule provider {}", self.name());
@@ -556,5 +566,91 @@ mod tests {
             destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
             ..Default::default()
         }));
+    }
+
+    /// A local `type: file` provider is watched automatically (no config flag)
+    /// and live-reloads on disk change.
+    ///
+    /// Linux-only: inotify delivers events promptly, whereas macOS (FSEvents)
+    /// and Windows (ReadDirectoryChangesW) coalesce them with multi-second
+    /// latency — fine for the real feature, but too flaky for a bounded test.
+    /// The watcher code is platform-agnostic; only this timing check is gated.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn test_file_provider_watch() {
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+
+        // Write initial content to a temporary file.  Using `NamedTempFile`
+        // ensures the file is removed even if the test panics.
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::{Seek as _, Write as _};
+        write!(tmp, "payload:\n  - twitter.com\n").unwrap();
+        tmp.flush().unwrap();
+
+        // Use the real file vehicle so that notify can watch the actual path.
+        let vehicle = Arc::new(
+            crate::app::remote_content_manager::providers::file_vehicle::Vehicle::new(
+                tmp.path().to_str().unwrap(),
+            ),
+        );
+
+        let provider = Arc::new(RuleProviderImpl::new(
+            "watch-test".to_string(),
+            RuleSetBehavior::Domain,
+            RuleSetFormat::Yaml,
+            None, // no polling interval — rely purely on file watching
+            Some(vehicle),
+            Some(Arc::new(mock_mmdb)),
+            Some(Arc::new(mock_geodata)),
+            None,
+        ));
+
+        assert_ok!(provider.initialize().await);
+
+        // Initial content: twitter.com should match.
+        let sess_twitter = Session {
+            destination: SocksAddr::Domain("twitter.com".to_owned(), 443),
+            ..Default::default()
+        };
+        assert!(
+            provider.search(&sess_twitter),
+            "twitter.com should match after initial load"
+        );
+        // google.com should NOT match yet.
+        let sess_google = Session {
+            destination: SocksAddr::Domain("google.com".to_owned(), 443),
+            ..Default::default()
+        };
+        assert!(
+            !provider.search(&sess_google),
+            "google.com should NOT match before file update"
+        );
+
+        // Re-write on each iteration: this defeats the watcher-registration
+        // race (the watch is set up asynchronously by `initialize()`) and keeps
+        // nudging slow/coalescing backends until the reload is observed.
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            tmp.as_file_mut().set_len(0).expect("truncate tmp file");
+            tmp.as_file_mut().seek(std::io::SeekFrom::Start(0)).unwrap();
+            write!(tmp.as_file_mut(), "payload:\n  - google.com\n").unwrap();
+            tmp.as_file_mut().sync_all().unwrap();
+
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            if provider.search(&sess_google) {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                panic!("provider did not reload within 15 s after file change");
+            }
+        }
+
+        // And the old rule is gone after the reload.
+        assert!(
+            !provider.search(&sess_twitter),
+            "twitter.com should NOT match after file update"
+        );
     }
 }

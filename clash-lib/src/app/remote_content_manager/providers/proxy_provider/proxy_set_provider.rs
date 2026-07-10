@@ -244,6 +244,17 @@ impl Provider for ProxySetProvider {
         if let Some(updater) = self.fetcher.on_update.as_ref() {
             updater(ele).await;
         }
+        // Auto-watch local file providers. Best-effort: watcher setup can fail
+        // (inotify limits, unsupported filesystems), so log and keep serving the
+        // loaded proxies instead of failing init. No-op for non-file vehicles.
+        if let Err(e) = self.fetcher.start_watch().await {
+            warn!(
+                "proxy provider '{}': live file watching unavailable, falling back \
+                 to interval polling: {}",
+                self.name(),
+                e
+            );
+        }
         Ok(())
     }
 
