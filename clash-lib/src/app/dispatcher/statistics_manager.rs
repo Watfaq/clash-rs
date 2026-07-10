@@ -189,7 +189,7 @@ impl Manager {
         // their user counters to 0. upload_total/download_total are untouched
         // so /connections keeps seeing the correct cumulative values.
         let connections = self.connections.lock().await;
-        for (_, (tracked, _)) in connections.iter() {
+        for (tracked, _) in connections.values() {
             let info = tracked.tracker_info();
             if let Some(ref user) = info.session_holder.inbound_user {
                 let upload = info.user_upload.swap(0, Ordering::AcqRel);
@@ -250,7 +250,7 @@ impl Manager {
     pub async fn snapshot(&self) -> Snapshot {
         let mut connections = vec![];
         let conns = self.connections.lock().await;
-        for (_, v) in conns.iter() {
+        for v in conns.values() {
             let t = v.0.tracker_info();
             let chain = t.proxy_chain_holder.0.read().await;
             connections.push(TrackerInfo {
