@@ -529,15 +529,10 @@ impl FromStr for Config {
     }
 }
 
-/// Parse a YAML config source, validating that it contains no unknown
-/// top-level or `dns`-section fields. Returns the deserialized [`Config`] so
-/// the caller can convert it without a second parse pass.
-///
-/// Inner structs (proxies, rules, listeners, ...) still carry
-/// `#[serde(deny_unknown_fields)]`, so typos inside them remain hard errors
-/// regardless of strict mode. This check exists to surface unknowns at the
-/// only two layers that intentionally accept extras by default: the top-level
-/// [`Config`] and its [`DNS`] sub-section.
+/// Strict-mode parse: deserialize the config and reject any unknown key at any
+/// depth (via `serde_ignored`). Ordinary parsing ignores unknown keys since the
+/// config structs no longer use `deny_unknown_fields`; `--strict-config` routes
+/// through here to opt into rejection.
 pub(crate) fn check_unknown_fields(s: &str) -> crate::Result<Config> {
     let mut val: Value = serde_yaml::from_str(s).map_err(|e| {
         Error::InvalidConfig(format!("couldn't parse config content: {e}"))
@@ -571,7 +566,7 @@ pub(crate) fn check_unknown_fields(s: &str) -> crate::Result<Config> {
 /// Both protocols share the same wire format. For DoH3, `hostname` acts as the
 /// QUIC SNI value presented to clients.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct DohListenDef {
     /// Address to listen on, e.g. `127.0.0.1:53555`.
     pub addr: String,
@@ -586,7 +581,7 @@ pub struct DohListenDef {
 /// Listen configuration for DoT (DNS over TLS).
 /// Unlike [`DohListenDef`], DoT does not expose a hostname/SNI override field.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct DotListenDef {
     /// Address to listen on, e.g. `127.0.0.1:53554`.
     pub addr: String,
@@ -617,7 +612,7 @@ pub struct DotListenDef {
 ///       ca-key: /path/to/key.pem
 /// ```
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct DnsMultipleListenDef {
     /// Plain UDP listener address, e.g. `127.0.0.1:53`.
     pub udp: Option<String>,
@@ -720,7 +715,7 @@ pub enum DNSMode {
 }
 
 #[derive(Serialize, Deserialize, Clone, Educe)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 #[educe(Default)]
 pub struct FallbackFilter {
     #[serde(rename = "geoip")]
@@ -737,7 +732,7 @@ pub struct FallbackFilter {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct EdnsClientSubnet {
     /// IPv4 subnet expressed in CIDR notation, e.g. `1.2.3.0/24`
     pub ipv4: Option<String>,
@@ -746,7 +741,7 @@ pub struct EdnsClientSubnet {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
@@ -755,7 +750,7 @@ pub struct Experimental {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 #[serde(rename_all = "kebab-case")]
 pub struct Profile {
     /// Store the `select` results in $CWD/cache.db
@@ -840,7 +835,7 @@ pub enum RuleProviderDef {
 /// When `path` is absent, a local cache path is automatically derived from
 /// the MD5 hash of `url` during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct HttpRuleProviderDef {
     /// Remote URL to fetch the rule set from.
     pub url: String,
@@ -861,7 +856,7 @@ pub struct HttpRuleProviderDef {
 
 /// File-based rule provider loaded from a local path.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct FileRuleProviderDef {
     /// Path to the rule set file, relative to the working directory.
     pub path: String,
@@ -882,7 +877,7 @@ pub struct FileRuleProviderDef {
 /// When `path` is absent, a cache path is derived from the MD5 hash of the
 /// provider name during config conversion.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 pub struct InlineRuleProviderDef {
     /// Optional local cache path. Derived from the provider name's MD5 hash
     /// when absent.
@@ -960,6 +955,35 @@ dns:
             .parse::<Config>()
             .expect("unknown dns fields should be ignored");
         assert!(parsed.dns.enable);
+    }
+
+    #[test]
+    fn parse_ignores_unknown_field_in_inner_struct() {
+        // Unknown key in an inner struct is ignored; known fields still apply.
+        let cfg = r#"
+dns:
+  fallback-filter:
+    geoip: false
+    some-future-option: 1
+"#;
+        let parsed = cfg
+            .parse::<Config>()
+            .expect("unknown inner-struct field should be ignored");
+        assert!(!parsed.dns.fallback_filter.geo_ip);
+    }
+
+    #[test]
+    fn check_unknown_fields_rejects_unknown_inner_struct_field() {
+        // ...but strict mode still rejects it, at any depth.
+        let cfg = r#"
+dns:
+  fallback-filter:
+    some-future-option: 1
+"#;
+        assert!(
+            super::check_unknown_fields(cfg).is_err(),
+            "strict check should reject unknown inner-struct field"
+        );
     }
 
     #[test]
