@@ -46,6 +46,13 @@ impl Hy2TcpResp {
 /// ```
 pub struct Hy2TcpReqCodec;
 
+/// Upper bound on the client-supplied address length. A `host:port` string is
+/// at most a 253-byte DNS name plus a port, so 512 is generous.
+const MAX_ADDR_LEN: usize = 512;
+/// Upper bound on the client-supplied padding length. Hysteria2 padding is a
+/// few hundred bytes; cap well above that but far below a DoS-worthy size.
+const MAX_PADDING_LEN: usize = 64 * 1024;
+
 /// Parsed TCP relay request from the client.
 pub struct Hy2TcpReq {
     pub addr: SocksAddr,
@@ -87,6 +94,14 @@ impl Decoder for Hy2TcpReqCodec {
             return Ok(None);
         };
         let addr_len = addr_len.into_inner() as usize;
+        // Bound the peer-controlled length so a bogus varint can't make us
+        // buffer unboundedly (memory DoS). A `host:port` string fits easily.
+        if addr_len > MAX_ADDR_LEN {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "hysteria2 TCP request: address length too large",
+            ));
+        }
         if tmp.remaining() < addr_len {
             return Ok(None);
         }
@@ -96,6 +111,12 @@ impl Decoder for Hy2TcpReqCodec {
             return Ok(None);
         };
         let padding_len = padding_len.into_inner() as usize;
+        if padding_len > MAX_PADDING_LEN {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                "hysteria2 TCP request: padding length too large",
+            ));
+        }
         if tmp.remaining() < padding_len {
             return Ok(None);
         }
@@ -544,4 +565,56 @@ fn tcp_req_codec_waits_for_partial_frame() {
     let mut partial = BytesMut::from(&req[..1]);
     let out = Hy2TcpReqCodec.decode(&mut partial).unwrap();
     assert!(out.is_none(), "partial frame should decode to None");
+}
+
+/// Encode a Hy2 TCP request frame (as the client does) for decoder tests.
+#[cfg(test)]
+fn encode_tcp_req(addr: &str, padding_len: usize) -> BytesMut {
+    let mut buf = BytesMut::new();
+    VarInt::from_u32(0x401).encode(&mut buf);
+    VarInt::from_u32(addr.len() as u32).encode(&mut buf);
+    buf.put_slice(addr.as_bytes());
+    VarInt::from_u32(padding_len as u32).encode(&mut buf);
+    buf.put_slice(&vec![0u8; padding_len]);
+    buf
+}
+
+#[test]
+fn tcp_req_codec_decodes_full_frame() {
+    let mut buf = encode_tcp_req("example.com:443", 16);
+    let req = Hy2TcpReqCodec
+        .decode(&mut buf)
+        .unwrap()
+        .expect("a full frame should decode");
+    assert_eq!(req.addr, SocksAddr::Domain("example.com".into(), 443));
+    assert!(buf.is_empty(), "the whole frame should be consumed");
+}
+
+#[test]
+fn tcp_req_codec_rejects_oversized_lengths() {
+    // addr_len far beyond MAX_ADDR_LEN must be a hard error, not unbounded
+    // buffering.
+    let mut buf = BytesMut::new();
+    VarInt::from_u32(0x401).encode(&mut buf);
+    VarInt::from_u32(1_000_000).encode(&mut buf); // addr_len ≫ MAX_ADDR_LEN
+    assert!(Hy2TcpReqCodec.decode(&mut buf).is_err());
+
+    // padding_len far beyond MAX_PADDING_LEN must likewise be rejected.
+    let mut buf = BytesMut::new();
+    VarInt::from_u32(0x401).encode(&mut buf);
+    VarInt::from_u32(3).encode(&mut buf);
+    buf.put_slice(b"a:1");
+    VarInt::from_u32(10_000_000).encode(&mut buf); // padding_len ≫ MAX_PADDING_LEN
+    assert!(Hy2TcpReqCodec.decode(&mut buf).is_err());
+}
+
+#[test]
+fn tcp_resp_encode_decode_roundtrip() {
+    let mut buf = BytesMut::new();
+    Hy2TcpRespEncoder
+        .encode(Hy2TcpResp::ok(), &mut buf)
+        .unwrap();
+    let resp = Hy2TcpCodec.decode(&mut buf).unwrap().unwrap();
+    assert_eq!(resp.status, 0x00);
+    assert!(resp.msg.is_empty());
 }

@@ -344,6 +344,19 @@ async fn authenticate(
 
     let (req, mut stream) = resolver.resolve_request().await?;
 
+    // The Hysteria2 auth handshake is `POST https://hysteria/auth`. Reject
+    // anything else with a 404 so unrelated requests aren't treated as auth.
+    if req.method() != http::Method::POST || req.uri().path() != "/auth" {
+        let resp = http::Response::builder().status(404).body(()).unwrap();
+        let _ = stream.send_response(resp).await;
+        let _ = stream.finish().await;
+        return Err(anyhow::anyhow!(
+            "unexpected hysteria2 auth request: {} {}",
+            req.method(),
+            req.uri().path()
+        ));
+    }
+
     // `http::HeaderMap::get` is case-insensitive, so a single lookup covers any
     // header casing the client uses.
     let provided_password = req
