@@ -126,12 +126,16 @@ chacha20poly1305 = "0.10"
 aead = { version = "0.5", features = ["std"] }
 aes = "0.9"
 blake3 = { version = "1", optional = true }
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 cfb-mode = "0.9"
 const-fnv1a-hash = "1"
 
 filetime = "0.2"
 axum = { version = "0.8", features = ["ws"] }
+# Held at 0.6: tower-http 0.7's `serve_dir` (pulled in by the `fs` feature, used
+# for the dashboard's ServeDir) imports `std::sync::atomic::AtomicU64`, which
+# does not exist on 32-bit targets — it breaks the mips/mipsel builds. Bump once
+# tower-http uses portable-atomic (or the `fs` feature is dropped).
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
@@ -174,15 +178,21 @@ rand = "0.10"
 tracing = "0.1"
 
 shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher", "aead-cipher-extra"], git = "https://github.com/shadowsocks/shadowsocks-rust.git", rev = "c4d8d18527289d12470cad1ce718754c908a75fe" }
-maxminddb = "0.28"
+maxminddb = "0.29"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.42", optional = true, default-features = false, features = ["tokio", "rustls"] }
+arti-client = { version = "0.44", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.44", optional = true, default-features = false, features = ["tokio", "rustls"] }
 
 
 # tuic
+# Held at v1.8.5 (this dependency-group bump left the rest updated). Upgrading
+# tuic to v1.8.10 pulls a newer `Tipuch/quinn` `bbrv3` branch tip whose
+# `into_0rtt()` signature dropped `ZeroRttAccepted`; the `tuic-server` crate
+# (a dev-dependency used by the in-process test server) still calls the old
+# signature and fails to build, and no fixed upstream tuic tag exists yet.
+# Bump both pins once upstream tuic compiles against current quinn.
 tuic-core= { tag = "v1.8.5", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
 
@@ -218,7 +228,7 @@ etherparse = {version = "0.20", optional = true }
 tempfile = "3.27"
 
 [dev-dependencies]
-mockall = "0.14.0"
+mockall = "0.15.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.1"
 bollard = "0.21"

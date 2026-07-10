@@ -559,7 +559,7 @@ impl Debug for DnsClient {
 #[async_trait]
 impl Client for DnsClient {
     fn id(&self) -> String {
-        format!("{}#{}:{}", &self.net, &self.host, &self.port)
+        format!("{}#{}:{}", self.net, self.host, self.port)
     }
 
     #[instrument(skip(msg), level = "trace")]
