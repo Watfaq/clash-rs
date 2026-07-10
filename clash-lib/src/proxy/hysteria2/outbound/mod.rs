@@ -644,7 +644,7 @@ mod tests {
         net::{IpAddr, Ipv4Addr},
     };
 
-    use super::super::utils::test_utils::{
+    use crate::proxy::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
     use crate::{
