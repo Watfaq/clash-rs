@@ -499,7 +499,7 @@ mod tests {
         common::{geodata::MockGeoDataLookupTrait, mmdb::MockMmdbLookupTrait},
         session::{Session, SocksAddr},
     };
-    use std::{io::Seek, path::Path, sync::Arc, time::Duration};
+    use std::{path::Path, sync::Arc, time::Duration};
     use tokio_test::assert_ok;
 
     #[tokio::test]
@@ -575,6 +575,14 @@ mod tests {
     /// A local `type: file` provider is watched automatically (no config
     /// flag): verify it initializes and live-reloads when the file changes on
     /// disk.
+    ///
+    /// Restricted to Linux (inotify), where filesystem events are delivered
+    /// promptly and deterministically. The macOS (FSEvents) and Windows
+    /// (ReadDirectoryChangesW) backends coalesce events and can take several
+    /// seconds to fire — fine for the real feature, but too non-deterministic
+    /// to assert against within a bounded CI test. The watcher code itself is
+    /// platform-agnostic; only this timing assertion is Linux-only.
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn test_file_provider_watch() {
         let mock_mmdb = MockMmdbLookupTrait::new();
@@ -583,7 +591,7 @@ mod tests {
         // Write initial content to a temporary file.  Using `NamedTempFile`
         // ensures the file is removed even if the test panics.
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
-        use std::io::Write as _;
+        use std::io::{Seek as _, Write as _};
         write!(tmp, "payload:\n  - twitter.com\n").unwrap();
         tmp.flush().unwrap();
 
