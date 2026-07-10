@@ -28,8 +28,8 @@ pub struct Fetcher<U, P> {
     inner: Arc<RwLock<Inner>>,
     parser: Arc<P>,
     pub on_update: Option<Arc<U>>,
-    /// Cancels the background polling and file-watch tasks when the fetcher is
-    /// dropped, so a config reload does not leak tasks or OS watches.
+    /// Aborts the polling and file-watch tasks on drop so config reloads don't
+    /// leak tasks or OS watches.
     cancel_token: CancellationToken,
 }
 
@@ -166,11 +166,9 @@ where
 
         if hash == this.hash {
             this.updated_at = now;
-            // Only refresh the mtime of a *cache* file (http vehicle) so the
-            // startup staleness check stays accurate. For a `File` vehicle the
-            // path is the user's own source file: touching its mtime is
-            // pointless and would re-trigger the file watcher in an endless
-            // read → touch → event loop.
+            // Only bump the mtime of an http cache file (for the staleness
+            // check). Doing it to a watched `File` vehicle would re-trigger the
+            // watcher in an endless read→touch→event loop.
             if vehicle.typ() != ProviderVehicleType::File {
                 filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
             }
@@ -199,9 +197,8 @@ where
         self.cancel_token.cancel();
     }
 
-    /// Run one update cycle and, when the content changed, invoke `on_update`.
-    /// Shared by the polling loop and the file watcher so their reload
-    /// semantics can never diverge.
+    /// Run one update cycle, invoking `on_update` when the content changed.
+    /// Shared by the polling loop and the file watcher so they can't diverge.
     async fn run_update(
         inner: Arc<RwLock<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
@@ -229,17 +226,12 @@ where
         }
     }
 
-    /// Start a file-system event watcher for the provider's local file.
+    /// Watch the provider's local file and reload its content on change.
     ///
-    /// When the file changes on disk the provider content is reloaded
-    /// immediately. The parent directory is watched (rather than the file
-    /// itself) so that atomic-save editors — which replace the file's inode via
-    /// write-temp-then-rename (vim, VS Code, `sed -i`) — keep working; events
-    /// are filtered down to the target file name. A short debounce coalesces
-    /// bursts of writes into a single reload.
-    ///
-    /// Only meaningful when the vehicle is of type `File`; for other vehicle
-    /// types this is a no-op.
+    /// Watches the parent directory (not the file itself) so atomic-save
+    /// editors that replace the inode — vim, VS Code, `sed -i` — keep working,
+    /// filtering events down to the target file name. No-op for non-`File`
+    /// vehicles.
     pub async fn start_watch(&self) -> anyhow::Result<()> {
         use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
 
@@ -248,8 +240,8 @@ where
         }
 
         let file_path = PathBuf::from(self.vehicle.path());
-        // Watch the containing directory so the watch survives inode
-        // replacement; fall back to the file itself if it has no parent.
+        // Watch the parent dir so the watch survives inode replacement; fall
+        // back to the file itself if it has no parent.
         let watch_dir = file_path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -269,22 +261,15 @@ where
         let mut watcher =
             recommended_watcher(move |result: notify::Result<notify::Event>| {
                 let Ok(event) = result else { return };
-                // Accept any content-affecting event. We deliberately do NOT
-                // restrict to `Modify(Data)`: the backends differ (macOS
-                // FSEvents and Windows ReadDirectoryChangesW frequently report
-                // `Modify(Any)` / `Modify(Metadata)` for an ordinary write), so
-                // a narrow filter would miss real changes on those platforms.
-                // Over-triggering is harmless — `update_inner` re-reads, sees an
-                // unchanged hash, and does nothing (and no longer touches the
-                // file's mtime for `File` vehicles, so there is no feedback
-                // loop).
+                // Accept any non-access event: macOS/Windows backends report
+                // ordinary writes as `Modify(Any)`/`Modify(Metadata)`, so a
+                // narrow filter would miss them. Over-triggering is harmless —
+                // a same-hash reload is a no-op and no longer touches the mtime.
                 if matches!(event.kind, EventKind::Access(_)) {
                     return;
                 }
-                // Only react to events that concern our specific file. Some
-                // backends emit directory-scoped events with no path (or the
-                // directory path itself); accept those rather than risk missing
-                // the change.
+                // Filter to our file, but accept directory-scoped events that
+                // carry no path rather than miss a change.
                 if let Some(want) = &watch_name
                     && !event.paths.is_empty()
                     && !event.paths.iter().any(|p| p.file_name() == Some(want))
@@ -312,8 +297,7 @@ where
             })?;
 
         tokio::spawn(async move {
-            // The watcher must be kept alive inside the task so that the OS
-            // kernel continues to deliver events.
+            // Keep the watcher alive in the task so events keep flowing.
             let _watcher = watcher;
 
             loop {
@@ -323,8 +307,7 @@ where
                         if recv.is_none() {
                             break;
                         }
-                        // Debounce: wait briefly and drain queued events so a
-                        // burst of writes triggers at most one reload.
+                        // Debounce a burst of writes into a single reload.
                         tokio::time::sleep(Duration::from_millis(50)).await;
                         while rx.try_recv().is_ok() {}
 

@@ -239,10 +239,9 @@ impl RuleProviderImpl {
                 }
             });
 
-        // A file/http vehicle always gets a fetcher so its content is loaded at
-        // startup — independent of whether a polling `interval` is configured
-        // (file providers are also live-reloaded via an OS watcher). Only the
-        // inline provider (no vehicle) has none.
+        // A file/http vehicle always gets a fetcher so its content loads at
+        // startup, regardless of `interval` (file providers also live-reload
+        // via the watcher). Only inline providers (no vehicle) have none.
         let fetcher = vehicle.map(|vehicle| {
             Fetcher::new(
                 name.clone(),
@@ -344,12 +343,9 @@ impl Provider for RuleProviderImpl {
             if let Some(updater) = fetcher.on_update.as_ref() {
                 updater(ele).await; // Directly pass RuleContent
             }
-            // Live-reload local file providers on disk changes (matches
-            // mihomo, which watches every `type: file` provider). Watcher
-            // setup can fail for environmental reasons (inotify limits,
-            // filesystems without event support); that is best-effort, so we
-            // log and keep serving the already-loaded rules rather than
-            // failing initialization.
+            // Auto-watch local file providers (like mihomo). Best-effort:
+            // watcher setup can fail (inotify limits, unsupported filesystems),
+            // so log and keep serving the loaded rules instead of failing init.
             if let Err(e) = fetcher.start_watch().await {
                 warn!(
                     "rule provider '{}': live file watching unavailable, falling \
@@ -572,16 +568,13 @@ mod tests {
         }));
     }
 
-    /// A local `type: file` provider is watched automatically (no config
-    /// flag): verify it initializes and live-reloads when the file changes on
-    /// disk.
+    /// A local `type: file` provider is watched automatically (no config flag)
+    /// and live-reloads on disk change.
     ///
-    /// Restricted to Linux (inotify), where filesystem events are delivered
-    /// promptly and deterministically. The macOS (FSEvents) and Windows
-    /// (ReadDirectoryChangesW) backends coalesce events and can take several
-    /// seconds to fire — fine for the real feature, but too non-deterministic
-    /// to assert against within a bounded CI test. The watcher code itself is
-    /// platform-agnostic; only this timing assertion is Linux-only.
+    /// Linux-only: inotify delivers events promptly, whereas macOS (FSEvents)
+    /// and Windows (ReadDirectoryChangesW) coalesce them with multi-second
+    /// latency — fine for the real feature, but too flaky for a bounded test.
+    /// The watcher code is platform-agnostic; only this timing check is gated.
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn test_file_provider_watch() {
@@ -634,13 +627,9 @@ mod tests {
             "google.com should NOT match before file update"
         );
 
-        // Give the OS watcher time to register, then overwrite the file and
-        // wait for the live reload. The watcher is set up asynchronously inside
-        // the task spawned by `initialize()`, and OS backends (macOS FSEvents,
-        // Windows ReadDirectoryChangesW) can have multi-second latency, so we
-        // re-write on each iteration: this both defeats the setup race (a write
-        // that lands before the watch is registered is simply retried) and
-        // keeps nudging slow/coalescing backends until the reload is observed.
+        // Re-write on each iteration: this defeats the watcher-registration
+        // race (the watch is set up asynchronously by `initialize()`) and keeps
+        // nudging slow/coalescing backends until the reload is observed.
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_secs(15);
         loop {
