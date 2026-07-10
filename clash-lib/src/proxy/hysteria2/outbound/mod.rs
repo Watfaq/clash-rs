@@ -644,16 +644,16 @@ mod tests {
         net::{IpAddr, Ipv4Addr},
     };
 
-    use crate::proxy::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner,
-    };
     use crate::{
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
                 Suite,
                 config_helper::test_config_base_dir,
-                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                consts::*,
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
