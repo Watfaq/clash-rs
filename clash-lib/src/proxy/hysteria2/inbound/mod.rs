@@ -29,18 +29,21 @@ use tracing::{debug, info, trace, warn};
 
 use crate::{
     Dispatcher,
-    common::tls::load_cert_and_key,
+    common::tls::resolve_server_cert_and_key,
     config::internal::listener::InboundUser,
     proxy::{
         datagram::UdpPacket,
-        hysteria2::codec::{Hy2TcpReqCodec, Hy2TcpRespEncoder, Hy2TcpRespMsg},
+        hysteria2::codec::{Hy2TcpReqCodec, Hy2TcpResp, Hy2TcpRespEncoder},
         inbound::InboundHandlerTrait,
         utils::ToCanonical,
     },
     session::{Network, Session, SocksAddr, Type},
 };
 
-use super::codec::{Defragger, Fragments, HysUdpPacket, padding};
+use super::{
+    codec::{Defragger, Fragments, HysUdpPacket, padding},
+    stream::HystStream,
+};
 
 /// The `h3` server connection type over a Quinn transport. Held for the
 /// lifetime of a QUIC connection so its `Drop` (which closes the connection)
@@ -54,36 +57,8 @@ fn build_quic_server_config(
     certificate: Option<&str>,
     private_key: Option<&str>,
 ) -> std::io::Result<ServerConfig> {
-    let (certs, key) = match (certificate, private_key) {
-        (Some(cert), Some(key)) => load_cert_and_key(cert, key)?,
-        (None, None) => {
-            let rcgen::CertifiedKey { cert, signing_key } =
-                rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
-                    .map_err(|e| {
-                        std::io::Error::other(format!(
-                            "failed to generate hysteria2 ephemeral cert: {e}"
-                        ))
-                    })?;
-            let cert_der =
-                rustls::pki_types::CertificateDer::from(cert.der().to_vec());
-            let key_der = rustls::pki_types::PrivateKeyDer::try_from(
-                signing_key.serialize_der(),
-            )
-            .map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to serialize hysteria2 ephemeral key: {e}"
-                ))
-            })?;
-            (vec![cert_der], key_der)
-        }
-        _ => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "hysteria2 inbound: certificate and private-key must both be set, \
-                 or both omitted",
-            ));
-        }
-    };
+    let (certs, key) =
+        resolve_server_cert_and_key(certificate, private_key, "hysteria2")?;
 
     let mut tls_config = rustls::ServerConfig::builder()
         .with_no_client_auth()
@@ -446,7 +421,7 @@ async fn handle_tcp_stream(
 
     // Send success response to client
     let mut framed_send = FramedWrite::new(send, Hy2TcpRespEncoder);
-    if let Err(e) = framed_send.send(Hy2TcpRespMsg::ok()).await {
+    if let Err(e) = framed_send.send(Hy2TcpResp::ok()).await {
         debug!("hysteria2 inbound {src_addr}: failed to send TCP response: {e}");
         return;
     }
@@ -464,7 +439,7 @@ async fn handle_tcp_stream(
     let prefix = parts.read_buf.freeze();
     let send = framed_send.into_inner();
 
-    let stream = HystServerStream { send, recv, prefix };
+    let stream = HystStream::with_prefix(send, recv, prefix);
 
     let sess = Session {
         network: Network::Tcp,
@@ -585,61 +560,6 @@ async fn handle_udp_datagrams(
         tokio::spawn(async move {
             let _ = dispatcher.dispatch_datagram(sess, Box::new(datagram)).await;
         });
-    }
-}
-
-/// A `quinn::SendStream` + `quinn::RecvStream` combined into a single
-/// bidirectional async I/O object for the dispatcher. `prefix` holds any bytes
-/// that were read past the request frame during decoding and must be delivered
-/// before reading further from the QUIC stream.
-struct HystServerStream {
-    send: quinn::SendStream,
-    recv: quinn::RecvStream,
-    prefix: Bytes,
-}
-
-impl tokio::io::AsyncRead for HystServerStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        if !this.prefix.is_empty() {
-            let n = this.prefix.len().min(buf.remaining());
-            buf.put_slice(&this.prefix[..n]);
-            let _ = this.prefix.split_to(n);
-            return Poll::Ready(Ok(()));
-        }
-        Pin::new(&mut this.recv).poll_read(cx, buf)
-    }
-}
-
-impl tokio::io::AsyncWrite for HystServerStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        <quinn::SendStream as tokio::io::AsyncWrite>::poll_write(
-            Pin::new(&mut self.get_mut().send),
-            cx,
-            buf,
-        )
-    }
-
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().send).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().send).poll_shutdown(cx)
     }
 }
 

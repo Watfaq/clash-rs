@@ -23,6 +23,16 @@ pub struct Hy2TcpResp {
     pub msg: String,
 }
 
+impl Hy2TcpResp {
+    /// A success response (status `0x00`, empty message).
+    pub fn ok() -> Self {
+        Self {
+            status: 0x00,
+            msg: String::new(),
+        }
+    }
+}
+
 /// Server-side codec for reading TCP relay requests from the client.
 ///
 /// ### Client → Server format
@@ -113,26 +123,12 @@ impl Decoder for Hy2TcpReqCodec {
 /// ```
 pub struct Hy2TcpRespEncoder;
 
-pub struct Hy2TcpRespMsg {
-    pub status: u8,
-    pub msg: String,
-}
-
-impl Hy2TcpRespMsg {
-    pub fn ok() -> Self {
-        Self {
-            status: 0x00,
-            msg: String::new(),
-        }
-    }
-}
-
-impl Encoder<Hy2TcpRespMsg> for Hy2TcpRespEncoder {
+impl Encoder<Hy2TcpResp> for Hy2TcpRespEncoder {
     type Error = std::io::Error;
 
     fn encode(
         &mut self,
-        item: Hy2TcpRespMsg,
+        item: Hy2TcpResp,
         buf: &mut BytesMut,
     ) -> Result<(), Self::Error> {
         let pad = padding(64..=512);
