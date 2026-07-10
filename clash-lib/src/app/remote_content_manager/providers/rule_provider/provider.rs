@@ -343,9 +343,9 @@ impl Provider for RuleProviderImpl {
             if let Some(updater) = fetcher.on_update.as_ref() {
                 updater(ele).await; // Directly pass RuleContent
             }
-            // Auto-watch local file providers (like mihomo). Best-effort:
-            // watcher setup can fail (inotify limits, unsupported filesystems),
-            // so log and keep serving the loaded rules instead of failing init.
+            // Auto-watch local file providers. Best-effort: watcher setup can
+            // fail (inotify limits, unsupported filesystems), so log and keep
+            // serving the loaded rules instead of failing init.
             if let Err(e) = fetcher.start_watch().await {
                 warn!(
                     "rule provider '{}': live file watching unavailable, falling \
