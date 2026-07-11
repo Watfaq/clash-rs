@@ -319,6 +319,27 @@ listeners:
     #   - name: bob
     #     password: "bob-password"
 
+  # SunnyQUIC inbound (requires the shadowquic feature).
+  - name: sunnyquic-in
+    type: sunnyquic
+    listen: 0.0.0.0
+    port: 1443
+    allow-lan: true
+    server-name: example.com
+    certificate: /path/to/cert.pem
+    private-key: /path/to/key.pem
+    users:
+      - name: alice
+        password: "alice-password"
+    alpn: [h3]
+    congestion-control: bbr
+    zero-rtt: true
+    initial-mtu: 1300
+    min-mtu: 1290
+    max-path-num: 12
+    gso: true
+    mtu-discovery: true
+
 # Inbound providers — load listener lists from files or HTTP endpoints.
 # The referenced YAML must have a top-level `listeners:` key.
 # inbound-providers:

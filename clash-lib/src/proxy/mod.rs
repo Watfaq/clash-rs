@@ -47,6 +47,8 @@ pub mod shadowsocks;
 pub mod socks;
 #[cfg(feature = "ssh")]
 pub mod ssh;
+#[cfg(feature = "shadowquic")]
+pub mod sunnyquic;
 #[cfg(feature = "tailscale")]
 pub mod tailscale;
 #[cfg(feature = "onion")]

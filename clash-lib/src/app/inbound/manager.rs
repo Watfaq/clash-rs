@@ -31,9 +31,7 @@ use std::{
 /// push user-list updates without restarting the listener.
 struct ProviderHandleEntry {
     handle: Option<JoinHandle<()>>,
-    /// Present only for Shadowsocks and AnyTLS listeners — used to push updated
-    /// user lists without restarting the listener.
-    /// lists into the running listener without a restart.
+    /// Used by listeners that support user updates without a restart.
     #[allow(dead_code)]
     users_tx: Option<tokio::sync::watch::Sender<Vec<InboundUser>>>,
 }
@@ -41,8 +39,7 @@ struct ProviderHandleEntry {
 /// Per-listener handle entry for static (non-provider) inbounds.
 struct StaticHandleEntry {
     handle: Option<JoinHandle<()>>,
-    /// Present only for AnyTLS (and Shadowsocks) listeners — used to push
-    /// updated user lists without restarting the listener.
+    /// Used by listeners that support user updates without a restart.
     #[allow(dead_code)]
     users_tx: Option<tokio::sync::watch::Sender<Vec<InboundUser>>>,
 }
@@ -250,6 +247,17 @@ impl InboundManager {
                                     users.len()
                                 );
                             }
+                            #[cfg(feature = "shadowquic")]
+                            if let (InboundOpts::SunnyQuic { users, .. }, Some(tx)) =
+                                (&opts, &entry.users_tx)
+                                && tx.send(users.clone()).is_ok()
+                            {
+                                info!(
+                                    "inbound provider {provider_name}: sunnyquic \
+                                     user list updated in place ({} users)",
+                                    users.len()
+                                );
+                            }
                             new_handles.insert(opts, entry);
                         } else {
                             opts_to_start.push(opts);
@@ -285,14 +293,19 @@ impl InboundManager {
                              '{listener_name}'"
                         );
 
-                        // For Shadowsocks, AnyTLS, and Hysteria2, create a watch
-                        // channel so future user-list updates can be pushed
-                        // without a restart.
+                        // Create a watch channel so supported listeners can apply
+                        // future user-list updates without a restart.
                         #[cfg(feature = "shadowsocks")]
                         let (users_rx, users_tx) = match &opts {
                             InboundOpts::Shadowsocks { users, .. }
                             | InboundOpts::Anytls { users, .. }
                             | InboundOpts::Hysteria2 { users, .. } => {
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
+                                (Some(rx), Some(tx))
+                            }
+                            #[cfg(feature = "shadowquic")]
+                            InboundOpts::SunnyQuic { users, .. } => {
                                 let (tx, rx) =
                                     tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
@@ -303,6 +316,12 @@ impl InboundManager {
                         let (users_rx, users_tx) = match &opts {
                             InboundOpts::Anytls { users, .. }
                             | InboundOpts::Hysteria2 { users, .. } => {
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
+                                (Some(rx), Some(tx))
+                            }
+                            #[cfg(feature = "shadowquic")]
+                            InboundOpts::SunnyQuic { users, .. } => {
                                 let (tx, rx) =
                                     tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
@@ -377,13 +396,18 @@ impl InboundManager {
             let cancellation_token = cancellation_token.clone();
             let name = opts.common_opts().name.clone();
 
-            // For AnyTLS, Hysteria2 (and Shadowsocks), create a watch channel so
-            // user-list updates can be pushed without a full restart.
+            // Create a watch channel so supported listeners can apply user-list
+            // updates without a full restart.
             #[cfg(feature = "shadowsocks")]
             let (users_rx, users_tx) = match opts {
                 InboundOpts::Shadowsocks { users, .. }
                 | InboundOpts::Anytls { users, .. }
                 | InboundOpts::Hysteria2 { users, .. } => {
+                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
+                    (Some(rx), Some(tx))
+                }
+                #[cfg(feature = "shadowquic")]
+                InboundOpts::SunnyQuic { users, .. } => {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
                 }
@@ -393,6 +417,11 @@ impl InboundManager {
             let (users_rx, users_tx) = match opts {
                 InboundOpts::Anytls { users, .. }
                 | InboundOpts::Hysteria2 { users, .. } => {
+                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
+                    (Some(rx), Some(tx))
+                }
+                #[cfg(feature = "shadowquic")]
+                InboundOpts::SunnyQuic { users, .. } => {
                     let (tx, rx) = tokio::sync::watch::channel(users.clone());
                     (Some(rx), Some(tx))
                 }

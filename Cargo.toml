@@ -48,9 +48,5 @@ needless_collect = "deny"
 [patch.crates-io]
 rustls = { git = "https://github.com/Watfaq/rustls.git", branch = "watfaq/0.23.40" }
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", branch = "watfaq/0.26.4" }
-# shadowquic 0.3.11 (registry) is incompatible with quinn-proto-jls 0.3.6 which
-# added an `_is_ecn: bool` parameter to CongestionController::on_congestion_event.
-# The fix is in the main branch but not yet released as a new crate version.
-shadowquic = { git = "https://github.com/spongebob888/shadowquic.git", rev = "295034e1b6478706a4348565bfc3ecea8378da98" }
-shadowquic-macros = { git = "https://github.com/spongebob888/shadowquic.git", rev = "295034e1b6478706a4348565bfc3ecea8378da98" }
-
+shadowquic = { path = "../shadowquic/shadowquic" }
+shadowquic-macros = { path = "../shadowquic/shadowquic-macros" }

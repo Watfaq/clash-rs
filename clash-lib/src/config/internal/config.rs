@@ -261,4 +261,62 @@ mod tests {
             _ => false,
         }));
     }
+
+    #[cfg(feature = "shadowquic")]
+    #[test]
+    fn parses_sunnyquic_listener() {
+        let cfg = r#"
+        listeners:
+          - name: sunny-in
+            type: sunnyquic
+            listen: 0.0.0.0
+            port: 1443
+            server-name: example.com
+            certificate: /etc/clash-rs/sunnyquic.crt
+            private-key: /etc/clash-rs/sunnyquic.key
+            users:
+              - name: alice
+                password: secret
+        "#;
+        let config = cfg.parse::<def::Config>().expect("should parse");
+        let config = convert(config).expect("should convert");
+
+        assert!(config.listeners.iter().any(|listener| match listener {
+            InboundOpts::SunnyQuic {
+                common_opts,
+                users,
+                alpn,
+                zero_rtt,
+                initial_mtu,
+                min_mtu,
+                ..
+            } => {
+                common_opts.port == 1443
+                    && users.len() == 1
+                    && alpn == &["h3"]
+                    && *zero_rtt
+                    && *initial_mtu == 1300
+                    && *min_mtu == 1290
+            }
+            _ => false,
+        }));
+    }
+
+    #[cfg(feature = "shadowquic")]
+    #[test]
+    fn parses_sunnyquic_example_file() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sunnyquic-inbound.yaml");
+        let yaml =
+            std::fs::read_to_string(path).expect("example file should be readable");
+        let config = yaml.parse::<def::Config>().expect("example should parse");
+        let config = convert(config).expect("example should convert");
+
+        assert!(
+            config
+                .listeners
+                .iter()
+                .any(|listener| matches!(listener, InboundOpts::SunnyQuic { .. }))
+        );
+    }
 }

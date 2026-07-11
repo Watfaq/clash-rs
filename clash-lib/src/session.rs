@@ -387,6 +387,7 @@ pub enum Type {
     Shadowsocks,
     Anytls,
     Hysteria2,
+    SunnyQuic,
     Ignore,
 }
 

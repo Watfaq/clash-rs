@@ -14,6 +14,11 @@ use crate::{
     },
 };
 
+#[cfg(feature = "shadowquic")]
+use crate::proxy::sunnyquic::{
+    InboundOptions as SunnyQuicInboundOptions, SunnyQuicInbound,
+};
+
 #[cfg(all(target_os = "linux", feature = "redir"))]
 use crate::proxy::redir::RedirInbound;
 #[cfg(all(target_os = "linux", feature = "tproxy"))]
@@ -249,6 +254,50 @@ fn build_handler(
                 Ok(h) => Some(Arc::new(h)),
                 Err(e) => {
                     warn!("hysteria2 inbound failed to init: {e}");
+                    None
+                }
+            }
+        }
+        #[cfg(feature = "shadowquic")]
+        InboundOpts::SunnyQuic {
+            common_opts,
+            users,
+            server_name,
+            certificate,
+            private_key,
+            max_path_num,
+            alpn,
+            zero_rtt,
+            congestion_control,
+            initial_mtu,
+            min_mtu,
+            gso,
+            mtu_discovery,
+        } => {
+            let rx = users_rx
+                .unwrap_or_else(|| tokio::sync::watch::channel(users.clone()).1);
+            match SunnyQuicInbound::new(SunnyQuicInboundOptions {
+                addr: (common_opts.listen.0, common_opts.port).into(),
+                users: users.clone(),
+                server_name: server_name.clone(),
+                certificate: certificate.clone(),
+                private_key: private_key.clone(),
+                max_path_num: *max_path_num,
+                alpn: alpn.clone(),
+                zero_rtt: *zero_rtt,
+                congestion_control: congestion_control.clone(),
+                initial_mtu: *initial_mtu,
+                min_mtu: *min_mtu,
+                gso: *gso,
+                mtu_discovery: *mtu_discovery,
+                allow_lan: common_opts.allow_lan,
+                dispatcher,
+                fw_mark: common_opts.fw_mark,
+                users_rx: rx,
+            }) {
+                Ok(handler) => Some(Arc::new(handler)),
+                Err(error) => {
+                    warn!("sunnyquic inbound failed to init: {error}");
                     None
                 }
             }
