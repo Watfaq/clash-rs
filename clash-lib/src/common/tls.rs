@@ -80,6 +80,47 @@ pub fn load_cert_and_key(
     Ok((certs, private_key))
 }
 
+/// Resolve a server certificate chain and key for an inbound listener.
+///
+/// - both provided → loaded via [`load_cert_and_key`] (inline PEM or file path)
+/// - both absent → an ephemeral self-signed certificate for `localhost`
+/// - exactly one provided → an error
+///
+/// `who` names the caller (e.g. `"anytls"`, `"hysteria2"`) for error messages.
+pub fn resolve_server_cert_and_key(
+    certificate: Option<&str>,
+    private_key: Option<&str>,
+    who: &str,
+) -> std::io::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+    match (certificate, private_key) {
+        (Some(cert), Some(key)) => load_cert_and_key(cert, key),
+        (None, None) => {
+            let rcgen::CertifiedKey { cert, signing_key } =
+                rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
+                    .map_err(|e| {
+                        std::io::Error::other(format!(
+                            "failed to generate ephemeral {who} certificate: {e}"
+                        ))
+                    })?;
+            let cert_der = CertificateDer::from(cert.der().to_vec());
+            let key_der = PrivateKeyDer::try_from(signing_key.serialize_der())
+                .map_err(|e| {
+                    std::io::Error::other(format!(
+                        "failed to serialize ephemeral {who} key: {e}"
+                    ))
+                })?;
+            Ok((vec![cert_der], key_der))
+        }
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "{who} inbound: certificate and private-key must both be set, or \
+                 both omitted"
+            ),
+        )),
+    }
+}
+
 /// Build a `rustls` [`ClientConfig`] with a custom certificate verifier and
 /// optional mTLS client certificate.
 ///

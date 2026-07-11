@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
 
-use crate::common::tls::load_cert_and_key;
+use crate::common::tls::resolve_server_cert_and_key;
 
 /// Build a TLS acceptor from PEM certificate and private key.
 /// Strings containing `-----BEGIN` are treated as inline PEM; otherwise
@@ -13,36 +13,8 @@ pub(crate) fn build_tls_acceptor(
     certificate: Option<&str>,
     private_key: Option<&str>,
 ) -> std::io::Result<TlsAcceptor> {
-    let (certs, key) = match (certificate, private_key) {
-        (Some(cert), Some(key)) => load_cert_and_key(cert, key)?,
-        (None, None) => {
-            let rcgen::CertifiedKey { cert, signing_key } =
-                rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
-                    .map_err(|e| {
-                        std::io::Error::other(format!(
-                            "failed to generate ephemeral anytls certificate: {e}"
-                        ))
-                    })?;
-            let cert_der =
-                rustls::pki_types::CertificateDer::from(cert.der().to_vec());
-            let key_der = rustls::pki_types::PrivateKeyDer::try_from(
-                signing_key.serialize_der(),
-            )
-            .map_err(|e| {
-                std::io::Error::other(format!(
-                    "failed to serialize ephemeral anytls key: {e}"
-                ))
-            })?;
-            (vec![cert_der], key_der)
-        }
-        _ => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "anytls inbound: certificate and private-key must both be set, or \
-                 both omitted",
-            ));
-        }
-    };
+    let (certs, key) =
+        resolve_server_cert_and_key(certificate, private_key, "anytls")?;
 
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()

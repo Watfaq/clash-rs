@@ -4,6 +4,9 @@ use crate::{
     proxy::{
         anytls::inbound::{AnytlsInbound, InboundOptions as AnytlsInboundOptions},
         http::HttpInbound,
+        hysteria2::inbound::{
+            Hysteria2Inbound, InboundOptions as Hysteria2InboundOptions,
+        },
         inbound::InboundHandlerTrait,
         mixed::MixedInbound,
         socks::inbound::SocksInbound,
@@ -220,6 +223,32 @@ fn build_handler(
                 Ok(h) => Some(Arc::new(h)),
                 Err(e) => {
                     warn!("anytls inbound failed to init: {e}");
+                    None
+                }
+            }
+        }
+        InboundOpts::Hysteria2 {
+            common_opts,
+            password,
+            certificate,
+            private_key,
+            users,
+        } => {
+            let rx = users_rx
+                .unwrap_or_else(|| tokio::sync::watch::channel(users.clone()).1);
+            match Hysteria2Inbound::new(Hysteria2InboundOptions {
+                addr: (common_opts.listen.0, common_opts.port).into(),
+                password: password.clone(),
+                certificate: certificate.clone(),
+                private_key: private_key.clone(),
+                allow_lan: common_opts.allow_lan,
+                dispatcher,
+                fw_mark: common_opts.fw_mark,
+                users_rx: rx,
+            }) {
+                Ok(h) => Some(Arc::new(h)),
+                Err(e) => {
+                    warn!("hysteria2 inbound failed to init: {e}");
                     None
                 }
             }
