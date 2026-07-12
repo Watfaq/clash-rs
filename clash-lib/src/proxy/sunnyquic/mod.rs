@@ -553,3 +553,163 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::{fs, io::Write as _, path::Path};
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::{IMAGE_SHADOWQUIC, LOCAL_ADDR},
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
+
+    async fn get_sunnyquic_client(
+        socks_port: u16,
+        server_port: u16,
+        certificate: &Path,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let client_config = format!(
+            r#"inbound:
+    type: socks
+    bind-addr: "127.0.0.1:{socks_port}"
+outbound:
+    type: sunnyquic
+    addr: "127.0.0.1:{server_port}"
+    username: "sunny-user"
+    password: "sunny-password"
+    server-name: "dns.example.com"
+    cert-path: "/etc/shadowquic/server.crt"
+    alpn: ["h3"]
+    initial-mtu: 1300
+    min-mtu: 1290
+    congestion-control:
+      brutal:
+        bandwidth: "1G"
+        min-window: 16384
+        cwnd-gain: 1.10
+        min-ack-rate: 0.8
+        min-sample-count: 50
+        ack-compensate: true
+    zero-rtt: true
+    gso: true
+    over-stream: false
+log-level: "error"
+"#,
+        );
+        let mut config_file = tempfile::NamedTempFile::new()?;
+        config_file.write_all(client_config.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOWQUIC)
+            .no_port()
+            .net_mode("host")
+            .entrypoint(&["/bin/sh"])
+            .cmd(&[
+                "-c",
+                "sleep 2; exec /usr/bin/shadowquic -c /etc/shadowquic/config.yaml",
+            ])
+            .mounts(&[
+                (
+                    config_file.path().to_str().unwrap(),
+                    "/etc/shadowquic/config.yaml",
+                ),
+                (certificate.to_str().unwrap(), "/etc/shadowquic/server.crt"),
+            ])
+            .build()
+            .await?;
+        drop(config_file);
+        Ok(runner)
+    }
+
+    fn generate_test_certificate(
+        directory: &Path,
+    ) -> anyhow::Result<(std::path::PathBuf, std::path::PathBuf)> {
+        let rcgen::CertifiedKey { cert, signing_key } =
+            rcgen::generate_simple_self_signed(vec!["dns.example.com".to_owned()])?;
+        let certificate = directory.join("server.crt");
+        let private_key = directory.join("server.key");
+        fs::write(&certificate, cert.pem())?;
+        fs::write(&private_key, signing_key.serialize_pem())?;
+        Ok((certificate, private_key))
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_sunnyquic_inbound_brutal() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let server_port = alloc_port();
+        let echo_port = alloc_port();
+        let certificate_directory = tempfile::tempdir()?;
+        let (certificate, private_key) =
+            generate_test_certificate(certificate_directory.path())?;
+        let client =
+            get_sunnyquic_client(socks_port, server_port, &certificate).await?;
+
+        let config_dir = config_helper::test_config_base_dir();
+        let mmdb = config_dir.join("Country.mmdb");
+        let config = format!(
+            r#"mmdb: "{mmdb}"
+mode: direct
+log-level: error
+listeners:
+  - name: sunnyquic-in
+    type: sunnyquic
+    listen: 0.0.0.0
+    port: {server_port}
+    allow-lan: true
+    server-name: dns.example.com
+    certificate: "{certificate}"
+    private-key: "{private_key}"
+    users:
+      - name: sunny-user
+        password: sunny-password
+    alpn: [h3]
+    congestion-control:
+      brutal:
+        bandwidth: "1G"
+        min-window: 16384
+        cwnd-gain: 1.10
+        min-ack-rate: 0.8
+        min-sample-count: 50
+        ack-compensate: true
+    zero-rtt: true
+    initial-mtu: 1300
+    min-mtu: 1290
+    max-path-num: 12
+    gso: true
+    mtu-discovery: true
+"#,
+            mmdb = mmdb.display(),
+            certificate = certificate.display(),
+            private_key = private_key.display(),
+        );
+        let binary = find_clash_rs_binary();
+
+        client
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "sunnyquic-inbound-brutal",
+                    socks_port,
+                    echo_port,
+                    Some(LOCAL_ADDR.to_owned()),
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}
