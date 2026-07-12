@@ -10,6 +10,8 @@ listeners:
     certificate: /etc/clash-rs/certs/example.com.crt
     private-key: /etc/clash-rs/certs/example.com.key
 
+    # All names, including those beginning with "admin", are ordinary users;
+    # the user-management API is disabled.
     users:
       - name: alice
         password: "replace-with-a-strong-password"

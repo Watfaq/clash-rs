@@ -21,10 +21,7 @@ use tracing::{debug, info, warn};
 use crate::{
     Dispatcher,
     config::listener::InboundUser,
-    proxy::{
-        AnyInboundDatagram, datagram::UdpPacket, inbound::InboundHandlerTrait,
-        utils::ToCanonical,
-    },
+    proxy::{AnyInboundDatagram, datagram::UdpPacket, inbound::InboundHandlerTrait},
     session::{Network, Session, SocksAddr, Type},
 };
 
@@ -50,7 +47,6 @@ pub struct InboundOptions {
 
 pub struct SunnyQuicInbound {
     addr: SocketAddr,
-    allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     fw_mark: Option<u32>,
     config: SunnyQuicServerCfg,
@@ -70,7 +66,9 @@ impl SunnyQuicInbound {
             max_path_num: opts.max_path_num,
             alpn: opts.alpn,
             zero_rtt: opts.zero_rtt,
-            congestion_control: opts.congestion_control,
+            congestion_control: normalize_congestion_control(
+                opts.congestion_control,
+            ),
             initial_mtu: opts.initial_mtu,
             min_mtu: opts.min_mtu,
             gso: opts.gso,
@@ -79,7 +77,6 @@ impl SunnyQuicInbound {
         };
         Ok(Self {
             addr: opts.addr,
-            allow_lan: opts.allow_lan,
             dispatcher: opts.dispatcher,
             fw_mark: opts.fw_mark,
             config,
@@ -126,18 +123,9 @@ impl InboundHandlerTrait for SunnyQuicInbound {
 
             match event {
                 Event::Request(Ok(request)) => {
-                    let source = request_source(&request);
-                    if !source_allowed(source, self.addr, self.allow_lan) {
-                        warn!(
-                            "sunnyquic inbound {}: request from {} rejected (not \
-                             allowed)",
-                            self.addr, source
-                        );
-                        continue;
-                    }
                     dispatch_request(
                         request,
-                        source,
+                        unspecified_source(self.addr),
                         self.dispatcher.clone(),
                         self.fw_mark,
                     );
@@ -229,6 +217,18 @@ fn validate_options(opts: &InboundOptions) -> io::Result<()> {
             "sunnyquic inbound requires initial-mtu >= min-mtu >= 1200",
         ));
     }
+    validate_listener_access(opts.addr, opts.allow_lan)?;
+    Ok(())
+}
+
+fn validate_listener_access(addr: SocketAddr, allow_lan: bool) -> io::Result<()> {
+    if !allow_lan && !addr.ip().is_loopback() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "sunnyquic inbound with allow-lan disabled must listen on a loopback \
+             address",
+        ));
+    }
     Ok(())
 }
 
@@ -242,19 +242,21 @@ fn to_auth_users(users: &[InboundUser]) -> Vec<AuthUser> {
         .collect()
 }
 
-fn source_allowed(source: SocketAddr, listen: SocketAddr, allow_lan: bool) -> bool {
-    allow_lan
-        || source.ip().is_loopback()
-        || (!listen.ip().is_unspecified() && source.ip() == listen.ip())
+fn normalize_congestion_control(
+    congestion_control: CongestionControl,
+) -> CongestionControl {
+    match congestion_control {
+        CongestionControl::Bbr => CongestionControl::Bbr3,
+        other => other,
+    }
 }
 
-fn request_source(request: &ProxyRequest) -> SocketAddr {
-    match request {
-        ProxyRequest::Tcp(session) => session.peer_addr(),
-        ProxyRequest::Udp(session) => session.peer_addr(),
+fn unspecified_source(listen: SocketAddr) -> SocketAddr {
+    if listen.is_ipv6() {
+        "[::]:0".parse().expect("valid unspecified IPv6 address")
+    } else {
+        "0.0.0.0:0".parse().expect("valid unspecified IPv4 address")
     }
-    .unwrap_or_else(|| "0.0.0.0:0".parse().expect("valid unspecified address"))
-    .to_canonical()
 }
 
 fn dispatch_request(
@@ -265,7 +267,6 @@ fn dispatch_request(
 ) {
     match request {
         ProxyRequest::Tcp(session) => {
-            let inbound_user = session.username().map(str::to_owned);
             let destination = match to_clash_socks_addr(session.dst) {
                 Ok(destination) => destination,
                 Err(error) => {
@@ -283,19 +284,18 @@ fn dispatch_request(
                     source,
                     destination,
                     so_mark: fw_mark,
-                    inbound_user,
+                    inbound_user: None,
                     ..Default::default()
                 };
                 dispatcher.dispatch_stream(sess, Box::new(stream)).await;
             });
         }
         ProxyRequest::Udp(session) => {
-            let inbound_user = session.username().map(str::to_owned);
             let datagram = SunnyQuicInboundDatagram::new(
                 session.recv,
                 session.send,
                 source,
-                inbound_user.clone(),
+                None,
             );
             tokio::spawn(async move {
                 let sess = Session {
@@ -303,7 +303,7 @@ fn dispatch_request(
                     typ: Type::SunnyQuic,
                     source,
                     so_mark: fw_mark,
-                    inbound_user,
+                    inbound_user: None,
                     ..Default::default()
                 };
                 let _ = dispatcher
@@ -507,22 +507,39 @@ mod tests {
     }
 
     #[test]
-    fn restricts_non_loopback_clients_when_lan_is_disabled() {
-        let listen = "0.0.0.0:1443".parse().unwrap();
-        assert!(source_allowed(
-            "127.0.0.1:50000".parse().unwrap(),
-            listen,
-            false
+    fn accepts_admin_as_a_regular_user() {
+        let users = vec![InboundUser {
+            name: "administrator".to_owned(),
+            password: "password".to_owned(),
+        }];
+        assert!(validate_users(&users).is_ok());
+    }
+
+    #[test]
+    fn maps_bbr_to_bbr3() {
+        assert!(matches!(
+            normalize_congestion_control(CongestionControl::Bbr),
+            CongestionControl::Bbr3
         ));
-        assert!(!source_allowed(
-            "192.0.2.10:50000".parse().unwrap(),
-            listen,
-            false
-        ));
-        assert!(source_allowed(
-            "192.0.2.10:50000".parse().unwrap(),
-            listen,
-            true
-        ));
+    }
+
+    #[test]
+    fn requires_loopback_when_lan_access_is_disabled() {
+        assert!(
+            validate_listener_access("127.0.0.1:1443".parse().unwrap(), false)
+                .is_ok()
+        );
+        assert!(
+            validate_listener_access("[::1]:1443".parse().unwrap(), false).is_ok()
+        );
+        assert_eq!(
+            validate_listener_access("0.0.0.0:1443".parse().unwrap(), false)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert!(
+            validate_listener_access("0.0.0.0:1443".parse().unwrap(), true).is_ok()
+        );
     }
 }
