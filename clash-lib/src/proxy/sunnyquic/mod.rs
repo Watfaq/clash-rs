@@ -100,11 +100,9 @@ impl InboundHandlerTrait for SunnyQuicInbound {
         let mut users_rx = self.users_rx.clone();
         let mut users_rx_open = true;
         let mut server =
-            shadowquic::sunnyquic::inbound::SunnyQuicServer::new_without_user_api(
-                config.clone(),
-            )
-            .await
-            .map_err(io::Error::other)?;
+            shadowquic::sunnyquic::inbound::SunnyQuicServer::new(config.clone())
+                .await
+                .map_err(io::Error::other)?;
         server.init().await.map_err(io::Error::other)?;
         info!("SunnyQUIC listening at: {}", self.addr);
 
@@ -180,6 +178,15 @@ fn validate_users(users: &[InboundUser]) -> io::Result<()> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "sunnyquic inbound users require non-empty name and password",
+            ));
+        }
+        if user.name.starts_with("admin") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "sunnyquic inbound user name must not start with \"admin\": {}",
+                    user.name
+                ),
             ));
         }
         if !names.insert(user.name.as_str()) {
@@ -507,12 +514,15 @@ mod tests {
     }
 
     #[test]
-    fn accepts_admin_as_a_regular_user() {
+    fn rejects_user_management_names() {
         let users = vec![InboundUser {
             name: "administrator".to_owned(),
             password: "password".to_owned(),
         }];
-        assert!(validate_users(&users).is_ok());
+        assert_eq!(
+            validate_users(&users).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
     }
 
     #[test]

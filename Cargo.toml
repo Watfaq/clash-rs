@@ -9,7 +9,6 @@ members = [
     "clash-dns",
     "clash-netstack"
 ]
-exclude = ["vendor/shadowquic"]
 
 
 [workspace.package]
@@ -49,5 +48,5 @@ needless_collect = "deny"
 [patch.crates-io]
 rustls = { git = "https://github.com/Watfaq/rustls.git", branch = "watfaq/0.23.40" }
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", branch = "watfaq/0.26.4" }
-shadowquic = { path = "vendor/shadowquic/shadowquic" }
-shadowquic-macros = { path = "vendor/shadowquic/shadowquic-macros" }
+shadowquic = { git = "https://github.com/spongebob888/shadowquic", rev = "1db0142b3d960d876d5884277edaa210e318965e" }
+shadowquic-macros = { git = "https://github.com/spongebob888/shadowquic", rev = "1db0142b3d960d876d5884277edaa210e318965e" }
