@@ -129,7 +129,8 @@ impl InboundHandlerTrait for SunnyQuicInbound {
                     let source = request_source(&request);
                     if !source_allowed(source, self.addr, self.allow_lan) {
                         warn!(
-                            "sunnyquic inbound {}: request from {} rejected (not allowed)",
+                            "sunnyquic inbound {}: request from {} rejected (not \
+                             allowed)",
                             self.addr, source
                         );
                         continue;
@@ -381,7 +382,8 @@ impl Stream for SunnyQuicInboundDatagram {
                         Ok(destination) => destination,
                         Err(error) => {
                             warn!(
-                                "sunnyquic inbound UDP packet has invalid target: {error}"
+                                "sunnyquic inbound UDP packet has invalid target: \
+                                 {error}"
                             );
                             continue;
                         }

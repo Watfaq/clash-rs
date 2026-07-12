@@ -1,7 +1,6 @@
-# SunnyQUIC inbound listener for clash-rs.
-# Build clash-rs with the `shadowquic` feature.
+# SunnyQUIC inbound using shadowquic/noq's existing Brutal controller.
 listeners:
-  - name: sunnyquic-in
+  - name: sunnyquic-brutal-in
     type: sunnyquic
     listen: 0.0.0.0
     port: 1443
@@ -11,18 +10,21 @@ listeners:
     certificate: /etc/clash-rs/certs/example.com.crt
     private-key: /etc/clash-rs/certs/example.com.key
 
-    # Used only for client authentication. The ShadowQUIC user-management
-    # protocol extension is disabled for this Clash inbound.
     users:
       - name: alice
         password: "replace-with-a-strong-password"
 
     alpn: [h3]
-    congestion-control: bbr
-    # To use the existing shadowquic/noq Brutal controller instead:
-    # congestion-control:
-    #   brutal:
-    #     bandwidth: 100000000 # bits per second
+    congestion-control:
+      brutal:
+        # Server upload bandwidth in bits per second. "100M" is also accepted.
+        bandwidth: 100000000
+        min-window: 16384
+        cwnd-gain: 1.1
+        min-ack-rate: 0.8
+        min-sample-count: 50
+        ack-compensate: false
+
     zero-rtt: true
     initial-mtu: 1300
     min-mtu: 1290

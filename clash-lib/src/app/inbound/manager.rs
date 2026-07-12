@@ -1,6 +1,9 @@
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::{
+    sync::{RwLock, watch},
+    task::JoinHandle,
+};
 
 use crate::{
     app::{
@@ -47,6 +50,43 @@ struct StaticHandleEntry {
 type ProviderHandles =
     Arc<RwLock<HashMap<String, HashMap<InboundOpts, ProviderHandleEntry>>>>;
 use tracing::{error, info, warn};
+
+type UsersChannel = (
+    Option<watch::Receiver<Vec<InboundUser>>>,
+    Option<watch::Sender<Vec<InboundUser>>>,
+);
+
+fn inbound_users(opts: &InboundOpts) -> Option<&Vec<InboundUser>> {
+    match opts {
+        #[cfg(feature = "shadowsocks")]
+        InboundOpts::Shadowsocks { users, .. } => Some(users),
+        InboundOpts::Anytls { users, .. } | InboundOpts::Hysteria2 { users, .. } => {
+            Some(users)
+        }
+        #[cfg(feature = "shadowquic")]
+        InboundOpts::SunnyQuic { users, .. } => Some(users),
+        _ => None,
+    }
+}
+
+fn make_users_channel(opts: &InboundOpts) -> UsersChannel {
+    match inbound_users(opts) {
+        Some(users) => {
+            let (tx, rx) = watch::channel(users.clone());
+            (Some(rx), Some(tx))
+        }
+        None => (None, None),
+    }
+}
+
+fn push_user_update(
+    opts: &InboundOpts,
+    users_tx: Option<&watch::Sender<Vec<InboundUser>>>,
+) -> Option<usize> {
+    let users = inbound_users(opts)?;
+    users_tx?.send(users.clone()).ok()?;
+    Some(users.len())
+}
 
 /// Legacy ports configuration for inbounds.
 /// Newer inbounds have their own port configuration
@@ -216,46 +256,14 @@ impl InboundManager {
                             // Structural key matched (same port/cipher/password).
                             // Push updated user list via watch channel if present —
                             // this avoids restarting the listener entirely.
-                            #[cfg(feature = "shadowsocks")]
-                            if let (InboundOpts::Shadowsocks { users, .. }, Some(tx)) =
-                                (&opts, &entry.users_tx)
-                                && tx.send(users.clone()).is_ok()
+                            if let Some(user_count) =
+                                push_user_update(&opts, entry.users_tx.as_ref())
                             {
                                 info!(
-                                    "inbound provider {provider_name}: user list \
-                                     updated in place ({} users)",
-                                    users.len()
-                                );
-                            }
-                            if let (InboundOpts::Anytls { users, .. }, Some(tx)) =
-                                (&opts, &entry.users_tx)
-                                && tx.send(users.clone()).is_ok()
-                            {
-                                info!(
-                                    "inbound provider {provider_name}: anytls user \
+                                    "inbound provider {provider_name}: {} user \
                                      list updated in place ({} users)",
-                                    users.len()
-                                );
-                            }
-                            if let (InboundOpts::Hysteria2 { users, .. }, Some(tx)) =
-                                (&opts, &entry.users_tx)
-                                && tx.send(users.clone()).is_ok()
-                            {
-                                info!(
-                                    "inbound provider {provider_name}: hysteria2 \
-                                     user list updated in place ({} users)",
-                                    users.len()
-                                );
-                            }
-                            #[cfg(feature = "shadowquic")]
-                            if let (InboundOpts::SunnyQuic { users, .. }, Some(tx)) =
-                                (&opts, &entry.users_tx)
-                                && tx.send(users.clone()).is_ok()
-                            {
-                                info!(
-                                    "inbound provider {provider_name}: sunnyquic \
-                                     user list updated in place ({} users)",
-                                    users.len()
+                                    opts.type_name(),
+                                    user_count
                                 );
                             }
                             new_handles.insert(opts, entry);
@@ -295,42 +303,7 @@ impl InboundManager {
 
                         // Create a watch channel so supported listeners can apply
                         // future user-list updates without a restart.
-                        #[cfg(feature = "shadowsocks")]
-                        let (users_rx, users_tx) = match &opts {
-                            InboundOpts::Shadowsocks { users, .. }
-                            | InboundOpts::Anytls { users, .. }
-                            | InboundOpts::Hysteria2 { users, .. } => {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            }
-                            #[cfg(feature = "shadowquic")]
-                            InboundOpts::SunnyQuic { users, .. } => {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            }
-                            _ => (None, None),
-                        };
-                        #[cfg(not(feature = "shadowsocks"))]
-                        let (users_rx, users_tx) = match &opts {
-                            InboundOpts::Anytls { users, .. }
-                            | InboundOpts::Hysteria2 { users, .. } => {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            }
-                            #[cfg(feature = "shadowquic")]
-                            InboundOpts::SunnyQuic { users, .. } => {
-                                let (tx, rx) =
-                                    tokio::sync::watch::channel(users.clone());
-                                (Some(rx), Some(tx))
-                            }
-                            _ => (
-                                None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
-                                None,
-                            ),
-                        };
+                        let (users_rx, users_tx) = make_users_channel(&opts);
 
                         let handle = build_network_listeners(
                             &opts,
@@ -398,35 +371,7 @@ impl InboundManager {
 
             // Create a watch channel so supported listeners can apply user-list
             // updates without a full restart.
-            #[cfg(feature = "shadowsocks")]
-            let (users_rx, users_tx) = match opts {
-                InboundOpts::Shadowsocks { users, .. }
-                | InboundOpts::Anytls { users, .. }
-                | InboundOpts::Hysteria2 { users, .. } => {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                }
-                #[cfg(feature = "shadowquic")]
-                InboundOpts::SunnyQuic { users, .. } => {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                }
-                _ => (None, None),
-            };
-            #[cfg(not(feature = "shadowsocks"))]
-            let (users_rx, users_tx) = match opts {
-                InboundOpts::Anytls { users, .. }
-                | InboundOpts::Hysteria2 { users, .. } => {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                }
-                #[cfg(feature = "shadowquic")]
-                InboundOpts::SunnyQuic { users, .. } => {
-                    let (tx, rx) = tokio::sync::watch::channel(users.clone());
-                    (Some(rx), Some(tx))
-                }
-                _ => (None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>, None),
-            };
+            let (users_rx, users_tx) = make_users_channel(opts);
 
             entry.users_tx = users_tx;
             entry.handle = build_network_listeners(

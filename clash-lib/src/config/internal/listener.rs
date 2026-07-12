@@ -128,21 +128,39 @@ pub enum InboundOpts {
         certificate: String,
         #[serde(rename = "private-key")]
         private_key: String,
-        #[serde(default = "default_sunnyquic_max_path_num")]
+        #[serde(
+            rename = "max-path-num",
+            default = "default_sunnyquic_max_path_num"
+        )]
         max_path_num: u32,
         #[serde(default = "shadowquic::config::default_alpn")]
         alpn: Vec<String>,
-        #[serde(default = "shadowquic::config::default_zero_rtt")]
+        #[serde(
+            rename = "zero-rtt",
+            default = "shadowquic::config::default_zero_rtt"
+        )]
         zero_rtt: bool,
-        #[serde(default = "shadowquic::config::default_congestion_control")]
+        #[serde(
+            rename = "congestion-control",
+            default = "shadowquic::config::default_congestion_control"
+        )]
         congestion_control: shadowquic::config::CongestionControl,
-        #[serde(default = "shadowquic::config::default_initial_mtu")]
+        #[serde(
+            rename = "initial-mtu",
+            default = "shadowquic::config::default_initial_mtu"
+        )]
         initial_mtu: u16,
-        #[serde(default = "shadowquic::config::default_min_mtu")]
+        #[serde(
+            rename = "min-mtu",
+            default = "shadowquic::config::default_min_mtu"
+        )]
         min_mtu: u16,
         #[serde(default = "shadowquic::config::default_gso")]
         gso: bool,
-        #[serde(default = "shadowquic::config::default_mtu_discovery")]
+        #[serde(
+            rename = "mtu-discovery",
+            default = "shadowquic::config::default_mtu_discovery"
+        )]
         mtu_discovery: bool,
     },
 }
