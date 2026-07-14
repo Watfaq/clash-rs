@@ -36,7 +36,11 @@ shadowsocks = ["dep:shadowsocks", "dep:blake3"]
 tuic = ["dep:tuic-core", "dep:register-count"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
-shadowquic = ["dep:shadowquic", "shadowquic?/shadowquic-quinn"]
+shadowquic = [
+    "dep:shadowquic",
+    "shadowquic?/shadowquic-quinn",
+    "shadowquic?/sunnyquic-noq",
+]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
 tailscale = ["dep:tailscale"]
 tproxy = [

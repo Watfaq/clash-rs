@@ -117,12 +117,110 @@ pub enum InboundOpts {
         #[serde(default)]
         users: Vec<InboundUser>,
     },
+    #[cfg(feature = "shadowquic")]
+    #[serde(rename = "sunnyquic")]
+    SunnyQuic {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        users: Vec<InboundUser>,
+        #[serde(rename = "server-name")]
+        server_name: String,
+        certificate: String,
+        #[serde(rename = "private-key")]
+        private_key: String,
+        #[serde(
+            rename = "max-path-num",
+            default = "default_sunnyquic_max_path_num"
+        )]
+        max_path_num: u32,
+        #[serde(default = "shadowquic::config::default_alpn")]
+        alpn: Vec<String>,
+        #[serde(
+            rename = "zero-rtt",
+            default = "shadowquic::config::default_zero_rtt"
+        )]
+        zero_rtt: bool,
+        #[serde(
+            rename = "congestion-control",
+            default = "shadowquic::config::default_congestion_control"
+        )]
+        congestion_control: shadowquic::config::CongestionControl,
+        #[serde(
+            rename = "initial-mtu",
+            default = "shadowquic::config::default_initial_mtu"
+        )]
+        initial_mtu: u16,
+        #[serde(
+            rename = "min-mtu",
+            default = "shadowquic::config::default_min_mtu"
+        )]
+        min_mtu: u16,
+        #[serde(default = "shadowquic::config::default_gso")]
+        gso: bool,
+        #[serde(
+            rename = "mtu-discovery",
+            default = "shadowquic::config::default_mtu_discovery"
+        )]
+        mtu_discovery: bool,
+    },
 }
 
-/// Equality and hashing for `InboundOpts` intentionally exclude the `users`
-/// field of the `Shadowsocks` variant so that a change to the user list
-/// does not cause a full listener restart. All structural parameters
-/// (address, port, cipher, server password) are still compared.
+#[cfg(feature = "shadowquic")]
+fn default_sunnyquic_max_path_num() -> u32 {
+    12
+}
+
+#[cfg(feature = "shadowquic")]
+fn congestion_control_eq(
+    a: &shadowquic::config::CongestionControl,
+    b: &shadowquic::config::CongestionControl,
+) -> bool {
+    use shadowquic::config::CongestionControl;
+
+    match (a, b) {
+        (CongestionControl::Bbr, CongestionControl::Bbr)
+        | (CongestionControl::Bbr3, CongestionControl::Bbr3)
+        | (CongestionControl::Cubic, CongestionControl::Cubic)
+        | (CongestionControl::NewReno, CongestionControl::NewReno) => true,
+        (CongestionControl::Brutal(a), CongestionControl::Brutal(b)) => {
+            a.bandwidth == b.bandwidth
+                && a.min_window == b.min_window
+                && a.cwnd_gain.to_bits() == b.cwnd_gain.to_bits()
+                && a.min_ack_rate.to_bits() == b.min_ack_rate.to_bits()
+                && a.min_sample_count == b.min_sample_count
+                && a.ack_compensate == b.ack_compensate
+        }
+        _ => false,
+    }
+}
+
+#[cfg(feature = "shadowquic")]
+fn hash_congestion_control<H: std::hash::Hasher>(
+    congestion_control: &shadowquic::config::CongestionControl,
+    state: &mut H,
+) {
+    use shadowquic::config::CongestionControl;
+
+    match congestion_control {
+        CongestionControl::Bbr => std::hash::Hash::hash(&0u8, state),
+        CongestionControl::Bbr3 => std::hash::Hash::hash(&1u8, state),
+        CongestionControl::Cubic => std::hash::Hash::hash(&2u8, state),
+        CongestionControl::NewReno => std::hash::Hash::hash(&3u8, state),
+        CongestionControl::Brutal(params) => {
+            std::hash::Hash::hash(&4u8, state);
+            std::hash::Hash::hash(&params.bandwidth, state);
+            std::hash::Hash::hash(&params.min_window, state);
+            std::hash::Hash::hash(&params.cwnd_gain.to_bits(), state);
+            std::hash::Hash::hash(&params.min_ack_rate.to_bits(), state);
+            std::hash::Hash::hash(&params.min_sample_count, state);
+            std::hash::Hash::hash(&params.ack_compensate, state);
+        }
+    }
+}
+
+/// Equality and hashing intentionally exclude dynamically reloadable `users`
+/// fields so changing a user list does not restart the listener. Structural
+/// parameters such as addresses, ports, and protocol settings are compared.
 impl PartialEq for InboundOpts {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -229,6 +327,52 @@ impl PartialEq for InboundOpts {
                     ..
                 },
             ) => a == b && pa == pb && ca == cb && pka == pkb,
+            #[cfg(feature = "shadowquic")]
+            (
+                InboundOpts::SunnyQuic {
+                    common_opts: a,
+                    server_name: sna,
+                    certificate: ca,
+                    private_key: pka,
+                    max_path_num: mpa,
+                    alpn: aa,
+                    zero_rtt: zra,
+                    congestion_control: cca,
+                    initial_mtu: ima,
+                    min_mtu: mma,
+                    gso: ga,
+                    mtu_discovery: mda,
+                    ..
+                },
+                InboundOpts::SunnyQuic {
+                    common_opts: b,
+                    server_name: snb,
+                    certificate: cb,
+                    private_key: pkb,
+                    max_path_num: mpb,
+                    alpn: ab,
+                    zero_rtt: zrb,
+                    congestion_control: ccb,
+                    initial_mtu: imb,
+                    min_mtu: mmb,
+                    gso: gb,
+                    mtu_discovery: mdb,
+                    ..
+                },
+            ) => {
+                a == b
+                    && sna == snb
+                    && ca == cb
+                    && pka == pkb
+                    && mpa == mpb
+                    && aa == ab
+                    && zra == zrb
+                    && congestion_control_eq(cca, ccb)
+                    && ima == imb
+                    && mma == mmb
+                    && ga == gb
+                    && mda == mdb
+            }
             _ => false,
         }
     }
@@ -307,6 +451,35 @@ impl std::hash::Hash for InboundOpts {
                 private_key.hash(state);
                 // `users` intentionally excluded — handled via watch channel
             }
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::SunnyQuic {
+                common_opts,
+                server_name,
+                certificate,
+                private_key,
+                max_path_num,
+                alpn,
+                zero_rtt,
+                congestion_control,
+                initial_mtu,
+                min_mtu,
+                gso,
+                mtu_discovery,
+                ..
+            } => {
+                common_opts.hash(state);
+                server_name.hash(state);
+                certificate.hash(state);
+                private_key.hash(state);
+                max_path_num.hash(state);
+                alpn.hash(state);
+                zero_rtt.hash(state);
+                hash_congestion_control(congestion_control, state);
+                initial_mtu.hash(state);
+                min_mtu.hash(state);
+                gso.hash(state);
+                mtu_discovery.hash(state);
+            }
         }
     }
 }
@@ -326,6 +499,8 @@ impl InboundOpts {
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
             InboundOpts::Hysteria2 { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::SunnyQuic { common_opts, .. } => common_opts,
         }
     }
 
@@ -343,6 +518,8 @@ impl InboundOpts {
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
             InboundOpts::Hysteria2 { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::SunnyQuic { common_opts, .. } => common_opts,
         }
     }
 
@@ -360,6 +537,8 @@ impl InboundOpts {
             InboundOpts::Shadowsocks { .. } => "shadowsocks",
             InboundOpts::Anytls { .. } => "anytls",
             InboundOpts::Hysteria2 { .. } => "hysteria2",
+            #[cfg(feature = "shadowquic")]
+            InboundOpts::SunnyQuic { .. } => "sunnyquic",
         }
     }
 }
@@ -434,4 +613,30 @@ pub struct CommonInboundOpts {
     pub port: u16,
     /// Linux routing mark
     pub fw_mark: Option<u32>,
+}
+
+#[cfg(all(test, feature = "shadowquic"))]
+mod tests {
+    use std::hash::Hasher;
+
+    use shadowquic::config::{BrutalParams, CongestionControl};
+
+    use super::{congestion_control_eq, hash_congestion_control};
+
+    #[test]
+    fn brutal_congestion_control_compares_and_hashes_parameters() {
+        let a = CongestionControl::Brutal(BrutalParams::default());
+        let mut changed = BrutalParams::default();
+        changed.bandwidth += 1;
+        let b = CongestionControl::Brutal(changed);
+
+        assert!(!congestion_control_eq(&a, &b));
+
+        let hash = |value| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            hash_congestion_control(value, &mut hasher);
+            hasher.finish()
+        };
+        assert_ne!(hash(&a), hash(&b));
+    }
 }

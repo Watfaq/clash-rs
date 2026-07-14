@@ -261,4 +261,135 @@ mod tests {
             _ => false,
         }));
     }
+
+    #[cfg(feature = "shadowquic")]
+    #[test]
+    fn parses_sunnyquic_listener() {
+        let cfg = r#"
+        listeners:
+          - name: sunny-in
+            type: sunnyquic
+            listen: 0.0.0.0
+            port: 1443
+            server-name: example.com
+            certificate: /etc/clash-rs/sunnyquic.crt
+            private-key: /etc/clash-rs/sunnyquic.key
+            users:
+              - name: alice
+                password: secret
+            max-path-num: 8
+            zero-rtt: false
+            congestion-control: bbr3
+            initial-mtu: 1400
+            min-mtu: 1200
+            gso: false
+            mtu-discovery: false
+        "#;
+        let config = cfg.parse::<def::Config>().expect("should parse");
+        let config = convert(config).expect("should convert");
+
+        assert!(config.listeners.iter().any(|listener| match listener {
+            InboundOpts::SunnyQuic {
+                common_opts,
+                users,
+                alpn,
+                zero_rtt,
+                congestion_control,
+                initial_mtu,
+                min_mtu,
+                max_path_num,
+                gso,
+                mtu_discovery,
+                ..
+            } => {
+                common_opts.port == 1443
+                    && users.len() == 1
+                    && alpn == &["h3"]
+                    && !*zero_rtt
+                    && matches!(
+                        congestion_control,
+                        shadowquic::config::CongestionControl::Bbr3
+                    )
+                    && *initial_mtu == 1400
+                    && *min_mtu == 1200
+                    && *max_path_num == 8
+                    && !*gso
+                    && !*mtu_discovery
+            }
+            _ => false,
+        }));
+    }
+
+    #[cfg(feature = "shadowquic")]
+    #[test]
+    fn parses_sunnyquic_example_file() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sunnyquic-inbound.yaml");
+        let yaml =
+            std::fs::read_to_string(path).expect("example file should be readable");
+        let config = yaml.parse::<def::Config>().expect("example should parse");
+        let config = convert(config).expect("example should convert");
+
+        assert!(config.listeners.iter().any(|listener| match listener {
+            InboundOpts::SunnyQuic {
+                congestion_control,
+                initial_mtu,
+                min_mtu,
+                max_path_num,
+                gso,
+                mtu_discovery,
+                ..
+            } => {
+                matches!(
+                    congestion_control,
+                    shadowquic::config::CongestionControl::Bbr
+                ) && *initial_mtu == 1300
+                    && *min_mtu == 1290
+                    && *max_path_num == 12
+                    && *gso
+                    && *mtu_discovery
+            }
+            _ => false,
+        }));
+    }
+
+    #[cfg(feature = "shadowquic")]
+    #[test]
+    fn parses_sunnyquic_brutal_congestion_control() {
+        let cfg = r#"
+        listeners:
+          - name: sunny-in
+            type: sunnyquic
+            listen: 0.0.0.0
+            port: 1443
+            server-name: example.com
+            certificate: /etc/clash-rs/sunnyquic.crt
+            private-key: /etc/clash-rs/sunnyquic.key
+            users:
+              - name: alice
+                password: secret
+            congestion-control:
+              brutal:
+                bandwidth: 100000000
+        "#;
+        let config = cfg.parse::<def::Config>().expect("should parse");
+        let config = convert(config).expect("should convert");
+
+        let congestion_control = config
+            .listeners
+            .iter()
+            .find_map(|listener| match listener {
+                InboundOpts::SunnyQuic {
+                    congestion_control, ..
+                } => Some(congestion_control),
+                _ => None,
+            })
+            .expect("sunnyquic listener should exist");
+        match congestion_control {
+            shadowquic::config::CongestionControl::Brutal(params) => {
+                assert_eq!(params.bandwidth, 100_000_000);
+            }
+            other => panic!("expected brutal congestion control, got {other:?}"),
+        }
+    }
 }
