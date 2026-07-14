@@ -9,9 +9,8 @@ pub struct UdpPacket {
     /// rewrites this to the resolved domain before forwarding, so proxy
     /// outbounds always see the intended domain rather than a fake-IP.
     pub dst_addr: SocksAddr,
-    /// Authenticated user name from SS2022 EIH, propagated to the dispatcher
-    /// session for per-user traffic attribution. `None` for all other
-    /// protocols.
+    /// Authenticated inbound user name propagated to the dispatcher session
+    /// for per-user traffic attribution.
     pub inbound_user: Option<String>,
 }
 

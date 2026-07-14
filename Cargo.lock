@@ -250,7 +250,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -261,7 +261,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2317,7 +2317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1747ed5fb4ab3a9f8253da3401efe7ca8f8e5ec373b2e700ff55c3304d84e31f"
 dependencies = [
  "heck",
- "indexmap 2.14.0",
+ "indexmap 1.9.3",
  "itertools 0.14.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -2481,7 +2481,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2876,7 +2876,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5250,9 +5250,9 @@ checksum = "f6b8866ec53810a9a4b3d434a29801e78c707430a9ae11c2db4b8b62bb9675a0"
 
 [[package]]
 name = "noq"
-version = "1.0.1"
+version = "1.0.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bf95190af1bd4a00a10e8255ca0c8ddd9e9a9f5e79151d7a7eb6d56aff5dc89"
+checksum = "198b99fc085a5db1f7d259edb5ede8311e59f28cdd2687920b4313613d21a73f"
 dependencies = [
  "bytes",
  "cfg_aliases",
@@ -5272,9 +5272,9 @@ dependencies = [
 
 [[package]]
 name = "noq-proto"
-version = "1.0.1"
+version = "1.0.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa6c890013591e709a3e45dd53501351b7e27e7ff3c7e9fc3dce43e300e7e9d3"
+checksum = "1ab0ac774795ce1e42a7e61266e71f3be8110210630441169ac8dda403dd23f1"
 dependencies = [
  "aes-gcm 0.10.3",
  "aws-lc-rs",
@@ -5354,7 +5354,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6703,7 +6703,7 @@ dependencies = [
  "derive-deftly",
  "libc",
  "paste",
- "thiserror 2.0.18",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -6745,6 +6745,17 @@ dependencies = [
  "tokio",
  "tracing",
  "web-time",
+]
+
+[[package]]
+name = "quinn-congestions"
+version = "0.1.0"
+source = "git+https://github.com/happytrudy/quinn-congestions?rev=9f5fbd7b4677538e174720b7990a7e420f68ba3b#9f5fbd7b4677538e174720b7990a7e420f68ba3b"
+dependencies = [
+ "noq-proto",
+ "quinn 0.12.0",
+ "quinn-proto 0.12.0",
+ "rand 0.9.4",
 ]
 
 [[package]]
@@ -6868,7 +6879,7 @@ dependencies = [
  "libc",
  "socket2 0.6.4",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6881,7 +6892,7 @@ dependencies = [
  "libc",
  "socket2 0.6.4",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7574,7 +7585,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7686,7 +7697,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8019,7 +8030,7 @@ checksum = "dcc7fe48e34d02a97bc8e6253b8b91e5a47fe2c47eaacb5149cefbb69922eaf0"
 dependencies = [
  "ahash",
  "annotate-snippets",
- "base64 0.22.1",
+ "base64 0.21.7",
  "encoding_rs_io",
  "getrandom 0.3.4",
  "granit-parser",
@@ -8309,7 +8320,7 @@ dependencies = [
 [[package]]
 name = "shadowquic"
 version = "0.3.11"
-source = "git+https://github.com/spongebob888/shadowquic?rev=1db0142b3d960d876d5884277edaa210e318965e#1db0142b3d960d876d5884277edaa210e318965e"
+source = "git+https://github.com/happytrudy/shadowquic?rev=bdc5745f1170b1d20466ab5f89fe3bfe80e80223#bdc5745f1170b1d20466ab5f89fe3bfe80e80223"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -8323,6 +8334,7 @@ dependencies = [
  "noq",
  "noq-proto",
  "notify",
+ "quinn-congestions 0.1.0 (git+https://github.com/happytrudy/quinn-congestions?rev=9f5fbd7b4677538e174720b7990a7e420f68ba3b)",
  "quinn-jls",
  "quinn-proto-jls",
  "rcgen 0.14.8",
@@ -8348,7 +8360,7 @@ dependencies = [
 [[package]]
 name = "shadowquic-macros"
 version = "0.3.11"
-source = "git+https://github.com/spongebob888/shadowquic?rev=1db0142b3d960d876d5884277edaa210e318965e#1db0142b3d960d876d5884277edaa210e318965e"
+source = "git+https://github.com/happytrudy/shadowquic?rev=bdc5745f1170b1d20466ab5f89fe3bfe80e80223#bdc5745f1170b1d20466ab5f89fe3bfe80e80223"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8618,7 +8630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9081,7 +9093,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11228,7 +11240,7 @@ dependencies = [
  "parking_lot",
  "peekable",
  "quinn 0.12.0",
- "quinn-congestions",
+ "quinn-congestions 0.1.0 (git+https://github.com/proxy-rs/quinn-congestions.git)",
  "register-count",
  "serde",
  "thiserror 2.0.18",
@@ -11898,7 +11910,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

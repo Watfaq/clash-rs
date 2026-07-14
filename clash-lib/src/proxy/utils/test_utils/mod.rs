@@ -1,3 +1,4 @@
+#[cfg(feature = "tuic")]
 pub mod echo;
 pub mod noop;
 

@@ -170,6 +170,54 @@ fn default_sunnyquic_max_path_num() -> u32 {
     12
 }
 
+#[cfg(feature = "shadowquic")]
+fn congestion_control_eq(
+    a: &shadowquic::config::CongestionControl,
+    b: &shadowquic::config::CongestionControl,
+) -> bool {
+    use shadowquic::config::CongestionControl;
+
+    match (a, b) {
+        (CongestionControl::Bbr, CongestionControl::Bbr)
+        | (CongestionControl::Bbr3, CongestionControl::Bbr3)
+        | (CongestionControl::Cubic, CongestionControl::Cubic)
+        | (CongestionControl::NewReno, CongestionControl::NewReno) => true,
+        (CongestionControl::Brutal(a), CongestionControl::Brutal(b)) => {
+            a.bandwidth == b.bandwidth
+                && a.min_window == b.min_window
+                && a.cwnd_gain.to_bits() == b.cwnd_gain.to_bits()
+                && a.min_ack_rate.to_bits() == b.min_ack_rate.to_bits()
+                && a.min_sample_count == b.min_sample_count
+                && a.ack_compensate == b.ack_compensate
+        }
+        _ => false,
+    }
+}
+
+#[cfg(feature = "shadowquic")]
+fn hash_congestion_control<H: std::hash::Hasher>(
+    congestion_control: &shadowquic::config::CongestionControl,
+    state: &mut H,
+) {
+    use shadowquic::config::CongestionControl;
+
+    match congestion_control {
+        CongestionControl::Bbr => std::hash::Hash::hash(&0u8, state),
+        CongestionControl::Bbr3 => std::hash::Hash::hash(&1u8, state),
+        CongestionControl::Cubic => std::hash::Hash::hash(&2u8, state),
+        CongestionControl::NewReno => std::hash::Hash::hash(&3u8, state),
+        CongestionControl::Brutal(params) => {
+            std::hash::Hash::hash(&4u8, state);
+            std::hash::Hash::hash(&params.bandwidth, state);
+            std::hash::Hash::hash(&params.min_window, state);
+            std::hash::Hash::hash(&params.cwnd_gain.to_bits(), state);
+            std::hash::Hash::hash(&params.min_ack_rate.to_bits(), state);
+            std::hash::Hash::hash(&params.min_sample_count, state);
+            std::hash::Hash::hash(&params.ack_compensate, state);
+        }
+    }
+}
+
 /// Equality and hashing intentionally exclude dynamically reloadable `users`
 /// fields so changing a user list does not restart the listener. Structural
 /// parameters such as addresses, ports, and protocol settings are compared.
@@ -319,7 +367,7 @@ impl PartialEq for InboundOpts {
                     && mpa == mpb
                     && aa == ab
                     && zra == zrb
-                    && format!("{cca:?}") == format!("{ccb:?}")
+                    && congestion_control_eq(cca, ccb)
                     && ima == imb
                     && mma == mmb
                     && ga == gb
@@ -426,7 +474,7 @@ impl std::hash::Hash for InboundOpts {
                 max_path_num.hash(state);
                 alpn.hash(state);
                 zero_rtt.hash(state);
-                format!("{congestion_control:?}").hash(state);
+                hash_congestion_control(congestion_control, state);
                 initial_mtu.hash(state);
                 min_mtu.hash(state);
                 gso.hash(state);
@@ -565,4 +613,30 @@ pub struct CommonInboundOpts {
     pub port: u16,
     /// Linux routing mark
     pub fw_mark: Option<u32>,
+}
+
+#[cfg(all(test, feature = "shadowquic"))]
+mod tests {
+    use std::hash::Hasher;
+
+    use shadowquic::config::{BrutalParams, CongestionControl};
+
+    use super::{congestion_control_eq, hash_congestion_control};
+
+    #[test]
+    fn brutal_congestion_control_compares_and_hashes_parameters() {
+        let a = CongestionControl::Brutal(BrutalParams::default());
+        let mut changed = BrutalParams::default();
+        changed.bandwidth += 1;
+        let b = CongestionControl::Brutal(changed);
+
+        assert!(!congestion_control_eq(&a, &b));
+
+        let hash = |value| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            hash_congestion_control(value, &mut hasher);
+            hasher.finish()
+        };
+        assert_ne!(hash(&a), hash(&b));
+    }
 }

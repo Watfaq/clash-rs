@@ -422,9 +422,7 @@ pub struct Session {
     pub asn: Option<String>,
     /// Traffic statistics for intelligent proxy selection
     pub traffic_stats: Option<crate::app::remote_content_manager::TrafficStats>,
-    /// Authenticated user name from SS2022 EIH (FAC user_id as string).
-    /// Set by the Shadowsocks inbound before dispatch; used for per-user
-    /// traffic attribution.
+    /// Authenticated inbound user name, used for per-user traffic attribution.
     pub inbound_user: Option<String>,
 }
 

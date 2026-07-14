@@ -48,5 +48,5 @@ needless_collect = "deny"
 [patch.crates-io]
 rustls = { git = "https://github.com/Watfaq/rustls.git", branch = "watfaq/0.23.40" }
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", branch = "watfaq/0.26.4" }
-shadowquic = { git = "https://github.com/spongebob888/shadowquic", rev = "1db0142b3d960d876d5884277edaa210e318965e" }
-shadowquic-macros = { git = "https://github.com/spongebob888/shadowquic", rev = "1db0142b3d960d876d5884277edaa210e318965e" }
+shadowquic = { git = "https://github.com/happytrudy/shadowquic", rev = "bdc5745f1170b1d20466ab5f89fe3bfe80e80223" }
+shadowquic-macros = { git = "https://github.com/happytrudy/shadowquic", rev = "bdc5745f1170b1d20466ab5f89fe3bfe80e80223" }
