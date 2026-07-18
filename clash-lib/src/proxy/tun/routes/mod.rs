@@ -26,6 +26,8 @@ mod freebsd;
 #[cfg(target_os = "freebsd")]
 use freebsd::add_route;
 #[cfg(target_os = "freebsd")]
+pub use freebsd::ensure_tun_device;
+#[cfg(target_os = "freebsd")]
 pub use freebsd::maybe_routes_clean_up;
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]

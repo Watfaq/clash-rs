@@ -182,6 +182,15 @@ impl TunRunner {
                         tun_builder = tun_builder.device_guid(guid);
                     }
 
+                    // FreeBSD materialises `/dev/<tun_name>` only while the
+                    // network interface exists. tun-rs opens that node directly
+                    // without creating the interface, so pre-create it here to
+                    // avoid `open("/dev/tun0") -> ENOENT` on a fresh host.
+                    #[cfg(target_os = "freebsd")]
+                    if !tun_exist {
+                        routes::ensure_tun_device(&tun_name)?;
+                    }
+
                     let dev = tun_builder.build_async()?;
 
                     if !tun_exist {
