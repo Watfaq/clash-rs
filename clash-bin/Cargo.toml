@@ -14,7 +14,7 @@ plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
 android = ["shadowsocks", "tuic", "aws-lc-rs", "wireguard", "clash-lib/zero_copy", "tproxy"] # Android build failed with libc
-bsd = ["shadowsocks", "tuic", "ring", "clash-lib/zero_copy"] # BSD build failed with aws-lc-rs, and cross compile also fail with missing headers for tun->route_manager
+bsd = ["shadowsocks", "tuic", "ring", "clash-lib/zero_copy", "tun"]  # enable tun via FIB multi-table routing
 
 shadowsocks = ["clash-lib/shadowsocks"]
 ssh = ["clash-lib/ssh"]

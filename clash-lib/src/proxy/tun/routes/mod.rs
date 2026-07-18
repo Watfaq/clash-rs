@@ -17,13 +17,22 @@ mod linux;
 #[cfg(target_os = "linux")]
 use linux::add_route;
 #[cfg(target_os = "linux")]
+use linux::setup_policy_routing;
+#[cfg(target_os = "linux")]
 pub use linux::maybe_routes_clean_up;
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "freebsd")]
+mod freebsd;
+#[cfg(target_os = "freebsd")]
+use freebsd::add_route;
+#[cfg(target_os = "freebsd")]
+pub use freebsd::maybe_routes_clean_up;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
 mod other;
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
 use other::add_route;
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
 pub use other::maybe_routes_clean_up;
 
 use tracing::warn;
@@ -51,7 +60,7 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
                  interface"
             );
 
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
             {
                 use ipnet::IpNet;
 
@@ -115,9 +124,20 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
             {
                 linux::setup_policy_routing(cfg, &tun_iface)?;
             }
+            #[cfg(target_os = "freebsd")]
+            {
+                freebsd::setup_policy_routing(cfg, &tun_iface)?;
+            }
         } else {
             for r in &cfg.routes {
                 add_route(&tun_iface, r)?;
+            }
+            // Even in partial mode we must push the clash process onto the
+            // bypass FIB so its own DIRECT outbounds don't loop back into the
+            // tun for the per-listed destinations (FreeBSD has no fwmark).
+            #[cfg(target_os = "freebsd")]
+            {
+                freebsd::setup_partial_fib(cfg, &tun_iface)?;
             }
         }
     }
