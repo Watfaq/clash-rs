@@ -97,10 +97,10 @@ impl FibState {
 /// only invoked via the external controller/IPC, *not* on SIGTERM / SIGINT /
 /// `kill -9`. So if the previous clash process was killed mid-run, the FIB
 /// tables are left dirty:
-///   * FIB 0's default may still point at the (now-destroyed) tun, leaving
-///     the host with no usable default route — even `route get default` fails,
-///     which would make a fresh [`setup_policy_routing`] abort with
-///     "requires an existing IPv4 default route".
+///   * FIB 0's default may still point at the (now-destroyed) tun, leaving the
+///     host with no usable default route — even `route get default` fails,
+///     which would make a fresh [`setup_policy_routing`] abort with "requires
+///     an existing IPv4 default route".
 ///   * the bypass FIB may still hold the old gateway/default routes.
 ///
 /// To break that deadlock, every tun setup first checks for a leftover state
@@ -336,7 +336,10 @@ pub fn ensure_tun_device(name: &str) -> std::io::Result<()> {
         .arg("create")
         .output()?;
     if out.status.success() {
-        info!("freebsd: created tun interface {} (dev node materialised)", name);
+        info!(
+            "freebsd: created tun interface {} (dev node materialised)",
+            name
+        );
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -390,31 +393,37 @@ fn install_bypass_default(
     // All installs are idempotent: a dirty bypass FIB (left over from a
     // previous run that crashed or was kill -9'd) may already hold these
     // routes; re-installing must not fail with EEXIST.
-    run_idempotent(std::process::Command::new("setfib")
-        .arg(bypass_fib.to_string())
-        .arg("route")
-        .arg("add")
-        .arg("-host")
-        .arg(gw4)
-        .arg("-interface")
-        .arg(iface4))?;
-    run_idempotent(std::process::Command::new("setfib")
-        .arg(bypass_fib.to_string())
-        .arg("route")
-        .arg("add")
-        .arg("default")
-        .arg(gw4))?;
-    if let (Some(gw6), Some(iface6)) = (gw6, iface6) {
-        if run_idempotent(std::process::Command::new("setfib")
+    run_idempotent(
+        std::process::Command::new("setfib")
             .arg(bypass_fib.to_string())
             .arg("route")
-            .arg("-6")
             .arg("add")
             .arg("-host")
-            .arg(gw6)
+            .arg(gw4)
             .arg("-interface")
-            .arg(iface6))
-            .is_err()
+            .arg(iface4),
+    )?;
+    run_idempotent(
+        std::process::Command::new("setfib")
+            .arg(bypass_fib.to_string())
+            .arg("route")
+            .arg("add")
+            .arg("default")
+            .arg(gw4),
+    )?;
+    if let (Some(gw6), Some(iface6)) = (gw6, iface6) {
+        if run_idempotent(
+            std::process::Command::new("setfib")
+                .arg(bypass_fib.to_string())
+                .arg("route")
+                .arg("-6")
+                .arg("add")
+                .arg("-host")
+                .arg(gw6)
+                .arg("-interface")
+                .arg(iface6),
+        )
+        .is_err()
         {
             warn!(
                 "failed to install IPv6 gateway host route into bypass FIB {} \
@@ -422,14 +431,16 @@ fn install_bypass_default(
                 bypass_fib
             );
         }
-        if run_idempotent(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("-6")
-            .arg("add")
-            .arg("default")
-            .arg(gw6))
-            .is_err()
+        if run_idempotent(
+            std::process::Command::new("setfib")
+                .arg(bypass_fib.to_string())
+                .arg("route")
+                .arg("-6")
+                .arg("add")
+                .arg("default")
+                .arg(gw6),
+        )
+        .is_err()
         {
             warn!(
                 "failed to install IPv6 default route into bypass FIB {} \
@@ -444,11 +455,7 @@ fn install_bypass_default(
 /// Tear down [`install_bypass_default`] in best-effort fashion (used by both
 /// full-tun crashes and clean shutdown).
 #[allow(dead_code)]
-fn uninstall_bypass_default(
-    bypass_fib: u32,
-    gw4: &str,
-    gw6: Option<&str>,
-) {
+fn uninstall_bypass_default(bypass_fib: u32, gw4: &str, gw6: Option<&str>) {
     let _ = run(std::process::Command::new("setfib")
         .arg(bypass_fib.to_string())
         .arg("route")
@@ -498,8 +505,8 @@ pub fn setup_policy_routing(
     // we can read the real gateway below, then proceed with a fresh setup.
     if let Some(prev) = FibState::load() {
         info!(
-            "freebsd fib tun: found leftover state from previous run \
-             (tun={}, fib={}, gw4={}); restoring before fresh setup",
+            "freebsd fib tun: found leftover state from previous run (tun={}, \
+             fib={}, gw4={}); restoring before fresh setup",
             prev.tun_name.as_deref().unwrap_or(&tun_name),
             prev.fib.unwrap_or(bypass_fib),
             prev.gw4.as_deref().unwrap_or("?"),
@@ -512,8 +519,8 @@ pub fn setup_policy_routing(
     // on-link (see `install_bypass_default`).
     let (gw4, iface4) = default_gateway_and_iface(false).ok_or_else(|| {
         new_io_error(
-            "freebsd tun route_all requires an existing IPv4 default route \
-             to back up into the bypass FIB"
+            "freebsd tun route_all requires an existing IPv4 default route to back \
+             up into the bypass FIB"
                 .to_string(),
         )
     })?;
@@ -534,11 +541,13 @@ pub fn setup_policy_routing(
     let _ = run(std::process::Command::new("route")
         .arg("delete")
         .arg("default"));
-    run_idempotent(std::process::Command::new("route")
-        .arg("add")
-        .arg("default")
-        .arg("-interface")
-        .arg(&tun_name))?;
+    run_idempotent(
+        std::process::Command::new("route")
+            .arg("add")
+            .arg("default")
+            .arg("-interface")
+            .arg(&tun_name),
+    )?;
 
     // If installing the bypass default fails we must roll FIB 0's default route
     // back so the host does NOT lose connectivity (the most expensive mistake
@@ -598,8 +607,8 @@ pub fn setup_partial_fib(
     // fresh partial setup (see restore_stale_state for why).
     if let Some(prev) = FibState::load() {
         info!(
-            "freebsd fib tun (partial): found leftover state \
-             (tun={}, fib={}, gw4={}); restoring before fresh setup",
+            "freebsd fib tun (partial): found leftover state (tun={}, fib={}, \
+             gw4={}); restoring before fresh setup",
             prev.tun_name.as_deref().unwrap_or(&tun_name),
             prev.fib.unwrap_or(bypass_fib),
             prev.gw4.as_deref().unwrap_or("?"),
@@ -609,8 +618,8 @@ pub fn setup_partial_fib(
 
     let (gw4, iface4) = default_gateway_and_iface(false).ok_or_else(|| {
         new_io_error(
-            "freebsd tun (partial) requires an existing IPv4 default route to \
-             back up into the bypass FIB"
+            "freebsd tun (partial) requires an existing IPv4 default route to back \
+             up into the bypass FIB"
                 .to_string(),
         )
     })?;
@@ -659,8 +668,8 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
 
     let Some(state) = FibState::load() else {
         warn!(
-            "freebsd tun clean-up: no persisted state, nothing to restore \
-             (already clean or setup never completed)"
+            "freebsd tun clean-up: no persisted state, nothing to restore (already \
+             clean or setup never completed)"
         );
         return Ok(());
     };
@@ -671,8 +680,9 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     // default untouched, so reinstalling here would duplicate an existing
     // route and produce "route already in table" noise.
     if state.route_all {
-        let _ =
-            run(std::process::Command::new("route").arg("delete").arg("default"));
+        let _ = run(std::process::Command::new("route")
+            .arg("delete")
+            .arg("default"));
         if let Some(gw4) = &state.gw4 {
             run(std::process::Command::new("route")
                 .arg("add")

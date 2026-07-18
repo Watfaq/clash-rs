@@ -17,9 +17,9 @@ mod linux;
 #[cfg(target_os = "linux")]
 use linux::add_route;
 #[cfg(target_os = "linux")]
-use linux::setup_policy_routing;
-#[cfg(target_os = "linux")]
 pub use linux::maybe_routes_clean_up;
+#[cfg(target_os = "linux")]
+use linux::setup_policy_routing;
 
 #[cfg(target_os = "freebsd")]
 mod freebsd;
@@ -30,11 +30,26 @@ pub use freebsd::ensure_tun_device;
 #[cfg(target_os = "freebsd")]
 pub use freebsd::maybe_routes_clean_up;
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(
+    windows,
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd"
+)))]
 mod other;
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(
+    windows,
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd"
+)))]
 use other::add_route;
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+#[cfg(not(any(
+    windows,
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "freebsd"
+)))]
 pub use other::maybe_routes_clean_up;
 
 use tracing::warn;
