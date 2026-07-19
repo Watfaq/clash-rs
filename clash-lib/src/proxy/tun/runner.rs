@@ -187,11 +187,33 @@ impl TunRunner {
                     // without creating the interface, so pre-create it here to
                     // avoid `open("/dev/tun0") -> ENOENT` on a fresh host.
                     #[cfg(target_os = "freebsd")]
-                    if !tun_exist {
+                    let created_tun = if !tun_exist {
                         routes::ensure_tun_device(&tun_name)?;
-                    }
+                        true
+                    } else {
+                        false
+                    };
+                    #[cfg(not(target_os = "freebsd"))]
+                    let created_tun = false;
 
-                    let dev = tun_builder.build_async()?;
+                    let dev = match tun_builder.build_async() {
+                        Ok(dev) => dev,
+                        Err(e) => {
+                            // If we pre-created the tun device on FreeBSD but
+                            // build_async() fails, destroy the interface so we
+                            // don't leave a dangling tun device behind.
+                            if created_tun {
+                                #[cfg(target_os = "freebsd")]
+                                {
+                                    let _ = std::process::Command::new("ifconfig")
+                                        .arg(&tun_name)
+                                        .arg("destroy")
+                                        .output();
+                                }
+                            }
+                            return Err(e.into());
+                        }
+                    };
 
                     if !tun_exist {
                         // After build_async(), the new TUN interface may not be

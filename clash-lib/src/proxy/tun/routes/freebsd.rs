@@ -6,28 +6,28 @@ use crate::{
     config::internal::config::TunConfig,
 };
 
-/// FreeBSD uses FIBs (Forwarding Information Bases) for multiple routing
-/// tables instead of Linux's policy routing (`ip rule` + `fwmark`).
-///
-/// The scheme mirrors the Linux implementation but with FIB semantics:
-///   * FIB 0 (the default routing table used by every unprivileged process)
-///     gets a default route pointing at the tun interface, so all traffic of
-///     unrelated processes on the host is captured by clash.
-///   * A separate "bypass" FIB (selected by `route_table`, default 2468) is
-///     populated with a copy of the host's *original* default route (the real
-///     gateway). clash's own outbound sockets are pushed into this bypass FIB
-///     via `setfib(2)` so the proxy's traffic escapes through the physical
-///     gateway instead of looping back into the tun.
-///
-/// Because `setfib(2)` sets the FIB for the whole process (and applies to all
-/// sockets opened afterwards, regardless of thread), it is enough to call it
-/// once after the tun is up and before any proxy traffic is forwarded; there
-/// is no need to plumb a per-socket option through every outbound connector.
-///
-/// `net.fibs` may only be raised at runtime (never lowered) and is capped at
-/// 65536. We raise it to `bypass_fib + 1` if it is not already large enough.
-/// Production deployments that want a small number of FIBs should pick a small
-/// `route_table` value and/or pre-set `net.fibs` in `/boot/loader.conf`.
+// FreeBSD uses FIBs (Forwarding Information Bases) for multiple routing
+// tables instead of Linux's policy routing (`ip rule` + `fwmark`).
+//
+// The scheme mirrors the Linux implementation but with FIB semantics:
+//   * FIB 0 (the default routing table used by every unprivileged process) gets
+//     a default route pointing at the tun interface, so all traffic of
+//     unrelated processes on the host is captured by clash.
+//   * A separate "bypass" FIB (selected by `route_table`, default 2468) is
+//     populated with a copy of the host's *original* default route (the real
+//     gateway). clash's own outbound sockets are pushed into this bypass FIB
+//     via `setfib(2)` so the proxy's traffic escapes through the physical
+//     gateway instead of looping back into the tun.
+//
+// Because `setfib(2)` sets the FIB for the whole process (and applies to all
+// sockets opened afterwards, regardless of thread), it is enough to call it
+// once after the tun is up and before any proxy traffic is forwarded; there
+// is no need to plumb a per-socket option through every outbound connector.
+//
+// `net.fibs` may only be raised at runtime (never lowered) and is capped at
+// 65536. We raise it to `bypass_fib + 1` if it is not already large enough.
+// Production deployments that want a small number of FIBs should pick a small
+// `route_table` value and/or pre-set `net.fibs` in `/boot/loader.conf`.
 
 /// Routing-table state we persist to disk so clean-up can restore the original
 /// default route even after a crash / kill -9.
@@ -136,34 +136,7 @@ fn restore_stale_state(prev: &FibState) {
                 .arg(gw6));
         }
     }
-    if let Some(gw4) = &prev.gw4 {
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("delete")
-            .arg("default"));
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("delete")
-            .arg("-host")
-            .arg(gw4));
-    }
-    if let Some(gw6) = &prev.gw6 {
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("-6")
-            .arg("delete")
-            .arg("default"));
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("-6")
-            .arg("delete")
-            .arg("-host")
-            .arg(gw6));
-    }
+    uninstall_bypass_default(bypass_fib, prev.gw4.as_deref(), prev.gw6.as_deref());
     FibState::remove();
     info!(
         "freebsd tun self-heal: cleaned stale state (route_all={}, fib={})",
@@ -454,19 +427,20 @@ fn install_bypass_default(
 
 /// Tear down [`install_bypass_default`] in best-effort fashion (used by both
 /// full-tun crashes and clean shutdown).
-#[allow(dead_code)]
-fn uninstall_bypass_default(bypass_fib: u32, gw4: &str, gw6: Option<&str>) {
-    let _ = run(std::process::Command::new("setfib")
-        .arg(bypass_fib.to_string())
-        .arg("route")
-        .arg("delete")
-        .arg("default"));
-    let _ = run(std::process::Command::new("setfib")
-        .arg(bypass_fib.to_string())
-        .arg("route")
-        .arg("delete")
-        .arg("-host")
-        .arg(gw4));
+fn uninstall_bypass_default(bypass_fib: u32, gw4: Option<&str>, gw6: Option<&str>) {
+    if let Some(gw4) = gw4 {
+        let _ = run(std::process::Command::new("setfib")
+            .arg(bypass_fib.to_string())
+            .arg("route")
+            .arg("delete")
+            .arg("default"));
+        let _ = run(std::process::Command::new("setfib")
+            .arg(bypass_fib.to_string())
+            .arg("route")
+            .arg("delete")
+            .arg("-host")
+            .arg(gw4));
+    }
     if let Some(gw6) = gw6 {
         let _ = run(std::process::Command::new("setfib")
             .arg(bypass_fib.to_string())
@@ -571,7 +545,7 @@ pub fn setup_policy_routing(
     }
 
     FibState {
-        tun_name: Some(tun_name.clone()),
+        tun_name: Some(tun_name),
         fib: Some(bypass_fib),
         gw4: Some(gw4),
         gw6,
@@ -644,7 +618,7 @@ pub fn setup_partial_fib(
     )?;
 
     FibState {
-        tun_name: Some(tun_name.clone()),
+        tun_name: Some(tun_name),
         fib: Some(bypass_fib),
         gw4: Some(gw4),
         gw6,
@@ -704,34 +678,7 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
 
     // Drop the bypass-FIB default route(s) installed by both modes, plus the
     // on-link host route(s) we added for the gateways (see install_bypass_default).
-    if let Some(gw4) = &state.gw4 {
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("delete")
-            .arg("default"));
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("delete")
-            .arg("-host")
-            .arg(gw4));
-    }
-    if let Some(gw6) = &state.gw6 {
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("-6")
-            .arg("delete")
-            .arg("default"));
-        let _ = run(std::process::Command::new("setfib")
-            .arg(bypass_fib.to_string())
-            .arg("route")
-            .arg("-6")
-            .arg("delete")
-            .arg("-host")
-            .arg(gw6));
-    }
+    uninstall_bypass_default(bypass_fib, state.gw4.as_deref(), state.gw6.as_deref());
 
     // Reset clash's own process FIB back to 0 (no-op at shutdown, but tidy).
     let _ = set_process_fib(0);

@@ -18,9 +18,6 @@ mod linux;
 use linux::add_route;
 #[cfg(target_os = "linux")]
 pub use linux::maybe_routes_clean_up;
-#[cfg(target_os = "linux")]
-use linux::setup_policy_routing;
-
 #[cfg(target_os = "freebsd")]
 mod freebsd;
 #[cfg(target_os = "freebsd")]
