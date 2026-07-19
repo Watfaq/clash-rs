@@ -197,14 +197,6 @@ tool = "cross"
 extra-args = "--no-default-features -F bsd"
 skip-test = true
 
-[[target]]
-os = "ubuntu-latest"
-target = "i686-unknown-freebsd"
-release-name = "i686-unknown-freebsd"
-tool = "cross"
-extra-args = "--no-default-features -F bsd"
-skip-test = true
-
 # Android (no release)
 [[target]]
 os = "ubuntu-latest"
