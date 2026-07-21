@@ -1,7 +1,7 @@
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
-    transport::Transport,
+    transport::{Transport, TransportLayer},
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 use crate::{
@@ -32,9 +32,9 @@ pub struct HandlerOptions {
     pub alter_id: u16,
     pub security: String,
     pub udp: bool,
-    pub transport: Option<Box<dyn Transport>>,
+    pub transport: Option<TransportLayer>,
     // maybe shadow-tls?
-    pub tls: Option<Box<dyn Transport>>,
+    pub tls: Option<TransportLayer>,
 }
 
 pub struct Handler {
@@ -68,13 +68,13 @@ impl Handler {
         udp: bool,
     ) -> io::Result<AnyStream> {
         let s = if let Some(tls) = self.opts.tls.as_ref() {
-            tls.proxy_stream(s).await?
+            tls.wrap(s).await?
         } else {
             s
         };
 
         let s = if let Some(transport) = self.opts.transport.as_ref() {
-            transport.proxy_stream(s).await?
+            transport.wrap(s).await?
         } else {
             s
         };
@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     use crate::{
         proxy::{
-            transport::{GrpcClient, H2Client, TlsClient, WsClient},
+            transport::{GrpcClient, H2Client, TlsClient, TransportLayer, WsClient},
             utils::test_utils::{
                 Suite,
                 config_helper::test_config_base_dir,
@@ -370,8 +370,8 @@ mod tests {
     }
 }"#;
 
-    fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
-        Some(Box::new(
+    fn tls_client(alpn: Option<Vec<String>>) -> Option<TransportLayer> {
+        Some(TransportLayer::Tls(
             TlsClient::new(true, "example.org".to_owned(), alpn, None, None, None)
                 .expect("failed to create TLS client"),
         ))

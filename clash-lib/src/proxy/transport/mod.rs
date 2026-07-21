@@ -48,3 +48,62 @@ pub trait Transport: Send + Sync {
         Ok((self.proxy_stream(stream).await?, None))
     }
 }
+
+/// A closed set of transport layers.
+///
+/// Replaces `Box<dyn Transport>` storage: the transport set is small and
+/// stable, so a closed enum gives static dispatch with no per-layer heap
+/// allocation while keeping the same runtime, config-driven composition
+/// (a handler holds an ordered stack of these and applies them in turn).
+pub enum TransportLayer {
+    Tls(TlsClient),
+    Reality(RealityClient),
+    Grpc(GrpcClient),
+    H2(H2Client),
+    Ws(WsClient),
+    #[cfg(feature = "shadowsocks")]
+    ShadowTls(Shadowtls),
+    #[cfg(feature = "shadowsocks")]
+    SimpleObfsHttp(SimpleObfsHttp),
+    #[cfg(feature = "shadowsocks")]
+    SimpleObfsTls(SimpleObfsTLS),
+    #[cfg(feature = "shadowsocks")]
+    V2rayWs(V2rayWsClient),
+    #[cfg(feature = "shadowsocks")]
+    Sip003(Sip003Plugin),
+}
+
+impl TransportLayer {
+    pub async fn wrap(
+        &self,
+        stream: super::AnyStream,
+    ) -> std::io::Result<super::AnyStream> {
+        match self {
+            Self::Tls(t) => t.proxy_stream(stream).await,
+            Self::Reality(t) => t.proxy_stream(stream).await,
+            Self::Grpc(t) => t.proxy_stream(stream).await,
+            Self::H2(t) => t.proxy_stream(stream).await,
+            Self::Ws(t) => t.proxy_stream(stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::ShadowTls(t) => t.proxy_stream(stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::SimpleObfsHttp(t) => t.proxy_stream(stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::SimpleObfsTls(t) => t.proxy_stream(stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::V2rayWs(t) => t.proxy_stream(stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::Sip003(t) => t.proxy_stream(stream).await,
+        }
+    }
+
+    pub async fn wrap_spliced(
+        &self,
+        stream: super::AnyStream,
+    ) -> std::io::Result<(super::AnyStream, Option<VisionOptions>)> {
+        match self {
+            Self::Reality(t) => t.proxy_stream_spliced(stream).await,
+            other => Ok((other.wrap(stream).await?, None)),
+        }
+    }
+}

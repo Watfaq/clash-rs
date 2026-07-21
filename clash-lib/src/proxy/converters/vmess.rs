@@ -5,7 +5,7 @@ use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
         HandlerCommonOptions,
-        transport::{GrpcClient, H2Client, TlsClient, WsClient},
+        transport::{GrpcClient, H2Client, TlsClient, TransportLayer, WsClient},
         vmess::{Handler, HandlerOptions},
     },
 };
@@ -53,7 +53,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                             let client: WsClient = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid ws options");
-                            Box::new(client) as _
+                            TransportLayer::Ws(client)
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
@@ -65,7 +65,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                             let client: H2Client = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid h2 options");
-                            Box::new(client) as _
+                            TransportLayer::H2(client)
                         })
                         .ok_or(Error::InvalidConfig(
                             "h2_opts is required for h2".to_owned(),
@@ -78,7 +78,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                                 (s.server_name.clone(), x, &s.common_opts)
                                     .try_into()
                                     .expect("invalid grpc options");
-                            Box::new(client) as _
+                            TransportLayer::Grpc(client)
                         })
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),
@@ -117,7 +117,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                     s.tls_cert.as_deref(),
                     s.tls_key.as_deref(),
                 )?;
-                Some(Box::new(client))
+                Some(TransportLayer::Tls(client))
             } else {
                 None
             },
