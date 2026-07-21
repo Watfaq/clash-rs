@@ -164,6 +164,16 @@ impl TrackedStream {
         &mut self.inner
     }
 
+    fn poll_closed(&mut self) -> Option<std::io::Error> {
+        match self.close_notify.try_recv() {
+            Ok(_) | Err(TryRecvError::Closed) => {
+                debug!("connection closed: {}", self.id());
+                Some(std::io::ErrorKind::BrokenPipe.into())
+            }
+            Err(TryRecvError::Empty) => None,
+        }
+    }
+
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     pub fn trackers(
         &self,
@@ -171,12 +181,16 @@ impl TrackedStream {
         Arc<dyn TrackCopy + Send + Sync>,
         Arc<dyn TrackCopy + Send + Sync>,
     ) {
-        let r =
-            Arc::new(ReadTracker::new(self.tracker.clone(), self.manager.clone()));
-        let w = Arc::new(WriteTracker::new(
-            self.tracker.clone(),
-            self.manager.clone(),
-        ));
+        let r = Arc::new(DirCopy {
+            tracker: self.tracker.clone(),
+            manager: self.manager.clone(),
+            download: true,
+        });
+        let w = Arc::new(DirCopy {
+            tracker: self.tracker.clone(),
+            manager: self.manager.clone(),
+            download: false,
+        });
         (r, w)
     }
 }
@@ -185,64 +199,21 @@ impl TrackedStream {
 pub trait TrackCopy {
     fn track(&self, total: usize);
 }
-#[cfg(all(target_os = "linux", feature = "zero_copy"))]
-impl TrackCopy for ReadTracker {
-    fn track(&self, total: usize) {
-        self.push_downloaded(total);
-    }
-}
-#[cfg(all(target_os = "linux", feature = "zero_copy"))]
-impl TrackCopy for WriteTracker {
-    fn track(&self, total: usize) {
-        self.push_uploaded(total);
-    }
-}
 
 #[cfg(all(target_os = "linux", feature = "zero_copy"))]
-pub struct ReadTracker {
+pub struct DirCopy {
     tracker: Arc<TrackerInfo>,
     manager: Arc<Manager>,
+    download: bool,
 }
 
 #[cfg(all(target_os = "linux", feature = "zero_copy"))]
-impl ReadTracker {
-    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
-        Self { tracker, manager }
-    }
-
-    fn push_downloaded(&self, download: usize) {
-        self.manager.push_downloaded(download);
-        self.tracker
-            .download_total
-            .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
-        if self.tracker.session_holder.inbound_user.is_some() {
-            self.tracker
-                .user_download
-                .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-}
-
-#[cfg(all(target_os = "linux", feature = "zero_copy"))]
-pub struct WriteTracker {
-    tracker: Arc<TrackerInfo>,
-    manager: Arc<Manager>,
-}
-#[cfg(all(target_os = "linux", feature = "zero_copy"))]
-impl WriteTracker {
-    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
-        Self { tracker, manager }
-    }
-
-    fn push_uploaded(&self, upload: usize) {
-        self.manager.push_uploaded(upload);
-        self.tracker
-            .upload_total
-            .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
-        if self.tracker.session_holder.inbound_user.is_some() {
-            self.tracker
-                .user_upload
-                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
+impl TrackCopy for DirCopy {
+    fn track(&self, n: usize) {
+        if self.download {
+            self.tracker.account_download(&self.manager, n);
+        } else {
+            self.tracker.account_upload(&self.manager, n);
         }
     }
 }
@@ -260,32 +231,13 @@ impl AsyncRead for TrackedStream {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => {
-                debug!("connection closed by sig: {}", self.id());
-                return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-            }
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    debug!("connection closed drop: {}", self.id());
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         let v = Pin::new(self.inner.as_mut()).poll_read(cx, buf);
         let download = buf.filled().len();
-        self.manager.push_downloaded(download);
-        self.tracker
-            .download_total
-            .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
-        if self.tracker.session_holder.inbound_user.is_some() {
-            self.tracker
-                .user_download
-                .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
-        }
-
+        self.tracker.account_download(&self.manager, download);
         v
     }
 }
@@ -296,14 +248,8 @@ impl AsyncWrite for TrackedStream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         let v = Pin::new(self.inner.as_mut()).poll_write(cx, buf);
@@ -311,16 +257,7 @@ impl AsyncWrite for TrackedStream {
             Poll::Ready(Ok(n)) => n,
             _ => return v,
         };
-        self.manager.push_uploaded(upload);
-        self.tracker
-            .upload_total
-            .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
-        if self.tracker.session_holder.inbound_user.is_some() {
-            self.tracker
-                .user_upload
-                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
-        }
-
+        self.tracker.account_upload(&self.manager, upload);
         v
     }
 
@@ -328,14 +265,8 @@ impl AsyncWrite for TrackedStream {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         Pin::new(&mut self.inner.as_mut()).poll_flush(cx)
@@ -345,14 +276,8 @@ impl AsyncWrite for TrackedStream {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         Pin::new(self.inner.as_mut()).poll_shutdown(cx)
@@ -493,6 +418,16 @@ impl TrackedDatagram {
     pub fn tracker_info(&self) -> Arc<TrackerInfo> {
         self.tracker.clone()
     }
+
+    fn poll_closed(&mut self) -> Option<std::io::Error> {
+        match self.close_notify.try_recv() {
+            Ok(_) | Err(TryRecvError::Closed) => {
+                debug!("connection closed: {}", self.id());
+                Some(std::io::ErrorKind::BrokenPipe.into())
+            }
+            Err(TryRecvError::Empty) => None,
+        }
+    }
 }
 
 impl Drop for TrackedDatagram {
@@ -509,26 +444,16 @@ impl Stream for TrackedDatagram {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        // poll_next returns None (not an error) on close — keep this inline.
         match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(None),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => return Poll::Ready(None),
-            },
+            Ok(_) | Err(TryRecvError::Closed) => return Poll::Ready(None),
+            Err(TryRecvError::Empty) => {}
         }
 
         let r = Pin::new(self.inner.as_mut()).poll_next(cx);
         if let Poll::Ready(Some(ref pkt)) = r {
             let n = pkt.data.len();
-            self.manager.push_downloaded(n);
-            self.tracker
-                .download_total
-                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
-            if self.tracker.session_holder.inbound_user.is_some() {
-                self.tracker
-                    .user_download
-                    .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
-            }
+            self.tracker.account_download(&self.manager, n);
         }
         r
     }
@@ -541,14 +466,8 @@ impl Sink<UdpPacket> for TrackedDatagram {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
         Pin::new(self.inner.as_mut()).poll_ready(cx)
     }
@@ -557,26 +476,12 @@ impl Sink<UdpPacket> for TrackedDatagram {
         mut self: Pin<&mut Self>,
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Err(std::io::ErrorKind::BrokenPipe.into()),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Err(std::io::ErrorKind::BrokenPipe.into());
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Err(e);
         }
 
         let upload = item.data.len();
-        self.manager.push_uploaded(upload);
-        self.tracker
-            .upload_total
-            .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
-        if self.tracker.session_holder.inbound_user.is_some() {
-            self.tracker
-                .user_upload
-                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
-        }
+        self.tracker.account_upload(&self.manager, upload);
         Pin::new(self.inner.as_mut()).start_send(item)
     }
 
@@ -584,14 +489,8 @@ impl Sink<UdpPacket> for TrackedDatagram {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         Pin::new(self.inner.as_mut()).poll_flush(cx)
@@ -601,14 +500,8 @@ impl Sink<UdpPacket> for TrackedDatagram {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
-            Err(e) => match e {
-                TryRecvError::Empty => {}
-                TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-                }
-            },
+        if let Some(e) = self.poll_closed() {
+            return Poll::Ready(Err(e));
         }
 
         Pin::new(self.inner.as_mut()).poll_close(cx)
