@@ -7,7 +7,6 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
-use downcast_rs::{Downcast, impl_downcast};
 use erased_serde::Serialize as ErasedSerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
@@ -94,9 +93,34 @@ pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 pub type AnyStream = Box<dyn ProxyStream>;
 
-pub trait ClientStream: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
-impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
-impl_downcast!(ClientStream);
+/// A client (inbound-side) stream handed to the dispatcher.
+///
+/// Exposes an optional `underlying_socket()` capability: a stream that is a
+/// direct, single-hop passthrough to an OS socket returns its raw fd, which
+/// the splice/zero-copy path uses. Everything with a transform above the
+/// socket (TLS, framing, muxing) inherits the `None` default — correct,
+/// since the fd would not carry the stream's payload bytes.
+pub trait ClientStream: AsyncRead + AsyncWrite + Send + Unpin {
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        None
+    }
+}
+
+/// The one stream that IS a raw OS socket: overrides the capability to yield
+/// its fd for the splice fast path.
+impl ClientStream for tokio::net::TcpStream {
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        Some(self)
+    }
+}
+
+/// Streams with a transform/mux above the socket: inherit the `None` default.
+impl ClientStream for tokio::io::DuplexStream {}
+#[cfg(feature = "tun")]
+impl ClientStream for watfaq_netstack::TcpStream {}
+impl ClientStream for hyper_util::rt::TokioIo<hyper::upgrade::Upgraded> {}
 
 pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug

@@ -24,6 +24,13 @@ use shadowsocks::{
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, info, warn};
 
+// Shadowsocks-encrypted server stream, not a raw socket: inherits the `None`
+// capability default.
+impl crate::proxy::ClientStream
+    for ProxyServerStream<tokio::net::TcpStream>
+{
+}
+
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
     addr: SocketAddr,

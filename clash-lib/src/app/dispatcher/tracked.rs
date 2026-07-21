@@ -33,6 +33,16 @@ impl Tracked {
 pub trait ChainedStream: ProxyStream + Downcast {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
+
+    /// The underlying OS socket, if this stream is a direct single-hop
+    /// passthrough over a raw `TcpStream`. Used by the splice/zero-copy path.
+    /// Returns `None` for any stream with a transform above the socket.
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        self.as_any_mut()
+            .downcast_mut::<ChainedStreamWrapper<tokio::net::TcpStream>>()
+            .map(|w| w.inner_mut())
+    }
 }
 impl_downcast!(ChainedStream);
 

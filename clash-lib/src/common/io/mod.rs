@@ -401,19 +401,17 @@ pub async fn copy_bidirectional(
         // figure out a better way
         let (r_tracker, w_tracker) = b.trackers();
         // for socks5 & http listener, a is a raw TcpStream
-        let a_raw = a.downcast_mut::<tokio::net::TcpStream>();
+        let a_raw = a.underlying_socket();
         // for direct outbound handler **without further chains**, b is a chained
         // stream wrapper over tcpstream
-        let b_raw = b
-            .inner_mut()
-            .downcast_mut::<crate::app::dispatcher::ChainedStreamWrapper<tokio::net::TcpStream>>();
+        let b_raw = b.inner_mut().underlying_socket();
         match (a_raw, b_raw) {
             // zero copy is only available when both streams are raw TcpStream
-            (Some(a), Some(wrapper)) => {
+            (Some(a), Some(b)) => {
                 tracing::trace!("using zero copy for bidirectional copy");
                 zero_copy_bidirectional(
                     a,
-                    wrapper.inner_mut(),
+                    b,
                     r_tracker,
                     w_tracker,
                     a_to_b_timeout_duration,
