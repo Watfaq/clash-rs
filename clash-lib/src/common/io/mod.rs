@@ -17,7 +17,7 @@ mod splice;
 #[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub use splice::zero_copy_bidirectional;
 
-use crate::{app::dispatcher::TrackedStream, proxy::ClientStream};
+use crate::{app::dispatcher::BoxedChainedStream, proxy::ClientStream};
 
 #[derive(Debug)]
 pub enum CopyBidirectionalError {
@@ -388,7 +388,7 @@ where
 
 pub async fn copy_bidirectional(
     mut a: Box<dyn ClientStream>,
-    mut b: TrackedStream,
+    mut b: BoxedChainedStream,
     size: usize,
     a_to_b_timeout_duration: Duration,
     b_to_a_timeout_duration: Duration,
@@ -399,15 +399,16 @@ pub async fn copy_bidirectional(
         // for zero copy, we need to track the download and upload amount with the
         // assistance of the tracker it's somehow ugly, but i could not
         // figure out a better way
-        let (r_tracker, w_tracker) = b.trackers();
+        let trackers = b.trackers();
         // for socks5 & http listener, a is a raw TcpStream
         let a_raw = a.underlying_socket();
         // for direct outbound handler **without further chains**, b is a chained
         // stream wrapper over tcpstream
-        let b_raw = b.inner_mut().underlying_socket();
-        match (a_raw, b_raw) {
-            // zero copy is only available when both streams are raw TcpStream
-            (Some(a), Some(b)) => {
+        let b_raw = b.underlying_socket();
+        match (a_raw, b_raw, trackers) {
+            // zero copy is only available when both streams are raw TcpStream and
+            // tracking is installed
+            (Some(a), Some(b), Some((r_tracker, w_tracker))) => {
                 tracing::trace!("using zero copy for bidirectional copy");
                 zero_copy_bidirectional(
                     a,

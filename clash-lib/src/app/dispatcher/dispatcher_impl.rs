@@ -1,6 +1,5 @@
 use crate::{
     app::{
-        dispatcher::tracked::{TrackedDatagram, TrackedStream},
         dns::ClashResolver,
         outbound::manager::ThreadSafeOutboundManager,
         router::ArcRouter,
@@ -120,15 +119,9 @@ impl Dispatcher {
             .instrument(info_span!("connect_stream", outbound_name = outbound_name,))
             .await
         {
-            Ok(rhs) => {
+            Ok(mut rhs) => {
                 debug!("remote connection established {}", sess);
-                let rhs = TrackedStream::new(
-                    rhs,
-                    self.manager.clone(),
-                    sess.clone(),
-                    rule,
-                )
-                .await;
+                rhs.install_tracking(self.manager.clone(), sess.clone(), rule).await;
                 match copy_bidirectional(
                     lhs,
                     rhs,
@@ -344,7 +337,7 @@ impl Dispatcher {
                 {
                     None => {
                         debug!("building {} outbound datagram connecting", sess);
-                        let outbound_datagram = match handler
+                        let mut outbound_datagram = match handler
                             .connect_datagram(&sess, resolver.clone())
                             .await
                         {
@@ -357,8 +350,7 @@ impl Dispatcher {
 
                         debug!("{} outbound datagram connected", sess);
 
-                        let outbound_datagram = TrackedDatagram::new(
-                            outbound_datagram,
+                        outbound_datagram.install_tracking(
                             manager.clone(),
                             sess.clone(),
                             rule,
