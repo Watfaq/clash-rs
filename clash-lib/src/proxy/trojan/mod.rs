@@ -25,7 +25,7 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
-    transport::Transport,
+    transport::TransportLayer,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
@@ -39,8 +39,8 @@ pub struct HandlerOptions {
     pub password: String,
     pub udp: bool,
     // might support shadow-tls?
-    pub tls: Option<Box<dyn Transport>>,
-    pub transport: Option<Box<dyn Transport>>,
+    pub tls: Option<TransportLayer>,
+    pub transport: Option<TransportLayer>,
 }
 
 pub struct Handler {
@@ -76,13 +76,13 @@ impl Handler {
         udp: bool,
     ) -> io::Result<AnyStream> {
         let s = if let Some(tls_client) = self.opts.tls.as_ref() {
-            tls_client.proxy_stream(s).await?
+            tls_client.wrap(s).await?
         } else {
             s
         };
 
         let mut s = if let Some(transport) = self.opts.transport.as_ref() {
-            transport.proxy_stream(s).await?
+            transport.wrap(s).await?
         } else {
             s
         };
@@ -246,7 +246,7 @@ mod tests {
     use super::*;
     use crate::{
         proxy::{
-            transport,
+            transport::{self, TransportLayer},
             utils::test_utils::{
                 Suite,
                 config_helper::test_config_base_dir,
@@ -379,8 +379,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            tls: Some(Box::new(tls)),
-            transport: Some(Box::new(transport)),
+            tls: Some(TransportLayer::Tls(tls)),
+            transport: Some(TransportLayer::Ws(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler
@@ -442,8 +442,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            tls: Some(Box::new(tls)),
-            transport: Some(Box::new(transport)),
+            tls: Some(TransportLayer::Tls(tls)),
+            transport: Some(TransportLayer::Grpc(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler

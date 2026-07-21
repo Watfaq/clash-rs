@@ -55,6 +55,7 @@ pub trait Transport: Send + Sync {
 /// stable, so a closed enum gives static dispatch with no per-layer heap
 /// allocation while keeping the same runtime, config-driven composition
 /// (a handler holds an ordered stack of these and applies them in turn).
+#[allow(dead_code)]
 pub enum TransportLayer {
     Tls(TlsClient),
     Reality(RealityClient),
@@ -69,8 +70,6 @@ pub enum TransportLayer {
     SimpleObfsTls(SimpleObfsTLS),
     #[cfg(feature = "shadowsocks")]
     V2rayWs(V2rayWsClient),
-    #[cfg(feature = "shadowsocks")]
-    Sip003(Sip003Plugin),
 }
 
 impl TransportLayer {
@@ -79,21 +78,19 @@ impl TransportLayer {
         stream: super::AnyStream,
     ) -> std::io::Result<super::AnyStream> {
         match self {
-            Self::Tls(t) => t.proxy_stream(stream).await,
-            Self::Reality(t) => t.proxy_stream(stream).await,
-            Self::Grpc(t) => t.proxy_stream(stream).await,
-            Self::H2(t) => t.proxy_stream(stream).await,
-            Self::Ws(t) => t.proxy_stream(stream).await,
+            Self::Tls(t) => Transport::proxy_stream(t, stream).await,
+            Self::Reality(t) => Transport::proxy_stream(t, stream).await,
+            Self::Grpc(t) => Transport::proxy_stream(t, stream).await,
+            Self::H2(t) => Transport::proxy_stream(t, stream).await,
+            Self::Ws(t) => Transport::proxy_stream(t, stream).await,
             #[cfg(feature = "shadowsocks")]
-            Self::ShadowTls(t) => t.proxy_stream(stream).await,
+            Self::ShadowTls(t) => Transport::proxy_stream(t, stream).await,
             #[cfg(feature = "shadowsocks")]
-            Self::SimpleObfsHttp(t) => t.proxy_stream(stream).await,
+            Self::SimpleObfsHttp(t) => Transport::proxy_stream(t, stream).await,
             #[cfg(feature = "shadowsocks")]
-            Self::SimpleObfsTls(t) => t.proxy_stream(stream).await,
+            Self::SimpleObfsTls(t) => Transport::proxy_stream(t, stream).await,
             #[cfg(feature = "shadowsocks")]
-            Self::V2rayWs(t) => t.proxy_stream(stream).await,
-            #[cfg(feature = "shadowsocks")]
-            Self::Sip003(t) => t.proxy_stream(stream).await,
+            Self::V2rayWs(t) => Transport::proxy_stream(t, stream).await,
         }
     }
 
@@ -102,7 +99,7 @@ impl TransportLayer {
         stream: super::AnyStream,
     ) -> std::io::Result<(super::AnyStream, Option<VisionOptions>)> {
         match self {
-            Self::Reality(t) => t.proxy_stream_spliced(stream).await,
+            Self::Reality(t) => Transport::proxy_stream_spliced(t, stream).await,
             other => Ok((other.wrap(stream).await?, None)),
         }
     }

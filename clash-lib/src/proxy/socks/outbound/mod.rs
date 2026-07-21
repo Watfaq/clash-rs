@@ -14,7 +14,7 @@ use crate::{
     proxy::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType, PlainProxyAPIResponse,
-        transport::Transport,
+        transport::TransportLayer,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
     },
     session::Session,
@@ -34,7 +34,7 @@ pub struct HandlerOptions {
     pub user: Option<String>,
     pub password: Option<String>,
     pub udp: bool,
-    pub tls_client: Option<Box<dyn Transport>>,
+    pub tls_client: Option<TransportLayer>,
 }
 
 pub struct Handler {
@@ -67,7 +67,7 @@ impl Handler {
         sess: &Session,
     ) -> std::io::Result<AnyStream> {
         let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
-            tls_client.proxy_stream(s).await?
+            tls_client.wrap(s).await?
         } else {
             s
         };
@@ -91,7 +91,7 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<Socks5Datagram> {
         let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
-            tls_client.proxy_stream(s).await?
+            tls_client.wrap(s).await?
         } else {
             s
         };

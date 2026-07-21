@@ -29,7 +29,7 @@ impl TryFrom<V2RayOBFSOption> for V2rayWsClient {
 }
 
 pub struct V2rayWsClient {
-    pub tls_client: Option<Box<dyn Transport>>,
+    pub tls_client: Option<TlsClient>,
     pub ws_client: transport::WsClient,
 }
 
@@ -49,14 +49,14 @@ impl V2rayWsClient {
         }
 
         let tls_client = if tls {
-            Some(Box::new(TlsClient::new(
+            Some(TlsClient::new(
                 skip_cert_verify,
                 host.clone(),
                 Some(vec!["http/1.1".to_owned()]),
                 None,
                 None,
                 None,
-            )?) as _)
+            )?)
         } else {
             None
         };
@@ -89,12 +89,12 @@ impl V2rayWsClient {
         s: AnyStream,
     ) -> std::io::Result<AnyStream> {
         let s = if let Some(tls_client) = self.tls_client.as_ref() {
-            tls_client.proxy_stream(s).await?
+            Transport::proxy_stream(tls_client, s).await?
         } else {
             s
         };
 
-        self.ws_client.proxy_stream(s).await
+        Transport::proxy_stream(&self.ws_client, s).await
     }
 }
 
