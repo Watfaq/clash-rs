@@ -1,4 +1,4 @@
-use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
+use std::{fmt::Debug, future::Future, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
@@ -123,13 +123,19 @@ impl<T> ChainedStreamWrapper<T> {
         &mut self.inner
     }
 
-    fn poll_closed(tracking: &mut StreamTracking) -> Option<std::io::Error> {
-        match tracking.close_notify.try_recv() {
-            Ok(_) | Err(TryRecvError::Closed) => {
+    /// Poll the close-notify channel, registering the task waker so an idle
+    /// connection wakes when `Manager::close` fires. Returns `Some(err)` when
+    /// the connection should be treated as closed, `None` while still open.
+    fn poll_closed(
+        tracking: &mut StreamTracking,
+        cx: &mut std::task::Context<'_>,
+    ) -> Option<std::io::Error> {
+        match Pin::new(&mut tracking.close_notify).poll(cx) {
+            Poll::Ready(_) => {
                 debug!("connection closed: {}", tracking.tracker.uuid);
                 Some(std::io::ErrorKind::BrokenPipe.into())
             }
-            Err(TryRecvError::Empty) => None,
+            Poll::Pending => None,
         }
     }
 }
@@ -223,14 +229,17 @@ where
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
 
+        let before = buf.filled().len();
         let v = Pin::new(&mut self.inner).poll_read(cx, buf);
-        if let Some(t) = &self.tracking {
-            let download = buf.filled().len();
+        if let Poll::Ready(Ok(())) = &v
+            && let Some(t) = &self.tracking
+        {
+            let download = buf.filled().len() - before;
             t.tracker.account_download(&t.manager, download);
         }
         v
@@ -247,7 +256,7 @@ where
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
@@ -266,7 +275,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
@@ -279,7 +288,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
@@ -383,13 +392,16 @@ impl<T> ChainedDatagramWrapper<T> {
         }
     }
 
-    fn poll_closed(tracking: &mut DatagramTracking) -> Option<std::io::Error> {
-        match tracking.close_notify.try_recv() {
-            Ok(_) | Err(TryRecvError::Closed) => {
+    fn poll_closed(
+        tracking: &mut DatagramTracking,
+        cx: &mut std::task::Context<'_>,
+    ) -> Option<std::io::Error> {
+        match Pin::new(&mut tracking.close_notify).poll(cx) {
+            Poll::Ready(_) => {
                 debug!("connection closed: {}", tracking.tracker.uuid);
                 Some(std::io::ErrorKind::BrokenPipe.into())
             }
-            Err(TryRecvError::Empty) => None,
+            Poll::Pending => None,
         }
     }
 }
@@ -462,12 +474,12 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // poll_next returns None (not an error) on close — keep inline.
-        if let Some(t) = &mut self.tracking {
-            match t.close_notify.try_recv() {
-                Ok(_) | Err(TryRecvError::Closed) => return Poll::Ready(None),
-                Err(TryRecvError::Empty) => {}
-            }
+        // poll_next returns None (not an error) on close. Poll (not try_recv)
+        // so the task waker is registered and an idle receiver wakes on close.
+        if let Some(t) = &mut self.tracking
+            && Pin::new(&mut t.close_notify).poll(cx).is_ready()
+        {
+            return Poll::Ready(None);
         }
 
         let r = Pin::new(&mut self.inner).poll_next(cx);
@@ -491,7 +503,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
@@ -500,8 +512,13 @@ where
 
     fn start_send(mut self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         if let Some(t) = &mut self.tracking {
-            if let Some(e) = Self::poll_closed(t) {
-                return Err(e);
+            // No task context here; a plain try_recv is the best we can do.
+            // Readiness/close wakeups are handled by poll_ready/poll_flush.
+            if matches!(
+                t.close_notify.try_recv(),
+                Ok(_) | Err(TryRecvError::Closed)
+            ) {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
             }
             let upload = item.data.len();
             t.tracker.account_upload(&t.manager, upload);
@@ -514,7 +531,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
@@ -526,7 +543,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t)
+            && let Some(e) = Self::poll_closed(t, cx)
         {
             return Poll::Ready(Err(e));
         }
