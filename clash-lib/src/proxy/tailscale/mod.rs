@@ -14,8 +14,9 @@ use tokio::sync::Mutex;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -165,7 +166,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let remote_ip = match &sess.destination {
             SocksAddr::Ip(addr) => addr.ip(),
             SocksAddr::Domain(host, _) => resolver
@@ -186,7 +187,7 @@ impl OutboundHandler for Handler {
                 ))
             })?;
 
-        let s = ChainedStreamWrapper::new(s);
+        let s = InstrumentedStreamWrapper::new(s);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -195,7 +196,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         let device = self.get_device().await?;
         let local_ip: IpAddr = match &sess.destination {
             // Strict: IP literal family must match — fail fast rather than binding
@@ -237,7 +238,7 @@ impl OutboundHandler for Handler {
             })?;
 
         let d = TailscaleDatagramOutbound::new(udp, resolver);
-        let d = ChainedDatagramWrapper::new(d);
+        let d = InstrumentedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

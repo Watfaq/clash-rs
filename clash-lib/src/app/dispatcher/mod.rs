@@ -5,8 +5,8 @@ mod tracked;
 pub use dispatcher_impl::Dispatcher;
 pub use statistics_manager::Manager as StatisticsManager;
 pub use tracked::{
-    BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-    ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+    BoxedInstrumentedDatagram, BoxedInstrumentedStream, InstrumentedDatagram,
+    InstrumentedDatagramWrapper, InstrumentedStream, InstrumentedStreamWrapper,
 };
 
 #[cfg(all(target_os = "linux", feature = "zero_copy"))]

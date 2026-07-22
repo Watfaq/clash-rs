@@ -1009,7 +1009,7 @@ impl ProxyManager {
 mod tests {
     use crate::{
         app::{
-            dispatcher::ChainedStreamWrapper, dns::MockClashResolver,
+            dispatcher::InstrumentedStreamWrapper, dns::MockClashResolver,
             remote_content_manager,
         },
         config::internal::proxy::PROXY_DIRECT,
@@ -1093,7 +1093,7 @@ mod tests {
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());
         mock_handler.expect_connect_stream().returning(|_, _| {
-            Ok(Box::new(ChainedStreamWrapper::new(
+            Ok(Box::new(InstrumentedStreamWrapper::new(
                 tokio_test::io::Builder::new()
                     .wait(Duration::from_secs(10))
                     .build(),

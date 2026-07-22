@@ -16,8 +16,9 @@ mod compat;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -29,7 +30,7 @@ use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
     PlainProxyAPIResponse,
 };
-use crate::app::dispatcher::ChainedStream;
+use crate::app::dispatcher::InstrumentedStream;
 // This is ugly, it may be exposed better by shadowquic in the future
 type SQConn = shadowquic::squic::SQConn<<EndClient as QuicClient>::C>;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
@@ -150,7 +151,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let conn = self.prepare_conn(sess, resolver).await?;
         let conn = shadowquic::squic::outbound::connect_tcp(
             &conn,
@@ -160,7 +161,7 @@ impl OutboundHandler for Handler {
         .map_err(|x| {
             io::Error::other(format!("can't open shadowquic stream due to:{x}"))
         })?;
-        let s = ChainedStreamWrapper::new(conn);
+        let s = InstrumentedStreamWrapper::new(conn);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -170,7 +171,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let conn = self.prepare_conn(sess, resolver).await?;
         // clash-rs didn't expose udp associate address, so set to unspecified
         // address
@@ -188,7 +189,7 @@ impl OutboundHandler for Handler {
         .map_err(|x| {
             io::Error::other(format!("can't open shadowquic stream due to:{x}"))
         })?;
-        let chain = ChainedDatagramWrapper::new(UdpSessionWrapper {
+        let chain = InstrumentedDatagramWrapper::new(UdpSessionWrapper {
             s: PollSender::new(socket.0),
             r: socket.1,
             src_addr: sess.source.into(),

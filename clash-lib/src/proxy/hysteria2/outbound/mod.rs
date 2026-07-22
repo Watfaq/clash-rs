@@ -7,8 +7,9 @@ use super::{
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -385,11 +386,11 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let hy_stream = authed_conn.connect_tcp(sess).await?;
-        Ok(Box::new(ChainedStreamWrapper::new(
-            Box::new(hy_stream) as crate::proxy::AnyStream
+        Ok(Box::new(InstrumentedStreamWrapper::new(
+            Box::new(hy_stream) as crate::proxy::AnyStream,
         )))
     }
 
@@ -398,13 +399,13 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let next_session_id = self
             .next_session_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let hy_datagram = authed_conn.connect_udp(sess, next_session_id).await;
-        let s = ChainedDatagramWrapper::new(hy_datagram);
+        let s = InstrumentedDatagramWrapper::new(hy_datagram);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }

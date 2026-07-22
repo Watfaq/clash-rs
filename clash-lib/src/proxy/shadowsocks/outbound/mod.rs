@@ -9,8 +9,9 @@ use self::{
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -125,7 +126,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -147,7 +148,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -174,7 +175,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let stream = connector
             .connect_stream(
                 resolver.clone(),
@@ -187,7 +188,7 @@ impl OutboundHandler for Handler {
             .await?;
 
         let s = self.proxy_stream(stream, sess, resolver).await?;
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -197,7 +198,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let cfg = self.server_config()?;
 
         let socket = connector
@@ -234,7 +235,7 @@ impl OutboundHandler for Handler {
             socket,
             (server_addr, self.opts.port).into(),
         );
-        let d = ChainedDatagramWrapper::new(d);
+        let d = InstrumentedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

@@ -4,8 +4,9 @@ use super::socks5::{client_handshake, socks_command};
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -164,7 +165,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -188,7 +189,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -215,7 +216,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let s = connector
             .connect_stream(
                 resolver,
@@ -229,7 +230,7 @@ impl OutboundHandler for Handler {
 
         let s = self.inner_connect_stream(s, sess).await?;
 
-        let s = ChainedStreamWrapper::new(s);
+        let s = InstrumentedStreamWrapper::new(s);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -239,7 +240,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         let s = connector
             .connect_stream(
                 resolver.clone(),
@@ -253,7 +254,7 @@ impl OutboundHandler for Handler {
 
         let d = self.inner_connect_datagram(s, sess, resolver).await?;
 
-        let d = ChainedDatagramWrapper::new(d);
+        let d = InstrumentedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

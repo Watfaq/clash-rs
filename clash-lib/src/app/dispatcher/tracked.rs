@@ -46,11 +46,11 @@ struct DatagramTracking {
 }
 
 // ---------------------------------------------------------------------------
-// ChainedStream trait
+// InstrumentedStream trait
 // ---------------------------------------------------------------------------
 
 #[async_trait]
-pub trait ChainedStream: ProxyStream + Sync + Downcast {
+pub trait InstrumentedStream: ProxyStream + Sync + Downcast {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 
@@ -73,7 +73,7 @@ pub trait ChainedStream: ProxyStream + Sync + Downcast {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
         self.as_any_mut()
-            .downcast_mut::<ChainedStreamWrapper<tokio::net::TcpStream>>()
+            .downcast_mut::<InstrumentedStreamWrapper<tokio::net::TcpStream>>()
             .map(|w| w.inner_mut())
     }
 
@@ -89,28 +89,28 @@ pub trait ChainedStream: ProxyStream + Sync + Downcast {
         None
     }
 }
-impl_downcast!(ChainedStream);
+impl_downcast!(InstrumentedStream);
 
-pub type BoxedChainedStream = Box<dyn ChainedStream>;
+pub type BoxedInstrumentedStream = Box<dyn InstrumentedStream>;
 
-impl crate::proxy::ProxyStream for Box<dyn ChainedStream> {
+impl crate::proxy::ProxyStream for Box<dyn InstrumentedStream> {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
-        ChainedStream::underlying_socket(self.as_mut())
+        InstrumentedStream::underlying_socket(self.as_mut())
     }
 }
 
 // ---------------------------------------------------------------------------
-// ChainedStreamWrapper — the single stream wrapper
+// InstrumentedStreamWrapper — the single stream wrapper
 // ---------------------------------------------------------------------------
 
-pub struct ChainedStreamWrapper<T> {
+pub struct InstrumentedStreamWrapper<T> {
     inner: T,
     chain: ProxyChain,
     tracking: Option<StreamTracking>,
 }
 
-impl<T> ChainedStreamWrapper<T> {
+impl<T> InstrumentedStreamWrapper<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
@@ -141,7 +141,7 @@ impl<T> ChainedStreamWrapper<T> {
 }
 
 #[async_trait]
-impl<T> ChainedStream for ChainedStreamWrapper<T>
+impl<T> InstrumentedStream for InstrumentedStreamWrapper<T>
 where
     T: crate::proxy::ProxyStream
         + AsyncRead
@@ -216,7 +216,7 @@ where
     }
 }
 
-impl<T> Drop for ChainedStreamWrapper<T> {
+impl<T> Drop for InstrumentedStreamWrapper<T> {
     fn drop(&mut self) {
         if let Some(t) = &self.tracking {
             debug!("untrack connection: {}", t.tracker.uuid);
@@ -225,7 +225,7 @@ impl<T> Drop for ChainedStreamWrapper<T> {
     }
 }
 
-impl<T> AsyncRead for ChainedStreamWrapper<T>
+impl<T> AsyncRead for InstrumentedStreamWrapper<T>
 where
     T: AsyncRead + Unpin,
 {
@@ -252,7 +252,7 @@ where
     }
 }
 
-impl<T> AsyncWrite for ChainedStreamWrapper<T>
+impl<T> AsyncWrite for InstrumentedStreamWrapper<T>
 where
     T: AsyncWrite + Unpin,
 {
@@ -304,10 +304,10 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// ProxyStream impl for ChainedStreamWrapper
+// ProxyStream impl for InstrumentedStreamWrapper
 // ---------------------------------------------------------------------------
 
-impl<T> crate::proxy::ProxyStream for ChainedStreamWrapper<T>
+impl<T> crate::proxy::ProxyStream for InstrumentedStreamWrapper<T>
 where
     T: crate::proxy::ProxyStream
         + AsyncRead
@@ -351,11 +351,11 @@ impl TrackCopy for DirCopy {
 }
 
 // ---------------------------------------------------------------------------
-// ChainedDatagram trait
+// InstrumentedDatagram trait
 // ---------------------------------------------------------------------------
 
 #[async_trait]
-pub trait ChainedDatagram:
+pub trait InstrumentedDatagram:
     Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Unpin
 {
     fn chain(&self) -> &ProxyChain;
@@ -375,28 +375,28 @@ pub trait ChainedDatagram:
     fn tracker_info(&self) -> Option<Arc<TrackerInfo>>;
 }
 
-pub type BoxedChainedDatagram = Box<dyn ChainedDatagram + Send + Sync>;
+pub type BoxedInstrumentedDatagram = Box<dyn InstrumentedDatagram + Send + Sync>;
 
 // ---------------------------------------------------------------------------
-// ChainedDatagramWrapper — the single datagram wrapper
+// InstrumentedDatagramWrapper — the single datagram wrapper
 // ---------------------------------------------------------------------------
 
-pub struct ChainedDatagramWrapper<T> {
+pub struct InstrumentedDatagramWrapper<T> {
     inner: T,
     chain: ProxyChain,
     tracking: Option<DatagramTracking>,
 }
 
-impl<T: Debug> Debug for ChainedDatagramWrapper<T> {
+impl<T: Debug> Debug for InstrumentedDatagramWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ChainedDatagramWrapper")
+        f.debug_struct("InstrumentedDatagramWrapper")
             .field("inner", &self.inner)
             .field("chain", &self.chain)
             .finish()
     }
 }
 
-impl<T> ChainedDatagramWrapper<T> {
+impl<T> InstrumentedDatagramWrapper<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
@@ -420,7 +420,7 @@ impl<T> ChainedDatagramWrapper<T> {
 }
 
 #[async_trait]
-impl<T> ChainedDatagram for ChainedDatagramWrapper<T>
+impl<T> InstrumentedDatagram for InstrumentedDatagramWrapper<T>
 where
     T: Sink<UdpPacket, Error = std::io::Error> + Unpin + Send + Sync + 'static,
     T: Stream<Item = UdpPacket>,
@@ -468,7 +468,7 @@ where
     }
 }
 
-impl<T> Drop for ChainedDatagramWrapper<T> {
+impl<T> Drop for InstrumentedDatagramWrapper<T> {
     fn drop(&mut self) {
         if let Some(t) = &self.tracking {
             debug!("untrack connection: {}", t.tracker.uuid);
@@ -477,7 +477,7 @@ impl<T> Drop for ChainedDatagramWrapper<T> {
     }
 }
 
-impl<T> Stream for ChainedDatagramWrapper<T>
+impl<T> Stream for InstrumentedDatagramWrapper<T>
 where
     T: Stream<Item = UdpPacket> + Unpin,
 {
@@ -505,7 +505,7 @@ where
     }
 }
 
-impl<T> Sink<UdpPacket> for ChainedDatagramWrapper<T>
+impl<T> Sink<UdpPacket> for InstrumentedDatagramWrapper<T>
 where
     T: Sink<UdpPacket, Error = std::io::Error> + Unpin,
 {

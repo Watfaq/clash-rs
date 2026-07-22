@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
     },
     proxy::datagram::UdpPacket,
@@ -103,7 +103,7 @@ pub enum ProxyError {
 /// (the impl is empty for everything except `TcpStream`).
 ///
 /// `Send`/`Sync` are NOT trait bounds here — they are expressed at the boxed
-/// use sites (`AnyStream = Box<dyn ProxyStream + Sync>`, `ChainedStream:
+/// use sites (`AnyStream = Box<dyn ProxyStream + Sync>`, `InstrumentedStream:
 /// ProxyStream + Sync`) so inbound streams that are `Send` but not `Sync`
 /// (e.g. `TokioIo<Upgraded>`) can still be `ProxyStream`.
 pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Unpin {
@@ -258,14 +258,14 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream>;
+    ) -> io::Result<BoxedInstrumentedStream>;
 
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram>;
+    ) -> io::Result<BoxedInstrumentedDatagram>;
 
     /// relay related
     async fn support_connector(&self) -> ConnectorType;
@@ -275,7 +275,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         error!("tcp relay not supported for {}", self.proto());
         Err(io::Error::other(format!(
             "tcp relay not supported for {}",
@@ -288,7 +288,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         Err(io::Error::other(format!(
             "udp relay not supported for {}",
             self.proto()

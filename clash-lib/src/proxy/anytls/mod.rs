@@ -11,8 +11,8 @@ use tracing::{debug, warn};
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedStream, InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -344,7 +344,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -366,7 +366,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -393,7 +393,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -406,7 +406,7 @@ impl OutboundHandler for Handler {
             .await?;
 
         let s = self.inner_proxy_stream(stream, sess).await?;
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -416,7 +416,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -444,7 +444,8 @@ impl OutboundHandler for Handler {
         stream.flush().await?;
 
         let datagram = OutboundDatagramAnytls::new(stream, sess.destination.clone());
-        let chained = crate::app::dispatcher::ChainedDatagramWrapper::new(datagram);
+        let chained =
+            crate::app::dispatcher::InstrumentedDatagramWrapper::new(datagram);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }

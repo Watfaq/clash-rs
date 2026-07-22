@@ -9,7 +9,7 @@ use tracing::debug;
 use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             ProxyManager, providers::proxy_provider::ArcProxyProvider,
@@ -104,7 +104,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
@@ -121,7 +121,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
@@ -142,7 +142,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());

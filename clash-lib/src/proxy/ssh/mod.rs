@@ -19,8 +19,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
-            ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -168,7 +168,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         // key exchange algorithms
         let kex = Cow::Borrowed(KEX_ALGORITHMS);
         // host key algorithms
@@ -219,7 +219,7 @@ impl OutboundHandler for Handler {
         let s: crate::proxy::AnyStream = Box::new(ChannelStreamWrapper {
             inner: channel.into_stream(),
         });
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -229,7 +229,7 @@ impl OutboundHandler for Handler {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         Err(new_io_error("ssh udp is not implemented yet"))
     }
 
