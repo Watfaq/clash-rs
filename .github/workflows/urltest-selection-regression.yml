@@ -1,0 +1,27 @@
+name: URLTest Selection Regression
+
+on:
+  push:
+    branches:
+      - fix/urltest-tolerance-selection
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: URLTest selection regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run regression test
+        env:
+          RUSTFLAGS: -A dead-code
+        run: >-
+          cargo test -p clash-lib
+          --no-default-features
+          --features aws-lc-rs
+          --lib --
+          proxy::group::urltest::tests::test_tolerance_and_liveness_select_proxy
+          --nocapture

@@ -184,6 +184,24 @@ impl ProxyManager {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) async fn report_delay(
+        &self,
+        name: &str,
+        alive: bool,
+        delay: Duration,
+    ) {
+        self.report_alive(
+            name,
+            alive,
+            Some(DelayHistory {
+                time: Utc::now(),
+                delay,
+            }),
+        )
+        .await;
+    }
+
     pub async fn delay_history(&self, name: &str) -> Vec<DelayHistory> {
         self.proxy_state
             .read()

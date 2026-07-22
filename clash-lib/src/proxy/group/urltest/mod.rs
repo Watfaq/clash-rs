@@ -252,13 +252,15 @@ impl GroupProxyAPIResponse for Handler {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
     use crate::{
         app::remote_content_manager::ProxyManager,
         proxy::{
-            group::GroupProxyAPIResponse, mocks::MockDummyProxyProvider,
-            utils::test_utils::noop::NoopResolver,
+            AnyOutboundHandler,
+            group::GroupProxyAPIResponse,
+            mocks::MockDummyProxyProvider,
+            utils::test_utils::noop::{NoopOutboundHandler, NoopResolver},
         },
     };
 
@@ -281,5 +283,57 @@ mod tests {
         );
 
         assert!(handler.get_active_proxy().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_tolerance_and_liveness_select_proxy() {
+        let proxies: Vec<AnyOutboundHandler> = vec![
+            Arc::new(NoopOutboundHandler { name: "a".into() }),
+            Arc::new(NoopOutboundHandler { name: "b".into() }),
+        ];
+        let mut provider = MockDummyProxyProvider::new();
+        provider.expect_proxies().returning({
+            let proxies = proxies.clone();
+            move || proxies.clone()
+        });
+
+        let proxy_manager = ProxyManager::new(Arc::new(NoopResolver), None);
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(100))
+            .await;
+        proxy_manager
+            .report_delay("b", true, Duration::from_millis(50))
+            .await;
+        let handler = super::Handler::new(
+            super::HandlerOptions {
+                name: "url-test".to_owned(),
+                ..Default::default()
+            },
+            20,
+            vec![Arc::new(provider)],
+            proxy_manager.clone(),
+        );
+
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(40))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(20))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "a");
+
+        proxy_manager
+            .report_delay("a", false, Duration::from_millis(20))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("b", false, Duration::from_millis(50))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "a");
     }
 }
