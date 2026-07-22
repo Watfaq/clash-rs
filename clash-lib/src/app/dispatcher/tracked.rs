@@ -30,19 +30,93 @@ impl Tracked {
 }
 
 // ---------------------------------------------------------------------------
-// Internal tracking state — installed by the dispatcher on the outermost box
+// Shared instrumentation — proxy-chain metadata + optional byte/close tracking.
+// Embedded by both the stream and datagram wrappers; the only difference
+// between TCP and UDP is the I/O trait impls, not this bookkeeping.
 // ---------------------------------------------------------------------------
 
-struct StreamTracking {
+struct Tracking {
     manager: Arc<Manager>,
     tracker: Arc<TrackerInfo>,
     close_notify: Receiver<()>,
 }
 
-struct DatagramTracking {
-    manager: Arc<Manager>,
-    tracker: Arc<TrackerInfo>,
-    close_notify: Receiver<()>,
+struct Instrumentation {
+    chain: ProxyChain,
+    tracking: Option<Tracking>,
+}
+
+impl Instrumentation {
+    fn new() -> Self {
+        Self {
+            chain: ProxyChain::default(),
+            tracking: None,
+        }
+    }
+
+    async fn append_to_chain(&self, name: &str) {
+        self.chain.push(name.to_owned()).await;
+    }
+
+    #[allow(clippy::borrowed_box)]
+    async fn install(
+        &mut self,
+        manager: Arc<Manager>,
+        sess: Session,
+        rule: Option<&Box<dyn RuleMatcher>>,
+    ) {
+        let uuid = uuid::Uuid::new_v4();
+        let chain = self.chain.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let tracker = Arc::new(TrackerInfo {
+            uuid,
+            session_holder: sess,
+            start_time: chrono::Utc::now(),
+            rule: rule
+                .as_ref()
+                .map(|x| x.type_name().to_owned())
+                .unwrap_or_default(),
+            rule_payload: rule.map(|x| x.payload()).unwrap_or_default(),
+            proxy_chain_holder: chain,
+            ..Default::default()
+        });
+        manager.track(Tracked(uuid, tracker.clone()), tx).await;
+        self.tracking = Some(Tracking {
+            manager,
+            tracker,
+            close_notify: rx,
+        });
+    }
+
+    fn tracker_info(&self) -> Option<Arc<TrackerInfo>> {
+        self.tracking.as_ref().map(|t| t.tracker.clone())
+    }
+
+    /// Poll the close-notify channel, registering the task waker so an idle
+    /// connection wakes when `Manager::close` fires. Returns `Some(err)` when
+    /// the connection should be treated as closed, `None` while still open.
+    fn poll_closed(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> Option<std::io::Error> {
+        let t = self.tracking.as_mut()?;
+        match Pin::new(&mut t.close_notify).poll(cx) {
+            Poll::Ready(_) => {
+                debug!("connection closed: {}", t.tracker.uuid);
+                Some(std::io::ErrorKind::BrokenPipe.into())
+            }
+            Poll::Pending => None,
+        }
+    }
+}
+
+impl Drop for Instrumentation {
+    fn drop(&mut self) {
+        if let Some(t) = &self.tracking {
+            debug!("untrack connection: {}", t.tracker.uuid);
+            t.manager.untrack(t.tracker.uuid);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,37 +180,19 @@ impl crate::proxy::ProxyStream for Box<dyn InstrumentedStream> {
 
 pub struct InstrumentedStreamWrapper<T> {
     inner: T,
-    chain: ProxyChain,
-    tracking: Option<StreamTracking>,
+    inst: Instrumentation,
 }
 
 impl<T> InstrumentedStreamWrapper<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
-            chain: ProxyChain::default(),
-            tracking: None,
+            inst: Instrumentation::new(),
         }
     }
 
     pub fn inner_mut(&mut self) -> &mut T {
         &mut self.inner
-    }
-
-    /// Poll the close-notify channel, registering the task waker so an idle
-    /// connection wakes when `Manager::close` fires. Returns `Some(err)` when
-    /// the connection should be treated as closed, `None` while still open.
-    fn poll_closed(
-        tracking: &mut StreamTracking,
-        cx: &mut std::task::Context<'_>,
-    ) -> Option<std::io::Error> {
-        match Pin::new(&mut tracking.close_notify).poll(cx) {
-            Poll::Ready(_) => {
-                debug!("connection closed: {}", tracking.tracker.uuid);
-                Some(std::io::ErrorKind::BrokenPipe.into())
-            }
-            Poll::Pending => None,
-        }
     }
 }
 
@@ -152,11 +208,11 @@ where
         + 'static,
 {
     fn chain(&self) -> &ProxyChain {
-        &self.chain
+        &self.inst.chain
     }
 
     async fn append_to_chain(&self, name: &str) {
-        self.chain.push(name.to_owned()).await;
+        self.inst.append_to_chain(name).await;
     }
 
     #[allow(clippy::borrowed_box)]
@@ -166,31 +222,11 @@ where
         sess: Session,
         rule: Option<&Box<dyn RuleMatcher>>,
     ) {
-        let uuid = uuid::Uuid::new_v4();
-        let chain = self.chain.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let tracker = Arc::new(TrackerInfo {
-            uuid,
-            session_holder: sess,
-            start_time: chrono::Utc::now(),
-            rule: rule
-                .as_ref()
-                .map(|x| x.type_name().to_owned())
-                .unwrap_or_default(),
-            rule_payload: rule.map(|x| x.payload()).unwrap_or_default(),
-            proxy_chain_holder: chain,
-            ..Default::default()
-        });
-        manager.track(Tracked(uuid, tracker.clone()), tx).await;
-        self.tracking = Some(StreamTracking {
-            manager,
-            tracker,
-            close_notify: rx,
-        });
+        self.inst.install(manager, sess, rule).await;
     }
 
     fn tracker_info(&self) -> Option<Arc<TrackerInfo>> {
-        self.tracking.as_ref().map(|t| t.tracker.clone())
+        self.inst.tracker_info()
     }
 
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
@@ -200,7 +236,7 @@ where
         Arc<dyn TrackCopy + Send + Sync>,
         Arc<dyn TrackCopy + Send + Sync>,
     )> {
-        self.tracking.as_ref().map(|t| {
+        self.inst.tracking.as_ref().map(|t| {
             let r: Arc<dyn TrackCopy + Send + Sync> = Arc::new(DirCopy {
                 tracker: t.tracker.clone(),
                 manager: t.manager.clone(),
@@ -216,15 +252,6 @@ where
     }
 }
 
-impl<T> Drop for InstrumentedStreamWrapper<T> {
-    fn drop(&mut self) {
-        if let Some(t) = &self.tracking {
-            debug!("untrack connection: {}", t.tracker.uuid);
-            t.manager.untrack(t.tracker.uuid);
-        }
-    }
-}
-
 impl<T> AsyncRead for InstrumentedStreamWrapper<T>
 where
     T: AsyncRead + Unpin,
@@ -234,16 +261,14 @@ where
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
 
         let before = buf.filled().len();
         let v = Pin::new(&mut self.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = &v
-            && let Some(t) = &self.tracking
+            && let Some(t) = &self.inst.tracking
         {
             let download = buf.filled().len() - before;
             t.tracker.account_download(&t.manager, download);
@@ -261,15 +286,13 @@ where
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
 
         let v = Pin::new(&mut self.inner).poll_write(cx, buf);
         if let Poll::Ready(Ok(n)) = &v
-            && let Some(t) = &self.tracking
+            && let Some(t) = &self.inst.tracking
         {
             t.tracker.account_upload(&t.manager, *n);
         }
@@ -280,9 +303,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
 
@@ -293,9 +314,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
 
@@ -383,15 +402,14 @@ pub type BoxedInstrumentedDatagram = Box<dyn InstrumentedDatagram + Send + Sync>
 
 pub struct InstrumentedDatagramWrapper<T> {
     inner: T,
-    chain: ProxyChain,
-    tracking: Option<DatagramTracking>,
+    inst: Instrumentation,
 }
 
 impl<T: Debug> Debug for InstrumentedDatagramWrapper<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InstrumentedDatagramWrapper")
             .field("inner", &self.inner)
-            .field("chain", &self.chain)
+            .field("chain", &self.inst.chain)
             .finish()
     }
 }
@@ -400,21 +418,7 @@ impl<T> InstrumentedDatagramWrapper<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
-            chain: ProxyChain::default(),
-            tracking: None,
-        }
-    }
-
-    fn poll_closed(
-        tracking: &mut DatagramTracking,
-        cx: &mut std::task::Context<'_>,
-    ) -> Option<std::io::Error> {
-        match Pin::new(&mut tracking.close_notify).poll(cx) {
-            Poll::Ready(_) => {
-                debug!("connection closed: {}", tracking.tracker.uuid);
-                Some(std::io::ErrorKind::BrokenPipe.into())
-            }
-            Poll::Pending => None,
+            inst: Instrumentation::new(),
         }
     }
 }
@@ -426,11 +430,11 @@ where
     T: Stream<Item = UdpPacket>,
 {
     fn chain(&self) -> &ProxyChain {
-        &self.chain
+        &self.inst.chain
     }
 
     async fn append_to_chain(&self, name: &str) {
-        self.chain.push(name.to_owned()).await;
+        self.inst.append_to_chain(name).await;
     }
 
     #[allow(clippy::borrowed_box)]
@@ -440,40 +444,11 @@ where
         sess: Session,
         rule: Option<&Box<dyn RuleMatcher>>,
     ) {
-        let uuid = uuid::Uuid::new_v4();
-        let chain = self.chain.clone();
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let tracker = Arc::new(TrackerInfo {
-            uuid,
-            session_holder: sess,
-            start_time: chrono::Utc::now(),
-            rule: rule
-                .as_ref()
-                .map(|x| x.type_name().to_owned())
-                .unwrap_or_default(),
-            rule_payload: rule.map(|x| x.payload()).unwrap_or_default(),
-            proxy_chain_holder: chain,
-            ..Default::default()
-        });
-        manager.track(Tracked(uuid, tracker.clone()), tx).await;
-        self.tracking = Some(DatagramTracking {
-            manager,
-            tracker,
-            close_notify: rx,
-        });
+        self.inst.install(manager, sess, rule).await;
     }
 
     fn tracker_info(&self) -> Option<Arc<TrackerInfo>> {
-        self.tracking.as_ref().map(|t| t.tracker.clone())
-    }
-}
-
-impl<T> Drop for InstrumentedDatagramWrapper<T> {
-    fn drop(&mut self) {
-        if let Some(t) = &self.tracking {
-            debug!("untrack connection: {}", t.tracker.uuid);
-            t.manager.untrack(t.tracker.uuid);
-        }
+        self.inst.tracker_info()
     }
 }
 
@@ -489,7 +464,7 @@ where
     ) -> Poll<Option<Self::Item>> {
         // poll_next returns None (not an error) on close. Poll (not try_recv)
         // so the task waker is registered and an idle receiver wakes on close.
-        if let Some(t) = &mut self.tracking
+        if let Some(t) = &mut self.inst.tracking
             && Pin::new(&mut t.close_notify).poll(cx).is_ready()
         {
             return Poll::Ready(None);
@@ -497,7 +472,7 @@ where
 
         let r = Pin::new(&mut self.inner).poll_next(cx);
         if let Poll::Ready(Some(ref pkt)) = r
-            && let Some(t) = &self.tracking
+            && let Some(t) = &self.inst.tracking
         {
             t.tracker.account_download(&t.manager, pkt.data.len());
         }
@@ -515,9 +490,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
         Pin::new(&mut self.inner).poll_ready(cx)
@@ -527,7 +500,7 @@ where
         mut self: Pin<&mut Self>,
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
-        if let Some(t) = &mut self.tracking {
+        if let Some(t) = &mut self.inst.tracking {
             // No task context here; a plain try_recv is the best we can do.
             // Readiness/close wakeups are handled by poll_ready/poll_flush.
             if matches!(t.close_notify.try_recv(), Ok(_) | Err(TryRecvError::Closed))
@@ -544,9 +517,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
         Pin::new(&mut self.inner).poll_flush(cx)
@@ -556,9 +527,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        if let Some(t) = &mut self.tracking
-            && let Some(e) = Self::poll_closed(t, cx)
-        {
+        if let Some(e) = self.inst.poll_closed(cx) {
             return Poll::Ready(Err(e));
         }
         Pin::new(&mut self.inner).poll_close(cx)
