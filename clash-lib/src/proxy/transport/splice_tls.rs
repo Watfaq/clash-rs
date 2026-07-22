@@ -165,3 +165,5 @@ impl AsyncWrite for SplicableTlsStream {
         }
     }
 }
+
+impl crate::proxy::ProxyStream for SplicableTlsStream {}

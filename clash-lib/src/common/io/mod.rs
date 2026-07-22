@@ -17,7 +17,7 @@ mod splice;
 #[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub use splice::zero_copy_bidirectional;
 
-use crate::{app::dispatcher::BoxedChainedStream, proxy::ClientStream};
+use crate::{app::dispatcher::BoxedChainedStream, proxy::ProxyStream};
 
 #[derive(Debug)]
 pub enum CopyBidirectionalError {
@@ -387,7 +387,7 @@ where
 }
 
 pub async fn copy_bidirectional(
-    mut a: Box<dyn ClientStream>,
+    mut a: Box<dyn ProxyStream>,
     mut b: BoxedChainedStream,
     size: usize,
     a_to_b_timeout_duration: Duration,

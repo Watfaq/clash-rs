@@ -50,7 +50,7 @@ struct DatagramTracking {
 // ---------------------------------------------------------------------------
 
 #[async_trait]
-pub trait ChainedStream: ProxyStream + Downcast {
+pub trait ChainedStream: ProxyStream + Sync + Downcast {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 
@@ -93,6 +93,13 @@ impl_downcast!(ChainedStream);
 
 pub type BoxedChainedStream = Box<dyn ChainedStream>;
 
+impl crate::proxy::ProxyStream for Box<dyn ChainedStream> {
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        ChainedStream::underlying_socket(self.as_mut())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ChainedStreamWrapper — the single stream wrapper
 // ---------------------------------------------------------------------------
@@ -130,7 +137,7 @@ impl<T> ChainedStreamWrapper<T> {
 #[async_trait]
 impl<T> ChainedStream for ChainedStreamWrapper<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    T: crate::proxy::ProxyStream + AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
     fn chain(&self) -> &ProxyChain {
         &self.chain
@@ -278,6 +285,20 @@ where
         }
 
         Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ProxyStream impl for ChainedStreamWrapper
+// ---------------------------------------------------------------------------
+
+impl<T> crate::proxy::ProxyStream for ChainedStreamWrapper<T>
+where
+    T: crate::proxy::ProxyStream + AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+{
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        self.inner.underlying_socket()
     }
 }
 

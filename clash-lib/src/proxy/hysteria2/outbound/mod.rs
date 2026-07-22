@@ -388,7 +388,9 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedStream> {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let hy_stream = authed_conn.connect_tcp(sess).await?;
-        Ok(Box::new(ChainedStreamWrapper::new(Box::new(hy_stream))))
+        Ok(Box::new(ChainedStreamWrapper::new(
+            Box::new(hy_stream) as crate::proxy::AnyStream,
+        )))
     }
 
     /// connect to remote target via UDP

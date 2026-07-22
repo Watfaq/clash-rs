@@ -89,38 +89,63 @@ pub enum ProxyError {
     Socks5(String),
 }
 
-pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
-impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
-pub type AnyStream = Box<dyn ProxyStream>;
-
-/// A client (inbound-side) stream handed to the dispatcher.
+/// A proxy stream: `AsyncRead + AsyncWrite`, plus an optional
+/// `underlying_socket()` capability.
 ///
-/// Exposes an optional `underlying_socket()` capability: a stream that is a
-/// direct, single-hop passthrough to an OS socket returns its raw fd, which
-/// the splice/zero-copy path uses. Everything with a transform above the
-/// socket (TLS, framing, muxing) inherits the `None` default — correct,
-/// since the fd would not carry the stream's payload bytes.
-pub trait ClientStream: AsyncRead + AsyncWrite + Send + Unpin {
+/// A stream that is a direct, single-hop passthrough to an OS socket returns
+/// its raw fd (used by the splice/zero-copy path); everything with a transform
+/// above the socket (TLS, framing, muxing) inherits the `None` default —
+/// correct, since the fd would not carry the stream's payload bytes.
+///
+/// This trait is intentionally NOT blanket-implemented: the `underlying_socket`
+/// capability requires `TcpStream` to override the default, which coherence
+/// forbids under a blanket impl. Each concrete stream type impls it explicitly
+/// (the impl is empty for everything except `TcpStream`).
+///
+/// `Send`/`Sync` are NOT trait bounds here — they are expressed at the boxed
+/// use sites (`AnyStream = Box<dyn ProxyStream + Sync>`, `ChainedStream:
+/// ProxyStream + Sync`) so inbound streams that are `Send` but not `Sync`
+/// (e.g. `TokioIo<Upgraded>`) can still be `ProxyStream`.
+pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Unpin {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
         None
     }
 }
+pub type AnyStream = Box<dyn ProxyStream + Sync>;
 
 /// The one stream that IS a raw OS socket: overrides the capability to yield
 /// its fd for the splice fast path.
-impl ClientStream for tokio::net::TcpStream {
+impl ProxyStream for tokio::net::TcpStream {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
         Some(self)
     }
 }
 
-/// Streams with a transform/mux above the socket: inherit the `None` default.
-impl ClientStream for tokio::io::DuplexStream {}
+/// Inbound-side streams with a transform/mux above the socket: inherit `None`.
+impl ProxyStream for tokio::io::DuplexStream {}
 #[cfg(feature = "tun")]
-impl ClientStream for watfaq_netstack::TcpStream {}
-impl ClientStream for hyper_util::rt::TokioIo<hyper::upgrade::Upgraded> {}
+impl ProxyStream for watfaq_netstack::TcpStream {}
+impl ProxyStream for hyper_util::rt::TokioIo<hyper::upgrade::Upgraded> {}
+
+/// Boxed trait-object wrappers: delegate through the box.
+impl ProxyStream for Box<dyn ProxyStream + Sync> {
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        (**self).underlying_socket()
+    }
+}
+impl ProxyStream for Box<dyn ProxyStream + Send + Sync> {
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
+        (**self).underlying_socket()
+    }
+}
+
+/// Test helper: tokio_test::io::Mock used in unit tests.
+#[cfg(test)]
+impl ProxyStream for tokio_test::io::Mock {}
 
 pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug

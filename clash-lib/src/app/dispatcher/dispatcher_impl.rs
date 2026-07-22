@@ -10,7 +10,7 @@ use crate::{
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
     proxy::{
-        AnyInboundDatagram, ClientStream, datagram::UdpPacket, utils::ToCanonical,
+        AnyInboundDatagram, ProxyStream, datagram::UdpPacket, utils::ToCanonical,
     },
     session::{Session, SocksAddr},
 };
@@ -83,7 +83,7 @@ impl Dispatcher {
     pub async fn dispatch_stream(
         &self,
         mut sess: Session,
-        mut lhs: Box<dyn ClientStream>,
+        mut lhs: Box<dyn ProxyStream>,
     ) {
         let dest: SocksAddr =
             match reverse_lookup(&self.resolver, &sess.destination).await {

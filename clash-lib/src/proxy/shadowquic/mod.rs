@@ -631,3 +631,8 @@ rules:
             .await
     }
 }
+
+impl<S: tokio::io::AsyncWrite + Unpin + Send, R: tokio::io::AsyncRead + Unpin + Send>
+    crate::proxy::ProxyStream for shadowquic::squic::inbound::Unsplit<S, R>
+{
+}

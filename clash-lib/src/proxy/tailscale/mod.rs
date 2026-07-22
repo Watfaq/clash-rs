@@ -491,3 +491,5 @@ mod tests {
         );
     }
 }
+
+impl crate::proxy::ProxyStream for ::tailscale::netstack::TcpStream {}

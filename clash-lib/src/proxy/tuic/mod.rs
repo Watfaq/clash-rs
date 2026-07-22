@@ -1038,3 +1038,5 @@ rules:
             .await
     }
 }
+
+impl crate::proxy::ProxyStream for tuic_core::quinn::Connect {}

@@ -31,7 +31,7 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, PlainProxyAPIResponse, ProxyStream, utils::RemoteConnector,
+    OutboundType, PlainProxyAPIResponse, utils::RemoteConnector,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait
@@ -216,11 +216,10 @@ impl OutboundHandler for Handler {
             )
             .await
             .map_err(io::Error::other)?;
-        let s = Box::new(ChannelStreamWrapper {
+        let s: crate::proxy::AnyStream = Box::new(ChannelStreamWrapper {
             inner: channel.into_stream(),
         });
-        let chained: ChainedStreamWrapper<Box<dyn ProxyStream>> =
-            ChainedStreamWrapper::new(s);
+        let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -870,3 +869,5 @@ rules:
         result
     }
 }
+
+impl crate::proxy::ProxyStream for ChannelStreamWrapper {}

@@ -304,3 +304,5 @@ impl AsyncWrite for GrpcStream {
             .map(|_| Ok(()))
     }
 }
+
+impl crate::proxy::ProxyStream for GrpcStream {}

@@ -92,4 +92,4 @@ impl AsyncWrite for HystStream {
 }
 
 // QUIC-muxed stream, not a raw socket: inherits the `None` capability default.
-impl crate::proxy::ClientStream for HystStream {}
+impl crate::proxy::ProxyStream for HystStream {}
