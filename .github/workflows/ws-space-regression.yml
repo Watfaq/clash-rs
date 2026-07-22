@@ -1,0 +1,27 @@
+name: WebSocket Space Regression
+
+on:
+  push:
+    branches:
+      - fix/websocket-space-path
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: WebSocket space regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run regression test
+        env:
+          RUSTFLAGS: -A dead-code
+        run: >-
+          cargo test -p clash-lib
+          --no-default-features
+          --features aws-lc-rs
+          --lib --
+          proxy::transport::ws::tests
+          --nocapture

@@ -94,3 +94,103 @@ impl Transport for Client {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Client, Transport};
+    use std::{collections::HashMap, sync::Arc};
+    use tokio::io::duplex;
+    use tokio_tungstenite::{
+        accept_hdr_async,
+        tungstenite::handshake::server::{Request, Response},
+    };
+
+    #[tokio::test]
+    async fn websocket_path_with_space_is_percent_encoded() {
+        let client = Client::new(
+            "example.com".to_owned(),
+            443,
+            "/a/./b/../path with space?ed=2048".to_owned(),
+            HashMap::from([("Host".to_owned(), "example.com".to_owned())]),
+            None,
+            0,
+            String::new(),
+        );
+        let (client_stream, server_stream) = duplex(4096);
+        let request_target = Arc::new(std::sync::Mutex::new(None));
+        let captured_target = Arc::clone(&request_target);
+
+        let client_task = tokio::spawn(async move {
+            client.proxy_stream(Box::new(client_stream)).await
+        });
+        let server_task = accept_hdr_async(
+            server_stream,
+            move |request: &Request, response: Response| {
+                *captured_target.lock().expect("request target lock") =
+                    request.uri().path_and_query().map(ToString::to_string);
+                Ok(response)
+            },
+        );
+
+        let (client_result, server_result) = tokio::join!(client_task, server_task);
+
+        assert_eq!(
+            request_target
+                .lock()
+                .expect("request target lock")
+                .as_deref(),
+            Some("/a/./b/../path%20with%20space?ed=2048")
+        );
+        client_result
+            .expect("WebSocket client task should not panic")
+            .expect("WebSocket client handshake should succeed");
+        server_result.expect("WebSocket server handshake should succeed");
+    }
+
+    async fn assert_invalid_input_without_panic(client: Client) {
+        let (client_stream, server_stream) = duplex(1024);
+        drop(server_stream);
+
+        let result = tokio::spawn(async move {
+            client.proxy_stream(Box::new(client_stream)).await
+        })
+        .await
+        .expect("WebSocket client task should not panic");
+
+        let error = match result {
+            Ok(_) => panic!("invalid request should fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn malformed_uri_returns_invalid_input() {
+        let client = Client::new(
+            "bad host".to_owned(),
+            443,
+            "/".to_owned(),
+            HashMap::from([("Host".to_owned(), "example.com".to_owned())]),
+            None,
+            0,
+            String::new(),
+        );
+
+        assert_invalid_input_without_panic(client).await;
+    }
+
+    #[tokio::test]
+    async fn invalid_header_returns_invalid_input() {
+        let client = Client::new(
+            "example.com".to_owned(),
+            443,
+            "/".to_owned(),
+            HashMap::from([("bad\nheader".to_owned(), "value".to_owned())]),
+            None,
+            0,
+            String::new(),
+        );
+
+        assert_invalid_input_without_panic(client).await;
+    }
+}
