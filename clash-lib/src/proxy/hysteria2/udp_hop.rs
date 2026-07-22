@@ -240,3 +240,89 @@ impl AsyncUdpSocket for UdpHop {
         self.get_conn().1.may_fragment()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        task::Waker,
+    };
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct MockSocket {
+        poll_count: Arc<AtomicUsize>,
+    }
+
+    #[derive(Debug)]
+    struct MockPoller {
+        poll_count: Arc<AtomicUsize>,
+    }
+
+    impl UdpPoller for MockPoller {
+        fn poll_writable(
+            self: Pin<&mut Self>,
+            _cx: &mut Context,
+        ) -> Poll<io::Result<()>> {
+            self.poll_count.fetch_add(1, Ordering::Relaxed);
+            Poll::Pending
+        }
+    }
+
+    impl AsyncUdpSocket for MockSocket {
+        fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
+            Box::pin(MockPoller {
+                poll_count: self.poll_count.clone(),
+            })
+        }
+
+        fn try_send(&self, _transmit: &Transmit) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn poll_recv(
+            &self,
+            _cx: &mut Context,
+            _bufs: &mut [io::IoSliceMut<'_>],
+            _meta: &mut [quinn::udp::RecvMeta],
+        ) -> Poll<io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn local_addr(&self) -> io::Result<SocketAddr> {
+            Ok(SocketAddr::from(([127, 0, 0, 1], 0)))
+        }
+    }
+
+    #[test]
+    fn io_poller_tracks_current_socket_after_hop() {
+        let first_polls = Arc::new(AtomicUsize::new(0));
+        let second_polls = Arc::new(AtomicUsize::new(0));
+        let first: Arc<dyn AsyncUdpSocket> = Arc::new(MockSocket {
+            poll_count: first_polls.clone(),
+        });
+        let second: Arc<dyn AsyncUdpSocket> = Arc::new(MockSocket {
+            poll_count: second_polls.clone(),
+        });
+        let hop = Arc::new(UdpHop {
+            state: Mutex::new(HopState {
+                prev_conn: None,
+                cur_conn: first,
+                last: Instant::now(),
+                new_hop_port: 443,
+            }),
+            init_port: 443,
+            port_range: PortGenerator::new(443),
+            interval: UdpHop::DEFAULT_INTERVAL,
+        });
+        let mut poller = hop.clone().create_io_poller();
+
+        hop.state.lock().unwrap().cur_conn = second;
+
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(poller.as_mut().poll_writable(&mut cx).is_pending());
+        assert_eq!(first_polls.load(Ordering::Relaxed), 0);
+        assert_eq!(second_polls.load(Ordering::Relaxed), 1);
+    }
+}
