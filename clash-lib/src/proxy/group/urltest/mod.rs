@@ -68,63 +68,70 @@ impl Handler {
         let proxy_manager = self.proxy_manager.clone();
 
         let proxies = self.get_proxies(touch).await;
-        let mut fastest = proxies.first()?;
-
-        let mut fastest_delay = proxy_manager
-            .last_delay(fastest.name())
-            .await
-            .unwrap_or(Duration::from_secs(u64::MAX));
-        let mut fast_not_exist = true;
+        if proxies.is_empty() {
+            return None;
+        }
 
         let current_fastest_index = std::cmp::min(
             self.fastest_proxy_index
                 .load(std::sync::atomic::Ordering::Relaxed),
             proxies.len() as u16 - 1,
-        );
+        ) as usize;
 
-        for proxy in proxies.iter().skip(1) {
-            if proxy.name() == proxies[current_fastest_index as usize].name() {
-                fast_not_exist = false;
+        let mut fastest = None;
+        let mut current_alive = false;
+        let mut current_delay = Duration::MAX;
+        for (index, proxy) in proxies.iter().enumerate() {
+            let (alive, delay) =
+                proxy_manager.alive_and_last_delay(proxy.name()).await;
+            if index == current_fastest_index {
+                current_alive = alive;
             }
-
-            if !proxy_manager.alive(proxy.name()).await {
+            if !alive {
                 continue;
             }
 
-            let delay = proxy_manager.last_delay(proxy.name()).await;
-            if delay.is_some_and(|d| d < fastest_delay) {
-                fastest = proxy;
-                fastest_delay = delay.unwrap();
+            let delay = delay.unwrap_or(Duration::MAX);
+            if index == current_fastest_index {
+                current_delay = delay;
             }
-
-            if fast_not_exist
-                || proxy_manager.alive(fastest.name()).await
-                || proxy_manager
-                    .last_delay(proxies[current_fastest_index as usize].name())
-                    .await
-                    .is_some_and(|d| {
-                        d > (fastest_delay
-                            + Duration::from_millis(self.tolerance as u64))
-                    })
-            {
-                self.fastest_proxy_index.store(
-                    proxies
-                        .iter()
-                        .position(|p| p.name() == fastest.name())
-                        .unwrap() as u16,
-                    std::sync::atomic::Ordering::Relaxed,
-                );
+            if fastest.map_or(true, |(_, fastest_delay)| delay < fastest_delay) {
+                fastest = Some((index, delay));
             }
         }
 
+        // Keep the historical first-proxy fallback when every candidate is
+        // unavailable, while never preferring an unavailable proxy when a live
+        // candidate exists (even if it has no delay sample yet).
+        let (fastest_index, fastest_delay) = fastest.unwrap_or((0, Duration::MAX));
+        let tolerance = Duration::from_millis(self.tolerance as u64);
+        let switch_threshold = fastest_delay
+            .checked_add(tolerance)
+            .unwrap_or(Duration::MAX);
+        let selected_index = if !current_alive || current_delay > switch_threshold {
+            fastest_index
+        } else {
+            current_fastest_index
+        };
+
+        self.fastest_proxy_index
+            .store(selected_index as u16, std::sync::atomic::Ordering::Relaxed);
+
+        let selected = &proxies[selected_index];
+        let selected_delay = if selected_index == fastest_index {
+            fastest_delay
+        } else {
+            current_delay
+        };
+
         trace!(
-            fastest = %fastest.name(),
-            delay = ?fastest_delay,
+            fastest = %selected.name(),
+            delay = ?selected_delay,
             "`{}` fastest",
             self.name(),
         );
 
-        Some(fastest.clone())
+        Some(selected.clone())
     }
 }
 

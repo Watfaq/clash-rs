@@ -167,6 +167,22 @@ impl ProxyManager {
             .unwrap_or(true) // if not found, assume it's alive
     }
 
+    pub(crate) async fn alive_and_last_delay(
+        &self,
+        name: &str,
+    ) -> (bool, Option<Duration>) {
+        self.proxy_state
+            .read()
+            .await
+            .get(name)
+            .map_or((true, None), |state| {
+                (
+                    state.alive.load(Ordering::Relaxed),
+                    state.delay_history.back().map(|history| history.delay),
+                )
+            })
+    }
+
     pub async fn report_alive(
         &self,
         name: &str,
@@ -213,13 +229,8 @@ impl ProxyManager {
     }
 
     pub async fn last_delay(&self, name: &str) -> Option<Duration> {
-        if !self.alive(name).await {
-            return None;
-        }
-        self.delay_history(name)
-            .await
-            .last()
-            .map(|x| x.delay.to_owned())
+        let (alive, delay) = self.alive_and_last_delay(name).await;
+        if alive { delay } else { None }
     }
 
     pub async fn get_packet_loss(&self, name: &str) -> Option<f64> {
