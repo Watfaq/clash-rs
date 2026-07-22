@@ -389,7 +389,7 @@ impl OutboundHandler for Handler {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let hy_stream = authed_conn.connect_tcp(sess).await?;
         Ok(Box::new(ChainedStreamWrapper::new(
-            Box::new(hy_stream) as crate::proxy::AnyStream,
+            Box::new(hy_stream) as crate::proxy::AnyStream
         )))
     }
 

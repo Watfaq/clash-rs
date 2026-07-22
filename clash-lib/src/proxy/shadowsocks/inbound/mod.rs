@@ -26,10 +26,7 @@ use tracing::{debug, info, warn};
 
 // Shadowsocks-encrypted server stream, not a raw socket: inherits the `None`
 // capability default.
-impl crate::proxy::ProxyStream
-    for ProxyServerStream<tokio::net::TcpStream>
-{
-}
+impl crate::proxy::ProxyStream for ProxyServerStream<tokio::net::TcpStream> {}
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {

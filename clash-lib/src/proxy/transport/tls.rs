@@ -117,5 +117,11 @@ impl Transport for Client {
     }
 }
 
-impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream for tokio_rustls::client::TlsStream<S> {}
-impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream for tokio_rustls::server::TlsStream<S> {}
+impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream
+    for tokio_rustls::client::TlsStream<S>
+{
+}
+impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream
+    for tokio_rustls::server::TlsStream<S>
+{
+}

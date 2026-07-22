@@ -575,4 +575,7 @@ fn hash_timestamp(timestamp: u64) -> [u8; 16] {
     hasher.finalize().into()
 }
 
-impl<S> crate::proxy::ProxyStream for VmessStream<S> where S: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<S> crate::proxy::ProxyStream for VmessStream<S> where
+    S: AsyncRead + AsyncWrite + Unpin + Send
+{
+}

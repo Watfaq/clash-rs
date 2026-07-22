@@ -143,7 +143,13 @@ impl<T> ChainedStreamWrapper<T> {
 #[async_trait]
 impl<T> ChainedStream for ChainedStreamWrapper<T>
 where
-    T: crate::proxy::ProxyStream + AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    T: crate::proxy::ProxyStream
+        + AsyncRead
+        + AsyncWrite
+        + Unpin
+        + Send
+        + Sync
+        + 'static,
 {
     fn chain(&self) -> &ProxyChain {
         &self.chain
@@ -303,7 +309,13 @@ where
 
 impl<T> crate::proxy::ProxyStream for ChainedStreamWrapper<T>
 where
-    T: crate::proxy::ProxyStream + AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
+    T: crate::proxy::ProxyStream
+        + AsyncRead
+        + AsyncWrite
+        + Unpin
+        + Send
+        + Sync
+        + 'static,
 {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
@@ -349,7 +361,8 @@ pub trait ChainedDatagram:
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 
-    /// Install byte-accounting / close-notify tracking on this datagram wrapper.
+    /// Install byte-accounting / close-notify tracking on this datagram
+    /// wrapper.
     #[allow(clippy::borrowed_box)]
     async fn install_tracking(
         &mut self,
@@ -510,14 +523,15 @@ where
         Pin::new(&mut self.inner).poll_ready(cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        mut self: Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         if let Some(t) = &mut self.tracking {
             // No task context here; a plain try_recv is the best we can do.
             // Readiness/close wakeups are handled by poll_ready/poll_flush.
-            if matches!(
-                t.close_notify.try_recv(),
-                Ok(_) | Err(TryRecvError::Closed)
-            ) {
+            if matches!(t.close_notify.try_recv(), Ok(_) | Err(TryRecvError::Closed))
+            {
                 return Err(std::io::ErrorKind::BrokenPipe.into());
             }
             let upload = item.data.len();

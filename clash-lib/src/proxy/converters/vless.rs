@@ -56,7 +56,9 @@ impl TryFrom<&OutboundVless> for Handler {
                 .clone()
                 .unwrap_or_else(|| s.common_opts.server.clone());
 
-            Some(TransportLayer::Reality(RealityClient::new(sni, pk_bytes, short_id)))
+            Some(TransportLayer::Reality(RealityClient::new(
+                sni, pk_bytes, short_id,
+            )))
         } else {
             // vless without reality
             match s.tls.unwrap_or_default() {

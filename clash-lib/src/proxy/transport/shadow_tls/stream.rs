@@ -466,4 +466,7 @@ fn verify_appdata(
     data[0..HMAC_SIZE] == hmac_real
 }
 
-impl<S> crate::proxy::ProxyStream for VerifiedStream<S> where S: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<S> crate::proxy::ProxyStream for VerifiedStream<S> where
+    S: AsyncRead + AsyncWrite + Unpin + Send
+{
+}

@@ -1,7 +1,6 @@
 use crate::{
     app::{
-        dns::ClashResolver,
-        outbound::manager::ThreadSafeOutboundManager,
+        dns::ClashResolver, outbound::manager::ThreadSafeOutboundManager,
         router::ArcRouter,
     },
     common::io::copy_bidirectional,
@@ -121,7 +120,8 @@ impl Dispatcher {
         {
             Ok(mut rhs) => {
                 debug!("remote connection established {}", sess);
-                rhs.install_tracking(self.manager.clone(), sess.clone(), rule).await;
+                rhs.install_tracking(self.manager.clone(), sess.clone(), rule)
+                    .await;
                 match copy_bidirectional(
                     lhs,
                     rhs,
@@ -350,12 +350,9 @@ impl Dispatcher {
 
                         debug!("{} outbound datagram connected", sess);
 
-                        outbound_datagram.install_tracking(
-                            manager.clone(),
-                            sess.clone(),
-                            rule,
-                        )
-                        .await;
+                        outbound_datagram
+                            .install_tracking(manager.clone(), sess.clone(), rule)
+                            .await;
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =
