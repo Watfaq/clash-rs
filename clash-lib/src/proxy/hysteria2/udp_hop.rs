@@ -20,6 +20,28 @@ struct HopState {
     new_hop_port: u16,
 }
 
+#[derive(Debug)]
+struct UdpHopPoller {
+    hop: Arc<UdpHop>,
+    conn: Arc<dyn AsyncUdpSocket>,
+    inner: Pin<Box<dyn UdpPoller>>,
+}
+
+impl UdpPoller for UdpHopPoller {
+    fn poll_writable(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let conn = this.hop.get_conn().1;
+        if !Arc::ptr_eq(&conn, &this.conn) {
+            this.inner = conn.clone().create_io_poller();
+            this.conn = conn;
+        }
+        this.inner.as_mut().poll_writable(cx)
+    }
+}
+
 /// A udp socket hopper, it can hop to a new port when the time interval is
 /// greater than interval
 ///
@@ -122,8 +144,12 @@ impl Debug for UdpHop {
 
 impl AsyncUdpSocket for UdpHop {
     fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
-        let cur = self.get_conn().1;
-        cur.create_io_poller()
+        let conn = self.get_conn().1;
+        Box::pin(UdpHopPoller {
+            hop: self,
+            inner: conn.clone().create_io_poller(),
+            conn,
+        })
     }
 
     fn try_send(&self, transmit: &Transmit) -> io::Result<()> {
@@ -131,14 +157,10 @@ impl AsyncUdpSocket for UdpHop {
 
         let cur = self.get_conn().1;
 
-        // here just need change send addr, it is not necessary to change send
-        // contents, so we can use unsafe
-        unsafe {
-            let prt = transmit as *const Transmit as *mut Transmit;
-            (*prt).destination.set_port(port);
-        }
+        let mut transmit = transmit.clone();
+        transmit.destination.set_port(port);
 
-        cur.try_send(transmit)
+        cur.try_send(&transmit)
     }
 
     // fn poll_send(
