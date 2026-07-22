@@ -420,7 +420,7 @@ mod tests {
             port: shadow_tls_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin: Some(Box::new(client)),
+            plugin: Some(TransportLayer::ShadowTls(client)),
             udp: false,
         };
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
@@ -479,9 +479,11 @@ mod tests {
         let host = "www.bing.com".to_owned();
         let plugin = match mode {
             SimpleOBFSMode::Http => {
-                Box::new(SimpleObfsHttp::new(host, ss_port)) as _
+                TransportLayer::SimpleObfsHttp(SimpleObfsHttp::new(host, ss_port))
             }
-            SimpleOBFSMode::Tls => Box::new(SimpleObfsTLS::new(host)) as _,
+            SimpleOBFSMode::Tls => {
+                TransportLayer::SimpleObfsTls(SimpleObfsTLS::new(host))
+            }
         };
         let opts = HandlerOptions {
             name: "test-obfs".to_owned(),
@@ -535,7 +537,7 @@ mod tests {
             port: ss_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin: Some(Box::new(plugin)),
+            plugin: Some(TransportLayer::V2rayWs(plugin)),
             udp: false,
         };
 

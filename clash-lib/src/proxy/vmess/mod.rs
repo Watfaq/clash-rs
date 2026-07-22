@@ -429,7 +429,7 @@ mod tests {
             security: "auto".into(),
             udp: true,
             tls: tls_client(None),
-            transport: Some(Box::new(ws_client)),
+            transport: Some(TransportLayer::Ws(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
 
@@ -477,7 +477,7 @@ mod tests {
             security: "auto".into(),
             udp: true,
             tls: tls_client(None),
-            transport: Some(Box::new(grpc_client)),
+            transport: Some(TransportLayer::Grpc(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
@@ -526,7 +526,7 @@ mod tests {
             security: "auto".into(),
             udp: false,
             tls: tls_client(Some(vec!["h2".to_string()])),
-            transport: Some(Box::new(h2_client)),
+            transport: Some(TransportLayer::H2(h2_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler
