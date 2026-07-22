@@ -20,7 +20,7 @@ use crate::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType, PlainProxyAPIResponse,
         shadowsocks::map_cipher,
-        transport::Sip003Plugin,
+        transport::TransportLayer,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
     session::Session,
@@ -41,7 +41,7 @@ pub struct HandlerOptions {
     pub port: u16,
     pub password: String,
     pub cipher: String,
-    pub plugin: Option<Box<dyn Sip003Plugin>>,
+    pub plugin: Option<TransportLayer>,
     pub udp: bool,
 }
 
@@ -77,7 +77,7 @@ impl Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin {
-            Some(plugin) => plugin.proxy_stream(s).await?,
+            Some(plugin) => plugin.wrap(s).await?,
             None => s,
         };
 

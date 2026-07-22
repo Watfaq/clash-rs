@@ -5,8 +5,6 @@ mod reality;
 mod shadow_tls;
 #[cfg(feature = "shadowsocks")]
 mod simple_obfs;
-#[cfg(feature = "shadowsocks")]
-mod sip003;
 pub mod splice_tls;
 mod tls;
 #[cfg(feature = "shadowsocks")]
@@ -22,8 +20,6 @@ pub use shadow_tls::Client as Shadowtls;
 pub use simple_obfs::{
     SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp, SimpleObfsTLS,
 };
-#[cfg(feature = "shadowsocks")]
-pub use sip003::Plugin as Sip003Plugin;
 pub use splice_tls::VisionOptions;
 pub use tls::Client as TlsClient;
 #[cfg(feature = "shadowsocks")]
@@ -55,7 +51,7 @@ pub trait Transport: Send + Sync {
 /// stable, so a closed enum gives static dispatch with no per-layer heap
 /// allocation while keeping the same runtime, config-driven composition
 /// (a handler holds an ordered stack of these and applies them in turn).
-#[allow(dead_code)]
+#[allow(clippy::large_enum_variant)]
 pub enum TransportLayer {
     Tls(TlsClient),
     Reality(RealityClient),
