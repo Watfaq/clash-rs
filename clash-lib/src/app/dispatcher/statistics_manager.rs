@@ -70,6 +70,9 @@ pub struct TrackerInfo {
 
 impl TrackerInfo {
     pub fn account_download(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
         mgr.push_downloaded(n);
         self.download_total
             .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
@@ -80,6 +83,9 @@ impl TrackerInfo {
     }
 
     pub fn account_upload(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
         mgr.push_uploaded(n);
         self.upload_total
             .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
