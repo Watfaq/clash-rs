@@ -46,14 +46,15 @@ impl Client {
         }
     }
 
-    fn req(&self) -> Request<()> {
+    fn req(&self) -> std::io::Result<Request<()>> {
+        let path = self.path.replace(' ', "%20");
         let mut request = Request::builder()
             .method("GET")
             .header("Connection", "Upgrade")
             .header("Upgrade", "websocket")
             .header("Sec-WebSocket-Version", "13")
             .header("Sec-WebSocket-Key", generate_key())
-            .uri(format!("ws://{}:{}{}", self.server, self.port, self.path));
+            .uri(format!("ws://{}:{}{}", self.server, self.port, path));
         for (k, v) in self.headers.iter() {
             request = request.header(k.as_str(), v.as_str());
         }
@@ -61,14 +62,16 @@ impl Client {
             // we will replace this field later
             request = request.header(self.early_data_header_name.as_str(), "xxoo");
         }
-        request.body(()).unwrap()
+        request.body(()).map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, error)
+        })
     }
 }
 
 #[async_trait]
 impl Transport for Client {
     async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
-        let req = self.req();
+        let req = self.req()?;
         if self.max_early_data > 0 {
             let early_data_conn = WebsocketEarlyDataConn::new(
                 stream,
