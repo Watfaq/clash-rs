@@ -1449,7 +1449,6 @@ dependencies = [
  "dhcproto",
  "digest 0.11.3",
  "dirs",
- "downcast-rs",
  "educe 0.6.0",
  "env_logger",
  "erased-serde",

@@ -1,7 +1,6 @@
 use std::{fmt::Debug, future::Future, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
-use downcast_rs::{Downcast, impl_downcast};
 use futures::{Sink, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -58,12 +57,11 @@ impl Instrumentation {
         self.chain.push(name.to_owned()).await;
     }
 
-    #[allow(clippy::borrowed_box)]
     async fn install(
         &mut self,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&dyn RuleMatcher>,
     ) {
         let uuid = uuid::Uuid::new_v4();
         let chain = self.chain.clone();
@@ -124,32 +122,21 @@ impl Drop for Instrumentation {
 // ---------------------------------------------------------------------------
 
 #[async_trait]
-pub trait InstrumentedStream: ProxyStream + Sync + Downcast {
+pub trait InstrumentedStream: ProxyStream + Sync {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 
     /// Install byte-accounting / close-notify tracking on this wrapper.
     /// Called exactly once by the dispatcher on the outermost box.
-    #[allow(clippy::borrowed_box)]
     async fn install_tracking(
         &mut self,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&dyn RuleMatcher>,
     );
 
     /// Return the tracker info if tracking has been installed.
     fn tracker_info(&self) -> Option<Arc<TrackerInfo>>;
-
-    /// The underlying OS socket, if this stream is a direct single-hop
-    /// passthrough over a raw `TcpStream`. Used by the splice/zero-copy path.
-    /// Returns `None` for any stream with a transform above the socket.
-    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
-    fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
-        self.as_any_mut()
-            .downcast_mut::<InstrumentedStreamWrapper<tokio::net::TcpStream>>()
-            .map(|w| w.inner_mut())
-    }
 
     /// Return tracker handles for the splice/zero-copy path.
     /// Returns `None` when tracking is not installed (inner hops).
@@ -163,14 +150,13 @@ pub trait InstrumentedStream: ProxyStream + Sync + Downcast {
         None
     }
 }
-impl_downcast!(InstrumentedStream);
 
 pub type BoxedInstrumentedStream = Box<dyn InstrumentedStream>;
 
 impl crate::proxy::ProxyStream for Box<dyn InstrumentedStream> {
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     fn underlying_socket(&mut self) -> Option<&mut tokio::net::TcpStream> {
-        InstrumentedStream::underlying_socket(self.as_mut())
+        crate::proxy::ProxyStream::underlying_socket(self.as_mut())
     }
 }
 
@@ -215,12 +201,11 @@ where
         self.inst.append_to_chain(name).await;
     }
 
-    #[allow(clippy::borrowed_box)]
     async fn install_tracking(
         &mut self,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&dyn RuleMatcher>,
     ) {
         self.inst.install(manager, sess, rule).await;
     }
@@ -382,12 +367,11 @@ pub trait InstrumentedDatagram:
 
     /// Install byte-accounting / close-notify tracking on this datagram
     /// wrapper.
-    #[allow(clippy::borrowed_box)]
     async fn install_tracking(
         &mut self,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&dyn RuleMatcher>,
     );
 
     /// Return the tracker info if tracking has been installed.
@@ -437,12 +421,11 @@ where
         self.inst.append_to_chain(name).await;
     }
 
-    #[allow(clippy::borrowed_box)]
     async fn install_tracking(
         &mut self,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&dyn RuleMatcher>,
     ) {
         self.inst.install(manager, sess, rule).await;
     }

@@ -120,8 +120,12 @@ impl Dispatcher {
         {
             Ok(mut rhs) => {
                 debug!("remote connection established {}", sess);
-                rhs.install_tracking(self.manager.clone(), sess.clone(), rule)
-                    .await;
+                rhs.install_tracking(
+                    self.manager.clone(),
+                    sess.clone(),
+                    rule.map(|r| r.as_ref()),
+                )
+                .await;
                 match copy_bidirectional(
                     lhs,
                     rhs,
@@ -351,7 +355,11 @@ impl Dispatcher {
                         debug!("{} outbound datagram connected", sess);
 
                         outbound_datagram
-                            .install_tracking(manager.clone(), sess.clone(), rule)
+                            .install_tracking(
+                                manager.clone(),
+                                sess.clone(),
+                                rule.map(|r| r.as_ref()),
+                            )
                             .await;
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
