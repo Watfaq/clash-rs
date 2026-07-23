@@ -95,7 +95,10 @@ impl Handler {
             if index == current_fastest_index {
                 current_delay = delay;
             }
-            if fastest.map_or(true, |(_, fastest_delay)| delay < fastest_delay) {
+            if match fastest {
+                None => true,
+                Some((_, fastest_delay)) => delay < fastest_delay,
+            } {
                 fastest = Some((index, delay));
             }
         }
