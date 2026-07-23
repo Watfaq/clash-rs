@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use http::{Request, StatusCode};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use std::collections::HashMap;
 use tokio_tungstenite::{
     client_async_with_config,
@@ -14,6 +15,21 @@ mod websocket_early_data;
 
 pub use websocket::WebsocketConn;
 pub use websocket_early_data::WebsocketEarlyDataConn;
+
+const PATH_AND_QUERY_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
 
 pub struct Client {
     server: String,
@@ -47,7 +63,7 @@ impl Client {
     }
 
     fn req(&self) -> std::io::Result<Request<()>> {
-        let path = self.path.replace(' ', "%20");
+        let path = utf8_percent_encode(&self.path, PATH_AND_QUERY_ENCODE_SET);
         let mut request = Request::builder()
             .method("GET")
             .header("Connection", "Upgrade")
@@ -109,11 +125,12 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn websocket_path_with_space_is_percent_encoded() {
+    async fn websocket_request_target_is_encoded_without_normalization() {
         let client = Client::new(
             "example.com".to_owned(),
             443,
-            "/a/./b/../path with space?ed=2048".to_owned(),
+            "/a/./b/../already%20encoded/中文 path?ed=2048&name=中文%20value"
+                .to_owned(),
             HashMap::from([("Host".to_owned(), "example.com".to_owned())]),
             None,
             0,
@@ -142,7 +159,9 @@ mod tests {
                 .lock()
                 .expect("request target lock")
                 .as_deref(),
-            Some("/a/./b/../path%20with%20space?ed=2048")
+            Some(
+                "/a/./b/../already%20encoded/%E4%B8%AD%E6%96%87%20path?ed=2048&name=%E4%B8%AD%E6%96%87%20value"
+            )
         );
         client_result
             .expect("WebSocket client task should not panic")
