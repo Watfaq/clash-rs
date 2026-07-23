@@ -1488,6 +1488,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk",
+ "percent-encoding",
  "portable-atomic",
  "prost",
  "prost-build",
