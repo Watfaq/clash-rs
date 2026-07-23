@@ -194,3 +194,5 @@ impl AsyncWrite for Http2Stream {
         ))
     }
 }
+
+impl crate::proxy::ProxyStream for Http2Stream {}

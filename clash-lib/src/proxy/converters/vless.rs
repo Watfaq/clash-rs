@@ -4,7 +4,7 @@ use crate::{
     proxy::{
         HandlerCommonOptions,
         transport::{
-            GrpcClient, H2Client, RealityClient, TlsClient, Transport, WsClient,
+            GrpcClient, H2Client, RealityClient, TlsClient, TransportLayer, WsClient,
         },
         vless::{Handler, HandlerOptions},
     },
@@ -38,7 +38,7 @@ impl TryFrom<&OutboundVless> for Handler {
             );
         }
 
-        let tls: Option<Box<dyn Transport>> = if let Some(ref reality_opts) =
+        let tls: Option<TransportLayer> = if let Some(ref reality_opts) =
             s.reality_opts
         {
             // vless with reality
@@ -56,7 +56,9 @@ impl TryFrom<&OutboundVless> for Handler {
                 .clone()
                 .unwrap_or_else(|| s.common_opts.server.clone());
 
-            Some(Box::new(RealityClient::new(sni, pk_bytes, short_id)))
+            Some(TransportLayer::Reality(RealityClient::new(
+                sni, pk_bytes, short_id,
+            )))
         } else {
             // vless without reality
             match s.tls.unwrap_or_default() {
@@ -90,7 +92,7 @@ impl TryFrom<&OutboundVless> for Handler {
                         s.tls_cert.as_deref(),
                         s.tls_key.as_deref(),
                     )?;
-                    Some(Box::new(client))
+                    Some(TransportLayer::Tls(client))
                 }
                 false => None,
             }
@@ -118,7 +120,7 @@ impl TryFrom<&OutboundVless> for Handler {
                             let client: WsClient = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid ws options");
-                            Some(Box::new(client) as _)
+                            Some(TransportLayer::Ws(client))
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
@@ -130,7 +132,7 @@ impl TryFrom<&OutboundVless> for Handler {
                             let client: H2Client = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid h2 options");
-                            Some(Box::new(client) as _)
+                            Some(TransportLayer::H2(client))
                         })
                         .ok_or(Error::InvalidConfig(
                             "h2_opts is required for h2".to_owned(),
@@ -143,7 +145,7 @@ impl TryFrom<&OutboundVless> for Handler {
                                 (s.server_name.clone(), x, &s.common_opts)
                                     .try_into()
                                     .expect("invalid grpc options");
-                            Some(Box::new(client) as _)
+                            Some(TransportLayer::Grpc(client))
                         })
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),

@@ -8,7 +8,7 @@ use crate::{
     config::internal::proxy::OutboundTrojan,
     proxy::{
         HandlerCommonOptions,
-        transport::{GrpcClient, TlsClient, WsClient},
+        transport::{GrpcClient, TlsClient, TransportLayer, WsClient},
         trojan::{Handler, HandlerOptions},
     },
 };
@@ -67,7 +67,7 @@ impl TryFrom<&OutboundTrojan> for Handler {
                     s.tls_cert.as_deref(),
                     s.tls_key.as_deref(),
                 )?;
-                Some(Box::new(client))
+                Some(TransportLayer::Tls(client))
             },
             transport: s
                 .network
@@ -80,7 +80,7 @@ impl TryFrom<&OutboundTrojan> for Handler {
                             let client: WsClient = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid ws_opts");
-                            Box::new(client) as _
+                            TransportLayer::Ws(client)
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
@@ -93,7 +93,7 @@ impl TryFrom<&OutboundTrojan> for Handler {
                                 (s.sni.clone(), x, &s.common_opts)
                                     .try_into()
                                     .expect("invalid grpc_opts");
-                            Box::new(client) as _
+                            TransportLayer::Grpc(client)
                         })
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),

@@ -6,7 +6,7 @@ use tracing::warn;
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
     },
     config::internal::proxy::PROXY_DIRECT,
@@ -100,7 +100,7 @@ impl OutboundHandler for SharedOutboundHandler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         self.get_inner().await.connect_stream(sess, resolver).await
     }
 
@@ -108,7 +108,7 @@ impl OutboundHandler for SharedOutboundHandler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         self.get_inner()
             .await
             .connect_datagram(sess, resolver)

@@ -116,3 +116,12 @@ impl Transport for Client {
         c.map(|x| Box::new(x) as _)
     }
 }
+
+impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream
+    for tokio_rustls::client::TlsStream<S>
+{
+}
+impl<S: crate::proxy::ProxyStream> crate::proxy::ProxyStream
+    for tokio_rustls::server::TlsStream<S>
+{
+}

@@ -9,8 +9,9 @@ use self::{
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -20,7 +21,7 @@ use crate::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType, PlainProxyAPIResponse,
         shadowsocks::map_cipher,
-        transport::Sip003Plugin,
+        transport::TransportLayer,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
     session::Session,
@@ -41,7 +42,7 @@ pub struct HandlerOptions {
     pub port: u16,
     pub password: String,
     pub cipher: String,
-    pub plugin: Option<Box<dyn Sip003Plugin>>,
+    pub plugin: Option<TransportLayer>,
     pub udp: bool,
 }
 
@@ -77,7 +78,7 @@ impl Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin {
-            Some(plugin) => plugin.proxy_stream(s).await?,
+            Some(plugin) => plugin.wrap(s).await?,
             None => s,
         };
 
@@ -125,7 +126,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -147,7 +148,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -174,7 +175,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let stream = connector
             .connect_stream(
                 resolver.clone(),
@@ -187,7 +188,7 @@ impl OutboundHandler for Handler {
             .await?;
 
         let s = self.proxy_stream(stream, sess, resolver).await?;
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -197,7 +198,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let cfg = self.server_config()?;
 
         let socket = connector
@@ -234,7 +235,7 @@ impl OutboundHandler for Handler {
             socket,
             (server_addr, self.opts.port).into(),
         );
-        let d = ChainedDatagramWrapper::new(d);
+        let d = InstrumentedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }
@@ -420,7 +421,7 @@ mod tests {
             port: shadow_tls_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin: Some(Box::new(client)),
+            plugin: Some(TransportLayer::ShadowTls(client)),
             udp: false,
         };
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
@@ -479,9 +480,11 @@ mod tests {
         let host = "www.bing.com".to_owned();
         let plugin = match mode {
             SimpleOBFSMode::Http => {
-                Box::new(SimpleObfsHttp::new(host, ss_port)) as _
+                TransportLayer::SimpleObfsHttp(SimpleObfsHttp::new(host, ss_port))
             }
-            SimpleOBFSMode::Tls => Box::new(SimpleObfsTLS::new(host)) as _,
+            SimpleOBFSMode::Tls => {
+                TransportLayer::SimpleObfsTls(SimpleObfsTLS::new(host))
+            }
         };
         let opts = HandlerOptions {
             name: "test-obfs".to_owned(),
@@ -535,7 +538,7 @@ mod tests {
             port: ss_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin: Some(Box::new(plugin)),
+            plugin: Some(TransportLayer::V2rayWs(plugin)),
             udp: false,
         };
 

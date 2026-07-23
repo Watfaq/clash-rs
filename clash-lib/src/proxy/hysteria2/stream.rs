@@ -90,3 +90,6 @@ impl AsyncWrite for HystStream {
         Pin::new(&mut self.get_mut().send).poll_shutdown(cx)
     }
 }
+
+// QUIC-muxed stream, not a raw socket: inherits the `None` capability default.
+impl crate::proxy::ProxyStream for HystStream {}

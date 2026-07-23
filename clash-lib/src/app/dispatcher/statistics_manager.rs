@@ -68,6 +68,34 @@ pub struct TrackerInfo {
     pub user_download: AtomicU64,
 }
 
+impl TrackerInfo {
+    pub fn account_download(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
+        mgr.push_downloaded(n);
+        self.download_total
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.session_holder.inbound_user.is_some() {
+            self.user_download
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub fn account_upload(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
+        mgr.push_uploaded(n);
+        self.upload_total
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.session_holder.inbound_user.is_some() {
+            self.user_upload
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {

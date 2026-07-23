@@ -5,8 +5,9 @@ pub(crate) mod datagram;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -68,7 +69,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let remote_ip = resolver
             .resolve(sess.destination.host().as_str(), false)
             .map_err(map_io_error)
@@ -83,7 +84,7 @@ impl OutboundHandler for Handler {
         )
         .await?;
 
-        let s = ChainedStreamWrapper::new(s);
+        let s = InstrumentedStreamWrapper::new(s);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -92,7 +93,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         // The outbound socket is shared across ALL destinations from the same
         // client (keyed by src_addr only in the dispatcher). Use a dual-stack
         // socket so one socket can send to both IPv4 and IPv6 destinations
@@ -102,8 +103,9 @@ impl OutboundHandler for Handler {
             #[cfg(target_os = "linux")]
             sess.so_mark,
         )?;
-        let d =
-            ChainedDatagramWrapper::new(OutboundDatagramImpl::new(udp, resolver));
+        let d = InstrumentedDatagramWrapper::new(OutboundDatagramImpl::new(
+            udp, resolver,
+        ));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }
@@ -117,7 +119,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let s = connector
             .connect_stream(
                 resolver,
@@ -128,7 +130,7 @@ impl OutboundHandler for Handler {
                 sess.so_mark,
             )
             .await?;
-        let s = ChainedStreamWrapper::new(s);
+        let s = InstrumentedStreamWrapper::new(s);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -138,7 +140,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         let d = connector
             .connect_datagram(
                 resolver,
@@ -149,7 +151,7 @@ impl OutboundHandler for Handler {
                 sess.so_mark,
             )
             .await?;
-        let d = ChainedDatagramWrapper::new(d);
+        let d = InstrumentedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

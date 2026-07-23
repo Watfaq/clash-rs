@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
-            ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -73,7 +73,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> std::io::Result<BoxedInstrumentedStream> {
         let s = self
             .client
             .connect_with_prefs(
@@ -89,7 +89,7 @@ impl OutboundHandler for Handler {
             )
             .await
             .map_err(|x| new_io_error(x.to_string()))?;
-        let s = ChainedStreamWrapper::new(StreamWrapper::new(s));
+        let s = InstrumentedStreamWrapper::new(StreamWrapper::new(s));
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -98,7 +98,7 @@ impl OutboundHandler for Handler {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> std::io::Result<BoxedInstrumentedDatagram> {
         Err(new_io_error("Tor outbound handler does not support UDP"))
     }
 

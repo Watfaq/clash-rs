@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::{RuleDispatch, ThreadSafeDNSResolver},
         net::OutboundInterface,
     },
@@ -90,7 +90,7 @@ impl DnsRuntimeProvider {
 
 impl RuntimeProvider for DnsRuntimeProvider {
     type Handle = TokioHandle;
-    type Tcp = AsyncIoTokioAsStd<BoxedChainedStream>;
+    type Tcp = AsyncIoTokioAsStd<BoxedInstrumentedStream>;
     type Timer = TokioTime;
     type Udp = DnsProxyUdpSocket;
 
@@ -167,7 +167,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
 // Mutex could be inefficient
 // But this is for DNS, it doesn't require high perf
 // SocketAddr indicates the source address of the UDP socket
-pub struct DnsProxyUdpSocket(Mutex<BoxedChainedDatagram>);
+pub struct DnsProxyUdpSocket(Mutex<BoxedInstrumentedDatagram>);
 
 impl DnsUdpSocket for DnsProxyUdpSocket {
     type Time = TokioTime;

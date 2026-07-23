@@ -10,8 +10,9 @@ use tracing::debug;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -25,7 +26,7 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
-    transport::Transport,
+    transport::TransportLayer,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
@@ -39,8 +40,8 @@ pub struct HandlerOptions {
     pub password: String,
     pub udp: bool,
     // might support shadow-tls?
-    pub tls: Option<Box<dyn Transport>>,
-    pub transport: Option<Box<dyn Transport>>,
+    pub tls: Option<TransportLayer>,
+    pub transport: Option<TransportLayer>,
 }
 
 pub struct Handler {
@@ -76,13 +77,13 @@ impl Handler {
         udp: bool,
     ) -> io::Result<AnyStream> {
         let s = if let Some(tls_client) = self.opts.tls.as_ref() {
-            tls_client.proxy_stream(s).await?
+            tls_client.wrap(s).await?
         } else {
             s
         };
 
         let mut s = if let Some(transport) = self.opts.transport.as_ref() {
-            transport.proxy_stream(s).await?
+            transport.wrap(s).await?
         } else {
             s
         };
@@ -123,7 +124,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -145,7 +146,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -172,7 +173,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -185,7 +186,7 @@ impl OutboundHandler for Handler {
             .await?;
 
         let s = self.inner_proxy_stream(stream, sess, false).await?;
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -195,7 +196,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -211,7 +212,7 @@ impl OutboundHandler for Handler {
 
         let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
 
-        let chained = ChainedDatagramWrapper::new(d);
+        let chained = InstrumentedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -246,7 +247,7 @@ mod tests {
     use super::*;
     use crate::{
         proxy::{
-            transport,
+            transport::{self, TransportLayer},
             utils::test_utils::{
                 Suite,
                 config_helper::test_config_base_dir,
@@ -379,8 +380,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            tls: Some(Box::new(tls)),
-            transport: Some(Box::new(transport)),
+            tls: Some(TransportLayer::Tls(tls)),
+            transport: Some(TransportLayer::Ws(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler
@@ -442,8 +443,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            tls: Some(Box::new(tls)),
-            transport: Some(Box::new(transport)),
+            tls: Some(TransportLayer::Tls(tls)),
+            transport: Some(TransportLayer::Grpc(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler
