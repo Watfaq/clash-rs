@@ -160,7 +160,8 @@ mod tests {
                 .expect("request target lock")
                 .as_deref(),
             Some(
-                "/a/./b/../already%20encoded/%E4%B8%AD%E6%96%87%20path?ed=2048&name=%E4%B8%AD%E6%96%87%20value"
+                "/a/./b/../already%20encoded/%E4%B8%AD%E6%96%87%20path?ed=2048&\
+                 name=%E4%B8%AD%E6%96%87%20value"
             )
         );
         client_result
