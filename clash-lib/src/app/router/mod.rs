@@ -310,16 +310,6 @@ pub fn map_rule_type(
     geodata: Option<GeoDataLookup>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
-    let rule_type = match rule_type {
-        RuleType::WithInterface { rule, interface } => {
-            return Box::new(InterfaceRule {
-                inner: map_rule_type(*rule, mmdb, geodata, rule_provider_registry),
-                interface,
-            });
-        }
-        rule_type => rule_type,
-    };
-
     let matcher: Box<dyn RuleMatcher> = match rule_type {
         RuleType::Domain { domain, target, .. } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
@@ -468,7 +458,10 @@ pub fn map_rule_type(
             }
         }
         RuleType::Match { target, .. } => Box::new(Final { target }),
-        RuleType::WithInterface { .. } => unreachable!(),
+        RuleType::WithInterface { rule, interface } => Box::new(InterfaceRule {
+            inner: map_rule_type(*rule, mmdb, geodata, rule_provider_registry),
+            interface,
+        }),
     };
 
     matcher
