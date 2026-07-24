@@ -16,7 +16,13 @@ use crate::{
     session::Session,
 };
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 
 use hyper::Uri;
 use rules::domain_regex::DomainRegex;
@@ -304,16 +310,27 @@ pub fn map_rule_type(
     geodata: Option<GeoDataLookup>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
-    match rule_type {
-        RuleType::Domain { domain, target } => {
+    let rule_type = match rule_type {
+        RuleType::WithInterface { rule, interface } => {
+            return Box::new(InterfaceRule {
+                inner: map_rule_type(*rule, mmdb, geodata, rule_provider_registry),
+                interface,
+            });
+        }
+        rule_type => rule_type,
+    };
+
+    let matcher: Box<dyn RuleMatcher> = match rule_type {
+        RuleType::Domain { domain, target, .. } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
         }
-        RuleType::DomainRegex { regex, target } => {
+        RuleType::DomainRegex { regex, target, .. } => {
             Box::new(DomainRegex { regex, target })
         }
         RuleType::DomainSuffix {
             domain_suffix,
             target,
+            ..
         } => Box::new(DomainSuffix {
             suffix: domain_suffix,
             target,
@@ -321,6 +338,7 @@ pub fn map_rule_type(
         RuleType::DomainKeyword {
             domain_keyword,
             target,
+            ..
         } => Box::new(DomainKeyword {
             keyword: domain_keyword,
             target,
@@ -329,6 +347,7 @@ pub fn map_rule_type(
             ipnet,
             target,
             no_resolve,
+            ..
         } => Box::new(IpCidr {
             ipnet,
             target,
@@ -339,6 +358,7 @@ pub fn map_rule_type(
             ipnet,
             target,
             no_resolve,
+            ..
         } => Box::new(IpCidr {
             ipnet,
             target,
@@ -350,6 +370,7 @@ pub fn map_rule_type(
             target,
             country_code,
             no_resolve,
+            ..
         } => Box::new(rules::geoip::GeoIP {
             target,
             country_code,
@@ -359,6 +380,7 @@ pub fn map_rule_type(
         RuleType::GeoSite {
             target,
             country_code,
+            ..
         } => {
             let res = rules::geodata::GeoSiteMatcher::new(
                 country_code,
@@ -368,12 +390,12 @@ pub fn map_rule_type(
             .unwrap();
             Box::new(res) as _
         }
-        RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
+        RuleType::SRCPort { target, port, .. } => Box::new(rules::port::Port {
             port,
             target,
             is_src: true,
         }),
-        RuleType::DSTPort { target, port } => Box::new(rules::port::Port {
+        RuleType::DSTPort { target, port, .. } => Box::new(rules::port::Port {
             port,
             target,
             is_src: false,
@@ -381,6 +403,7 @@ pub fn map_rule_type(
         RuleType::ProcessName {
             process_name,
             target,
+            ..
         } => Box::new(rules::process::Process {
             name: process_name,
             target,
@@ -389,12 +412,15 @@ pub fn map_rule_type(
         RuleType::ProcessPath {
             process_path,
             target,
+            ..
         } => Box::new(rules::process::Process {
             name: process_path,
             target,
             name_only: false,
         }),
-        RuleType::RuleSet { rule_set, target } => match rule_provider_registry {
+        RuleType::RuleSet {
+            rule_set, target, ..
+        } => match rule_provider_registry {
             Some(rule_provider_registry) => Box::new(RuleSet::new(
                 rule_set.clone(),
                 target,
@@ -411,13 +437,14 @@ pub fn map_rule_type(
                 unreachable!("you shouldn't nest rule-set within another rule-set")
             }
         },
-        RuleType::Network { network, target } => {
-            Box::new(rules::network::NetworkRule { network, target })
-        }
+        RuleType::Network {
+            network, target, ..
+        } => Box::new(rules::network::NetworkRule { network, target }),
         RuleType::Composite {
             operator,
             expression,
             target,
+            ..
         } => {
             match rules::composite::CompositeRule::new(
                 &operator,
@@ -440,7 +467,51 @@ pub fn map_rule_type(
                 }
             }
         }
-        RuleType::Match { target } => Box::new(Final { target }),
+        RuleType::Match { target, .. } => Box::new(Final { target }),
+        RuleType::WithInterface { .. } => unreachable!(),
+    };
+
+    matcher
+}
+
+struct InterfaceRule {
+    inner: Box<dyn RuleMatcher>,
+    interface: String,
+}
+
+impl Display for InterfaceRule {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl RuleMatcher for InterfaceRule {
+    fn apply(&self, sess: &Session) -> bool {
+        self.inner.apply(sess)
+    }
+
+    fn target(&self) -> &str {
+        self.inner.target()
+    }
+
+    fn payload(&self) -> String {
+        self.inner.payload()
+    }
+
+    fn type_name(&self) -> &str {
+        self.inner.type_name()
+    }
+
+    fn interface(&self) -> Option<&str> {
+        Some(&self.interface)
+    }
+
+    fn should_resolve_ip(&self) -> bool {
+        self.inner.should_resolve_ip()
+    }
+
+    fn size(&self) -> u16 {
+        self.inner.size()
     }
 }
 
@@ -461,6 +532,20 @@ mod tests {
         session::Session,
         tests::initialize,
     };
+
+    #[test]
+    fn test_interface_metadata_is_mapped() {
+        let matcher = super::map_rule_type(
+            RuleType::try_from("DOMAIN,example.com,PROXY,interface=en0".to_string())
+                .unwrap(),
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(matcher.target(), "PROXY");
+        assert_eq!(matcher.interface(), Some("en0"));
+    }
 
     #[tokio::test]
     async fn test_route_match() {

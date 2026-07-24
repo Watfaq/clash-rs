@@ -1,7 +1,7 @@
 use crate::{
     app::{
-        dns::ClashResolver, outbound::manager::ThreadSafeOutboundManager,
-        router::ArcRouter,
+        dns::ClashResolver, net::get_interface_by_name,
+        outbound::manager::ThreadSafeOutboundManager, router::ArcRouter,
     },
     common::io::copy_bidirectional,
     config::{
@@ -102,10 +102,22 @@ impl Dispatcher {
             RunMode::Direct => (PROXY_DIRECT, None),
         };
 
+        if let Some(interface) = rule.and_then(|rule| rule.interface()) {
+            match get_interface_by_name(interface) {
+                Some(iface) => sess.iface = Some(iface),
+                None => warn!(
+                    "rule-selected interface `{}` was not found; using the default \
+                     interface",
+                    interface
+                ),
+            }
+        }
+        let outbound_name = outbound_name.to_string();
+
         debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);
 
         let mgr = self.outbound_manager.clone();
-        let handler = match mgr.get_outbound(outbound_name).await {
+        let handler = match mgr.get_outbound(&outbound_name).await {
             Some(h) => h,
             None => {
                 debug!("unknown rule: {}, fallback to direct", outbound_name);
@@ -299,6 +311,16 @@ impl Dispatcher {
                     RunMode::Direct => (PROXY_DIRECT, None),
                 };
 
+                if let Some(interface) = rule.and_then(|rule| rule.interface()) {
+                    match get_interface_by_name(interface) {
+                        Some(iface) => sess.iface = Some(iface),
+                        None => warn!(
+                            "rule-selected interface `{}` was not found; using the \
+                             default interface",
+                            interface
+                        ),
+                    }
+                }
                 let outbound_name = outbound_name.to_string();
 
                 debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);

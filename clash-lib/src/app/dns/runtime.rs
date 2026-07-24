@@ -10,7 +10,7 @@ use crate::{
     app::{
         dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::{RuleDispatch, ThreadSafeDNSResolver},
-        net::OutboundInterface,
+        net::{OutboundInterface, get_interface_by_name},
     },
     common::errors::new_io_error,
     proxy::{AnyOutboundHandler, datagram::UdpPacket},
@@ -72,19 +72,28 @@ impl DnsRuntimeProvider {
     /// destination is always an IP — see `connect_tcp` / `bind_udp` — so
     /// `Router::match_route` never re-enters DNS). Otherwise, falls back to
     /// the static `outbound` (DIRECT or `#proxy=...`).
-    async fn pick_outbound(&self, sess: &Session) -> AnyOutboundHandler {
+    async fn pick_outbound(
+        &self,
+        mut sess: Session,
+    ) -> (AnyOutboundHandler, Session) {
         let Some(rd) = &self.rule_dispatch else {
-            return self.outbound.clone();
+            return (self.outbound.clone(), sess);
         };
         let (Some(router), Some(mgr)) = (rd.router.get(), rd.outbound_manager.get())
         else {
-            return self.outbound.clone();
+            return (self.outbound.clone(), sess);
         };
-        let mut sess = sess.clone();
-        let (name, _) = router.match_route(&mut sess).await;
-        mgr.get_outbound(name)
+        let (name, rule) = router.match_route(&mut sess).await;
+        if let Some(interface) = rule.and_then(|rule| rule.interface())
+            && let Some(iface) = get_interface_by_name(interface)
+        {
+            sess.iface = Some(iface);
+        }
+        let outbound = mgr
+            .get_outbound(name)
             .await
-            .unwrap_or_else(|| self.outbound.clone())
+            .unwrap_or_else(|| self.outbound.clone());
+        (outbound, sess)
     }
 }
 
@@ -124,7 +133,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
             ..Default::default()
         };
         Box::pin(async move {
-            let outbound = provider.pick_outbound(&sess).await;
+            let (outbound, sess) = provider.pick_outbound(sess).await;
             let stream = outbound.connect_stream(&sess, dns);
             stream.await.map(AsyncIoTokioAsStd)
         })
@@ -155,7 +164,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
         };
 
         Box::pin(async move {
-            let outbound = provider.pick_outbound(&sess).await;
+            let (outbound, sess) = provider.pick_outbound(sess).await;
             outbound
                 .connect_datagram(&sess, dns)
                 .await

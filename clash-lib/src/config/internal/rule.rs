@@ -69,6 +69,58 @@ pub enum RuleType {
         expression: String,
         target: String,
     },
+    WithInterface {
+        rule: Box<RuleType>,
+        interface: String,
+    },
+}
+
+fn split_rule_tokens(line: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut start = 0usize;
+    let mut depth = 0i32;
+    for (idx, ch) in line.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                tokens.push(line[start..idx].trim());
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+    tokens.push(line[start..].trim());
+    tokens
+}
+
+fn split_rule_options(
+    params: Option<Vec<&str>>,
+) -> Result<(Option<String>, Option<Vec<&str>>), Error> {
+    let Some(params) = params else {
+        return Ok((None, None));
+    };
+
+    let mut interface = None;
+    let mut rest = Vec::new();
+    for param in params {
+        if let Some(v) = param.strip_prefix("interface=") {
+            if v.is_empty() {
+                return Err(Error::InvalidConfig(
+                    "rule interface cannot be empty".to_string(),
+                ));
+            }
+            if interface.replace(v.to_string()).is_some() {
+                return Err(Error::InvalidConfig(
+                    "rule interface can only be specified once".to_string(),
+                ));
+            }
+        } else {
+            rest.push(param);
+        }
+    }
+
+    Ok((interface, (!rest.is_empty()).then_some(rest)))
 }
 
 impl RuleType {
@@ -87,9 +139,17 @@ impl RuleType {
             RuleType::ProcessName { target, .. } => target,
             RuleType::ProcessPath { target, .. } => target,
             RuleType::RuleSet { target, .. } => target,
-            RuleType::Match { target } => target,
+            RuleType::Match { target, .. } => target,
             RuleType::Network { target, .. } => target,
             RuleType::Composite { target, .. } => target,
+            RuleType::WithInterface { rule, .. } => rule.target(),
+        }
+    }
+
+    pub fn interface(&self) -> Option<&str> {
+        match self {
+            RuleType::WithInterface { interface, .. } => Some(interface),
+            _ => None,
         }
     }
 }
@@ -97,10 +157,10 @@ impl RuleType {
 impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuleType::Domain { domain, target } => {
+            RuleType::Domain { domain, target, .. } => {
                 write!(f, "DOMAIN,{domain},{target}")
             }
-            RuleType::DomainRegex { regex, target } => {
+            RuleType::DomainRegex { regex, target, .. } => {
                 write!(f, "DOMAIN-REGEX,{regex},{target}")
             }
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
@@ -117,6 +177,9 @@ impl Display for RuleType {
             RuleType::Match { .. } => write!(f, "MATCH"),
             RuleType::Network { .. } => write!(f, "NETWORK"),
             RuleType::Composite { .. } => write!(f, "COMPOSITE"),
+            RuleType::WithInterface { rule, interface } => {
+                write!(f, "{rule},interface={interface}")
+            }
         }
     }
 }
@@ -128,7 +191,12 @@ impl RuleType {
         target: &str,
         params: Option<Vec<&str>>,
     ) -> Result<Self, Error> {
-        match proto {
+        let (interface, params) = split_rule_options(params)?;
+        let no_resolve = params
+            .as_ref()
+            .is_some_and(|params| params.contains(&"no-resolve"));
+
+        let rule = match proto {
             "DOMAIN" => Ok(RuleType::Domain {
                 domain: payload.to_string(),
                 target: target.to_string(),
@@ -153,29 +221,17 @@ impl RuleType {
             "GEOIP" => Ok(RuleType::GeoIP {
                 target: target.to_string(),
                 country_code: payload.to_string(),
-                no_resolve: if let Some(params) = params {
-                    params.contains(&"no-resolve")
-                } else {
-                    false
-                },
+                no_resolve,
             }),
             "IP-CIDR" | "IP-CIDR6" => Ok(RuleType::IpCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
-                no_resolve: if let Some(params) = params {
-                    params.contains(&"no-resolve")
-                } else {
-                    false
-                },
+                no_resolve,
             }),
             "SRC-IP-CIDR" => Ok(RuleType::SrcCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
-                no_resolve: if let Some(params) = params {
-                    params.contains(&"no-resolve")
-                } else {
-                    false
-                },
+                no_resolve,
             }),
             "SRC-PORT" => Ok(RuleType::SRCPort {
                 target: target.to_string(),
@@ -229,7 +285,15 @@ impl RuleType {
             _ => Err(Error::InvalidConfig(format!(
                 "unsupported rule type: {proto}"
             ))),
-        }
+        }?;
+
+        Ok(match interface {
+            Some(interface) => RuleType::WithInterface {
+                rule: Box::new(rule),
+                interface,
+            },
+            None => rule,
+        })
     }
 }
 
@@ -237,40 +301,13 @@ impl TryFrom<String> for RuleType {
     type Error = crate::Error;
 
     fn try_from(line: String) -> Result<Self, Self::Error> {
-        // Check if this is a composite rule (contains parentheses)
-        if line.contains('(') {
-            // For composite rules: OPERATOR,((expression)),TARGET
-            // Split on first and last comma
-            let first_comma = line.find(',').ok_or_else(|| {
-                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
-            })?;
-
-            let last_comma = line.rfind(',').ok_or_else(|| {
-                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
-            })?;
-
-            if first_comma == last_comma {
-                return Err(Error::InvalidConfig(format!(
-                    "composite rule needs at least 2 commas: {line}"
-                )));
-            }
-
-            let operator = line[..first_comma].trim();
-            let expression = line[first_comma + 1..last_comma].trim();
-            let target = line[last_comma + 1..].trim();
-
-            return Ok(RuleType::Composite {
-                operator: operator.to_string(),
-                expression: expression.to_string(),
-                target: target.to_string(),
-            });
-        }
-
-        // For non-composite rules, use simple split
-        let parts = line.split(',').map(str::trim).collect::<Vec<&str>>();
+        let parts = split_rule_tokens(&line);
 
         match parts.as_slice() {
             [proto, target] => RuleType::new(proto, "", target, None),
+            ["MATCH", target, params @ ..] => {
+                RuleType::new("MATCH", "", target, Some(params.to_vec()))
+            }
             [proto, payload, target] => RuleType::new(proto, payload, target, None),
             [proto, payload, target, params @ ..] => {
                 RuleType::new(proto, payload, target, Some(params.to_vec()))
@@ -297,7 +334,9 @@ mod tests {
         // Test TCP network rule
         let rule = RuleType::try_from("NETWORK,TCP,PROXY".to_string()).unwrap();
         match rule {
-            RuleType::Network { network, target } => {
+            RuleType::Network {
+                network, target, ..
+            } => {
                 assert_eq!(network, crate::session::Network::Tcp);
                 assert_eq!(target, "PROXY");
             }
@@ -307,7 +346,9 @@ mod tests {
         // Test UDP network rule
         let rule = RuleType::try_from("NETWORK,UDP,PROXY".to_string()).unwrap();
         match rule {
-            RuleType::Network { network, target } => {
+            RuleType::Network {
+                network, target, ..
+            } => {
                 assert_eq!(network, crate::session::Network::Udp);
                 assert_eq!(target, "PROXY");
             }
@@ -317,7 +358,9 @@ mod tests {
         // Test lowercase network types
         let rule = RuleType::try_from("NETWORK,tcp,PROXY".to_string()).unwrap();
         match rule {
-            RuleType::Network { network, target } => {
+            RuleType::Network {
+                network, target, ..
+            } => {
                 assert_eq!(network, crate::session::Network::Tcp);
                 assert_eq!(target, "PROXY");
             }
@@ -327,5 +370,42 @@ mod tests {
         // Test invalid network type
         let rule = RuleType::try_from("NETWORK,INVALID,PROXY".to_string());
         assert!(rule.is_err());
+    }
+
+    #[test]
+    fn test_interface_option_does_not_change_target() {
+        let rule = RuleType::try_from(
+            "DOMAIN,google.com,IFACE_en0,interface=pdp_ip0".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(rule.target(), "IFACE_en0");
+        assert_eq!(rule.interface(), Some("pdp_ip0"));
+
+        let rule = RuleType::try_from("DOMAIN,google.com,interface=en0".to_string())
+            .unwrap();
+        assert_eq!(rule.target(), "interface=en0");
+        assert_eq!(rule.interface(), None);
+    }
+
+    #[test]
+    fn test_match_interface_option() {
+        let rule =
+            RuleType::try_from("MATCH,DIRECT,interface=en0".to_string()).unwrap();
+
+        assert_eq!(rule.target(), "DIRECT");
+        assert_eq!(rule.interface(), Some("en0"));
+    }
+
+    #[test]
+    fn test_composite_interface_option() {
+        let rule = RuleType::try_from(
+            "AND,((DOMAIN,google.com),(NETWORK,TCP)),PROXY,interface=en0"
+                .to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(rule.target(), "PROXY");
+        assert_eq!(rule.interface(), Some("en0"));
     }
 }
