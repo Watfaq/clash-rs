@@ -72,28 +72,23 @@ impl DnsRuntimeProvider {
     /// destination is always an IP — see `connect_tcp` / `bind_udp` — so
     /// `Router::match_route` never re-enters DNS). Otherwise, falls back to
     /// the static `outbound` (DIRECT or `#proxy=...`).
-    async fn pick_outbound(
-        &self,
-        mut sess: Session,
-    ) -> (AnyOutboundHandler, Session) {
+    async fn pick_outbound(&self, sess: &mut Session) -> AnyOutboundHandler {
         let Some(rd) = &self.rule_dispatch else {
-            return (self.outbound.clone(), sess);
+            return self.outbound.clone();
         };
         let (Some(router), Some(mgr)) = (rd.router.get(), rd.outbound_manager.get())
         else {
-            return (self.outbound.clone(), sess);
+            return self.outbound.clone();
         };
-        let (name, rule) = router.match_route(&mut sess).await;
+        let (name, rule) = router.match_route(sess).await;
         if let Some(interface) = rule.and_then(|rule| rule.interface())
             && let Some(iface) = get_interface_by_name(interface)
         {
             sess.iface = Some(iface);
         }
-        let outbound = mgr
-            .get_outbound(name)
+        mgr.get_outbound(name)
             .await
-            .unwrap_or_else(|| self.outbound.clone());
-        (outbound, sess)
+            .unwrap_or_else(|| self.outbound.clone())
     }
 }
 
@@ -123,7 +118,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
 
         let provider = self.clone();
         let dns = self.dns_resolver.clone();
-        let sess = Session {
+        let mut sess = Session {
             source: src,
             network: Network::Tcp,
             typ: Type::Ignore,
@@ -133,7 +128,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
             ..Default::default()
         };
         Box::pin(async move {
-            let (outbound, sess) = provider.pick_outbound(sess).await;
+            let outbound = provider.pick_outbound(&mut sess).await;
             let stream = outbound.connect_stream(&sess, dns);
             stream.await.map(AsyncIoTokioAsStd)
         })
@@ -153,7 +148,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
 
         let provider = self.clone();
         let dns = self.dns_resolver.clone();
-        let sess = Session {
+        let mut sess = Session {
             source: src,
             network: Network::Udp,
             typ: Type::Ignore,
@@ -164,7 +159,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
         };
 
         Box::pin(async move {
-            let (outbound, sess) = provider.pick_outbound(sess).await;
+            let outbound = provider.pick_outbound(&mut sess).await;
             outbound
                 .connect_datagram(&sess, dns)
                 .await

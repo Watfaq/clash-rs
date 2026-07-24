@@ -152,8 +152,6 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         &["Ethernet", "Wi-Fi", "Tailscale"]
     } else if cfg!(target_os = "linux") {
         &["eth", "wlp", "en", "Tailscale"]
-    } else if cfg!(target_os = "ios") {
-        &["pdp_ip", "en", "Tailscale"]
     } else if cfg!(target_os = "macos") {
         &["en", "pdp_ip", "Tailscale"]
     } else {
