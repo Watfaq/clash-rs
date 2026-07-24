@@ -105,6 +105,74 @@ async fn test_wildcard_cors_returns_any_origin_header() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn test_cors_preflight_without_auth_returns_cors_headers() {
+    let port_base = alloc_ports(CLIENT_PORT_BLOCK);
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_str = format!(
+        "{}\ncors-allow-origins:\n  - \"*\"\n",
+        make_client_config_str(port_base)
+    );
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::Str(config_str),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+            config_path: None,
+        },
+        (port_base..port_base + CLIENT_PORT_BLOCK).collect(),
+    )
+    .expect("Failed to start client with wildcard CORS origins");
+
+    // Preflight OPTIONS request WITHOUT Authorization header
+    // This is what browsers send and it must return CORS headers.
+    let version_url = format!("http://127.0.0.1:{}/version", port_base);
+    let req = hyper::Request::builder()
+        .uri(&version_url)
+        .header(http::header::ORIGIN, "https://example.com")
+        .header(http::header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+        .method(http::method::Method::OPTIONS)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let res = send_http_request(version_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send OPTIONS preflight request");
+
+    // Preflight must succeed, not return 401
+    assert_eq!(res.status(), http::StatusCode::OK);
+
+    // Must include CORS headers so the browser allows the actual request
+    assert_eq!(
+        res.headers()
+            .get(http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .and_then(|v| v.to_str().ok()),
+        Some("*")
+    );
+
+    // Must allow the actual request method
+    assert!(
+        res.headers()
+            .get(http::header::ACCESS_CONTROL_ALLOW_METHODS)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.contains("GET"))
+            .unwrap_or(false),
+        "preflight response should allow GET method"
+    );
+
+    // Must allow the Authorization header that the actual request will send
+    assert!(
+        res.headers()
+            .get(http::header::ACCESS_CONTROL_ALLOW_HEADERS)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.contains("authorization"))
+            .unwrap_or(false),
+        "preflight response should allow Authorization header"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn test_config_reload_via_payload() {
     let wd =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
