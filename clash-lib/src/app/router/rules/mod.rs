@@ -31,11 +31,6 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
     /// the type of the rule
     fn type_name(&self) -> &str;
 
-    /// Optional dial metadata attached to the rule.
-    fn interface(&self) -> Option<&str> {
-        None
-    }
-
     fn should_resolve_ip(&self) -> bool {
         false
     }
@@ -50,9 +45,6 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
         m.insert("proxy".to_string(), Box::new(self.target().to_owned()));
         m.insert("payload".to_string(), Box::new(self.payload()));
         m.insert("size".to_string(), Box::new(self.size()));
-        if let Some(interface) = self.interface() {
-            m.insert("interface".to_string(), Box::new(interface.to_owned()));
-        }
         m
     }
 }

@@ -11,18 +11,15 @@ use crate::{
         domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
         final_::Final, ipcidr::IpCidr, ruleset::RuleSet,
     },
-    config::internal::{config::RuleProviderDef, rule::RuleType},
+    config::internal::{
+        config::RuleProviderDef,
+        rule::{RuleKind, RuleType},
+    },
     print_and_exit,
     session::Session,
 };
 
-use std::{
-    collections::HashMap,
-    fmt::{Display, Formatter},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
 use rules::domain_regex::DomainRegex;
@@ -34,7 +31,7 @@ use crate::common::{geodata::GeoDataLookup, mmdb::MmdbLookup};
 pub use rules::RuleMatcher;
 
 pub struct Router {
-    rules: Vec<Box<dyn RuleMatcher>>,
+    rules: Vec<RuleEntry>,
     dns_resolver: ThreadSafeDNSResolver,
 
     country_mmdb: Option<MmdbLookup>,
@@ -78,7 +75,7 @@ impl Router {
             rules: rules
                 .into_iter()
                 .map(|r| {
-                    map_rule_type(
+                    map_rule_entry(
                         r,
                         country_mmdb.clone(),
                         geodata.clone(),
@@ -102,13 +99,13 @@ impl Router {
     pub async fn match_route(
         &self,
         sess: &mut Session,
-    ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
+    ) -> (&str, Option<&RuleEntry>) {
         let mut sess_resolved = false;
 
         for r in self.rules.iter() {
             // Resolve IP when needed
             if sess.destination.is_domain()
-                && r.should_resolve_ip()
+                && r.matcher.should_resolve_ip()
                 && !sess_resolved
                 && let Ok(Some(ip)) = self
                     .dns_resolver
@@ -129,14 +126,14 @@ impl Router {
                 );
             }
 
-            if r.apply(sess) {
+            if r.matcher.apply(sess) {
                 info!(
                     "matched {} to target {}[{}]",
                     &sess,
-                    r.target(),
-                    r.type_name()
+                    r.matcher.target(),
+                    r.matcher.type_name()
                 );
-                return (r.target(), Some(r));
+                return (r.matcher.target(), Some(r));
             }
         }
 
@@ -299,8 +296,46 @@ impl Router {
     }
 
     /// API handlers
-    pub fn get_all_rules(&self) -> &Vec<Box<dyn RuleMatcher>> {
+    pub fn get_all_rules(&self) -> &Vec<RuleEntry> {
         &self.rules
+    }
+}
+
+pub struct RuleEntry {
+    matcher: Box<dyn RuleMatcher>,
+    interface: Option<String>,
+}
+
+impl RuleEntry {
+    pub fn matcher(&self) -> &dyn RuleMatcher {
+        self.matcher.as_ref()
+    }
+
+    pub fn interface(&self) -> Option<&str> {
+        self.interface.as_deref()
+    }
+
+    pub fn as_map(
+        &self,
+    ) -> HashMap<String, Box<dyn erased_serde::Serialize + Send>> {
+        let mut map = self.matcher.as_map();
+        if let Some(interface) = &self.interface {
+            map.insert("interface".to_string(), Box::new(interface.clone()));
+        }
+        map
+    }
+}
+
+fn map_rule_entry(
+    rule_type: RuleType,
+    mmdb: Option<MmdbLookup>,
+    geodata: Option<GeoDataLookup>,
+    rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
+) -> RuleEntry {
+    let interface = rule_type.interface().map(str::to_owned);
+    RuleEntry {
+        matcher: map_rule_type(rule_type, mmdb, geodata, rule_provider_registry),
+        interface,
     }
 }
 
@@ -310,14 +345,15 @@ pub fn map_rule_type(
     geodata: Option<GeoDataLookup>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
-    let matcher: Box<dyn RuleMatcher> = match rule_type {
-        RuleType::Domain { domain, target, .. } => {
+    let (rule_kind, options) = rule_type.into_parts();
+    let matcher: Box<dyn RuleMatcher> = match rule_kind {
+        RuleKind::Domain { domain, target, .. } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
         }
-        RuleType::DomainRegex { regex, target, .. } => {
+        RuleKind::DomainRegex { regex, target, .. } => {
             Box::new(DomainRegex { regex, target })
         }
-        RuleType::DomainSuffix {
+        RuleKind::DomainSuffix {
             domain_suffix,
             target,
             ..
@@ -325,7 +361,7 @@ pub fn map_rule_type(
             suffix: domain_suffix,
             target,
         }),
-        RuleType::DomainKeyword {
+        RuleKind::DomainKeyword {
             domain_keyword,
             target,
             ..
@@ -333,41 +369,30 @@ pub fn map_rule_type(
             keyword: domain_keyword,
             target,
         }),
-        RuleType::IpCidr {
+        RuleKind::IpCidr { ipnet, target, .. } => Box::new(IpCidr {
             ipnet,
             target,
-            no_resolve,
-            ..
-        } => Box::new(IpCidr {
-            ipnet,
-            target,
-            no_resolve,
+            no_resolve: options.no_resolve,
             match_src: false,
         }),
-        RuleType::SrcCidr {
+        RuleKind::SrcCidr { ipnet, target, .. } => Box::new(IpCidr {
             ipnet,
             target,
-            no_resolve,
-            ..
-        } => Box::new(IpCidr {
-            ipnet,
-            target,
-            no_resolve,
+            no_resolve: options.no_resolve,
             match_src: true,
         }),
 
-        RuleType::GeoIP {
+        RuleKind::GeoIP {
             target,
             country_code,
-            no_resolve,
             ..
         } => Box::new(rules::geoip::GeoIP {
             target,
             country_code,
-            no_resolve,
+            no_resolve: options.no_resolve,
             mmdb: mmdb.clone(),
         }),
-        RuleType::GeoSite {
+        RuleKind::GeoSite {
             target,
             country_code,
             ..
@@ -380,17 +405,17 @@ pub fn map_rule_type(
             .unwrap();
             Box::new(res) as _
         }
-        RuleType::SRCPort { target, port, .. } => Box::new(rules::port::Port {
+        RuleKind::SRCPort { target, port, .. } => Box::new(rules::port::Port {
             port,
             target,
             is_src: true,
         }),
-        RuleType::DSTPort { target, port, .. } => Box::new(rules::port::Port {
+        RuleKind::DSTPort { target, port, .. } => Box::new(rules::port::Port {
             port,
             target,
             is_src: false,
         }),
-        RuleType::ProcessName {
+        RuleKind::ProcessName {
             process_name,
             target,
             ..
@@ -399,7 +424,7 @@ pub fn map_rule_type(
             target,
             name_only: true,
         }),
-        RuleType::ProcessPath {
+        RuleKind::ProcessPath {
             process_path,
             target,
             ..
@@ -408,7 +433,7 @@ pub fn map_rule_type(
             target,
             name_only: false,
         }),
-        RuleType::RuleSet {
+        RuleKind::RuleSet {
             rule_set, target, ..
         } => match rule_provider_registry {
             Some(rule_provider_registry) => Box::new(RuleSet::new(
@@ -427,10 +452,10 @@ pub fn map_rule_type(
                 unreachable!("you shouldn't nest rule-set within another rule-set")
             }
         },
-        RuleType::Network {
+        RuleKind::Network {
             network, target, ..
         } => Box::new(rules::network::NetworkRule { network, target }),
-        RuleType::Composite {
+        RuleKind::Composite {
             operator,
             expression,
             target,
@@ -457,55 +482,10 @@ pub fn map_rule_type(
                 }
             }
         }
-        RuleType::Match { target, .. } => Box::new(Final { target }),
-        RuleType::WithInterface { rule, interface } => Box::new(InterfaceRule {
-            inner: map_rule_type(*rule, mmdb, geodata, rule_provider_registry),
-            interface,
-        }),
+        RuleKind::Match { target, .. } => Box::new(Final { target }),
     };
 
     matcher
-}
-
-struct InterfaceRule {
-    inner: Box<dyn RuleMatcher>,
-    interface: String,
-}
-
-impl Display for InterfaceRule {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.inner.fmt(f)
-    }
-}
-
-impl RuleMatcher for InterfaceRule {
-    fn apply(&self, sess: &Session) -> bool {
-        self.inner.apply(sess)
-    }
-
-    fn target(&self) -> &str {
-        self.inner.target()
-    }
-
-    fn payload(&self) -> String {
-        self.inner.payload()
-    }
-
-    fn type_name(&self) -> &str {
-        self.inner.type_name()
-    }
-
-    fn interface(&self) -> Option<&str> {
-        Some(&self.interface)
-    }
-
-    fn should_resolve_ip(&self) -> bool {
-        self.inner.should_resolve_ip()
-    }
-
-    fn size(&self) -> u16 {
-        self.inner.size()
-    }
 }
 
 #[cfg(test)]
@@ -521,14 +501,14 @@ mod tests {
             http::new_http_client,
             mmdb::{DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL, Mmdb},
         },
-        config::internal::rule::RuleType,
+        config::internal::rule::{RuleKind, RuleType},
         session::Session,
         tests::initialize,
     };
 
     #[test]
     fn test_interface_metadata_is_mapped() {
-        let matcher = super::map_rule_type(
+        let entry = super::map_rule_entry(
             RuleType::try_from("DOMAIN,example.com,PROXY,interface=en0".to_string())
                 .unwrap(),
             None,
@@ -536,8 +516,8 @@ mod tests {
             None,
         );
 
-        assert_eq!(matcher.target(), "PROXY");
-        assert_eq!(matcher.interface(), Some("en0"));
+        assert_eq!(entry.matcher().target(), "PROXY");
+        assert_eq!(entry.interface(), Some("en0"));
     }
 
     #[tokio::test]
@@ -584,28 +564,31 @@ mod tests {
 
         let router = super::Router::new(
             vec![
-                RuleType::GeoIP {
+                RuleKind::GeoIP {
                     target: "DIRECT".to_string(),
                     country_code: "CN".to_string(),
-                    no_resolve: false,
-                },
-                RuleType::DomainRegex {
+                }
+                .into(),
+                RuleKind::DomainRegex {
                     regex: regex::Regex::new(r"^regex").unwrap(),
                     target: "regex-match".to_string(),
-                },
-                RuleType::DomainSuffix {
+                }
+                .into(),
+                RuleKind::DomainSuffix {
                     domain_suffix: "t.me".to_string(),
                     target: "DS".to_string(),
-                },
-                RuleType::IpCidr {
+                }
+                .into(),
+                RuleKind::IpCidr {
                     ipnet: "149.154.0.0/16".parse().unwrap(),
                     target: "IC".to_string(),
-                    no_resolve: false,
-                },
-                RuleType::DomainSuffix {
+                }
+                .into(),
+                RuleKind::DomainSuffix {
                     domain_suffix: "git.io".to_string(),
                     target: "DS2".to_string(),
-                },
+                }
+                .into(),
             ],
             Default::default(),
             mock_resolver,
@@ -663,14 +646,16 @@ mod tests {
 
         let router = super::Router::new(
             vec![
-                RuleType::Network {
+                RuleKind::Network {
                     network: crate::session::Network::Tcp,
                     target: "TCP-PROXY".to_string(),
-                },
-                RuleType::Network {
+                }
+                .into(),
+                RuleKind::Network {
                     network: crate::session::Network::Udp,
                     target: "UDP-PROXY".to_string(),
-                },
+                }
+                .into(),
             ],
             Default::default(),
             mock_resolver,

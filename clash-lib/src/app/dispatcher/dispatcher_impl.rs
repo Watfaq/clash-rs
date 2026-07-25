@@ -135,7 +135,7 @@ impl Dispatcher {
                 rhs.install_tracking(
                     self.manager.clone(),
                     sess.clone(),
-                    rule.map(|r| r.as_ref()),
+                    rule.map(|r| r.matcher()),
                 )
                 .await;
                 match copy_bidirectional(
@@ -380,7 +380,7 @@ impl Dispatcher {
                             .install_tracking(
                                 manager.clone(),
                                 sess.clone(),
-                                rule.map(|r| r.as_ref()),
+                                rule.map(|r| r.matcher()),
                             )
                             .await;
 

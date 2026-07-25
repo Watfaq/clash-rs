@@ -1,7 +1,55 @@
 use crate::{Error, print_and_exit};
 use std::{fmt::Display, str::FromStr};
 
-pub enum RuleType {
+#[derive(Default)]
+pub struct RuleOptions {
+    pub(crate) no_resolve: bool,
+    pub(crate) interface: Option<String>,
+}
+
+impl RuleOptions {
+    fn parse(params: Option<Vec<&str>>) -> Result<Self, Error> {
+        let mut options = Self::default();
+
+        for param in params.unwrap_or_default() {
+            match param {
+                "no-resolve" if options.no_resolve => {
+                    return Err(Error::InvalidConfig(
+                        "rule option `no-resolve` can only be specified once"
+                            .to_string(),
+                    ));
+                }
+                "no-resolve" => options.no_resolve = true,
+                param => {
+                    let Some(interface) = param.strip_prefix("interface=") else {
+                        return Err(Error::InvalidConfig(format!(
+                            "unsupported rule option: {param}"
+                        )));
+                    };
+                    if interface.is_empty() {
+                        return Err(Error::InvalidConfig(
+                            "rule interface cannot be empty".to_string(),
+                        ));
+                    }
+                    if options.interface.replace(interface.to_string()).is_some() {
+                        return Err(Error::InvalidConfig(
+                            "rule interface can only be specified once".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(options)
+    }
+}
+
+pub struct RuleType {
+    kind: RuleKind,
+    options: RuleOptions,
+}
+
+pub enum RuleKind {
     Domain {
         domain: String,
         target: String,
@@ -21,7 +69,6 @@ pub enum RuleType {
     GeoIP {
         target: String,
         country_code: String,
-        no_resolve: bool,
     },
     GeoSite {
         target: String,
@@ -30,12 +77,10 @@ pub enum RuleType {
     IpCidr {
         ipnet: ipnet::IpNet,
         target: String,
-        no_resolve: bool,
     },
     SrcCidr {
         ipnet: ipnet::IpNet,
         target: String,
-        no_resolve: bool,
     },
     SRCPort {
         target: String,
@@ -69,10 +114,15 @@ pub enum RuleType {
         expression: String,
         target: String,
     },
-    WithInterface {
-        rule: Box<RuleType>,
-        interface: String,
-    },
+}
+
+impl From<RuleKind> for RuleType {
+    fn from(kind: RuleKind) -> Self {
+        Self {
+            kind,
+            options: RuleOptions::default(),
+        }
+    }
 }
 
 fn split_rule_tokens(line: &str) -> Vec<&str> {
@@ -94,93 +144,67 @@ fn split_rule_tokens(line: &str) -> Vec<&str> {
     tokens
 }
 
-fn split_rule_options(
-    params: Option<Vec<&str>>,
-) -> Result<(Option<String>, Option<Vec<&str>>), Error> {
-    let Some(params) = params else {
-        return Ok((None, None));
-    };
-
-    let mut interface = None;
-    let mut rest = Vec::new();
-    for param in params {
-        if let Some(v) = param.strip_prefix("interface=") {
-            if v.is_empty() {
-                return Err(Error::InvalidConfig(
-                    "rule interface cannot be empty".to_string(),
-                ));
-            }
-            if interface.replace(v.to_string()).is_some() {
-                return Err(Error::InvalidConfig(
-                    "rule interface can only be specified once".to_string(),
-                ));
-            }
-        } else {
-            rest.push(param);
-        }
-    }
-
-    Ok((interface, (!rest.is_empty()).then_some(rest)))
-}
-
 impl RuleType {
     pub fn target(&self) -> &str {
-        match self {
-            RuleType::Domain { target, .. } => target,
-            RuleType::DomainSuffix { target, .. } => target,
-            RuleType::DomainRegex { target, .. } => target,
-            RuleType::DomainKeyword { target, .. } => target,
-            RuleType::GeoIP { target, .. } => target,
-            RuleType::GeoSite { target, .. } => target,
-            RuleType::IpCidr { target, .. } => target,
-            RuleType::SrcCidr { target, .. } => target,
-            RuleType::SRCPort { target, .. } => target,
-            RuleType::DSTPort { target, .. } => target,
-            RuleType::ProcessName { target, .. } => target,
-            RuleType::ProcessPath { target, .. } => target,
-            RuleType::RuleSet { target, .. } => target,
-            RuleType::Match { target, .. } => target,
-            RuleType::Network { target, .. } => target,
-            RuleType::Composite { target, .. } => target,
-            RuleType::WithInterface { rule, .. } => rule.target(),
+        match &self.kind {
+            RuleKind::Domain { target, .. }
+            | RuleKind::DomainSuffix { target, .. }
+            | RuleKind::DomainRegex { target, .. }
+            | RuleKind::DomainKeyword { target, .. }
+            | RuleKind::GeoIP { target, .. }
+            | RuleKind::GeoSite { target, .. }
+            | RuleKind::IpCidr { target, .. }
+            | RuleKind::SrcCidr { target, .. }
+            | RuleKind::SRCPort { target, .. }
+            | RuleKind::DSTPort { target, .. }
+            | RuleKind::ProcessName { target, .. }
+            | RuleKind::ProcessPath { target, .. }
+            | RuleKind::RuleSet { target, .. }
+            | RuleKind::Match { target, .. }
+            | RuleKind::Network { target, .. }
+            | RuleKind::Composite { target, .. } => target,
         }
     }
 
     pub fn interface(&self) -> Option<&str> {
-        match self {
-            RuleType::WithInterface { interface, .. } => Some(interface),
-            _ => None,
-        }
+        self.options.interface.as_deref()
+    }
+
+    pub fn into_parts(self) -> (RuleKind, RuleOptions) {
+        (self.kind, self.options)
     }
 }
 
 impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RuleType::Domain { domain, target, .. } => {
+        match &self.kind {
+            RuleKind::Domain { domain, target, .. } => {
                 write!(f, "DOMAIN,{domain},{target}")
             }
-            RuleType::DomainRegex { regex, target, .. } => {
+            RuleKind::DomainRegex { regex, target, .. } => {
                 write!(f, "DOMAIN-REGEX,{regex},{target}")
             }
-            RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
-            RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
-            RuleType::GeoIP { .. } => write!(f, "GEOIP"),
-            RuleType::GeoSite { .. } => write!(f, "GEOSITE"),
-            RuleType::IpCidr { .. } => write!(f, "IP-CIDR"),
-            RuleType::SrcCidr { .. } => write!(f, "SRC-IP-CIDR"),
-            RuleType::SRCPort { .. } => write!(f, "SRC-PORT"),
-            RuleType::DSTPort { .. } => write!(f, "DST-PORT"),
-            RuleType::ProcessName { .. } => write!(f, "PROCESS-NAME"),
-            RuleType::ProcessPath { .. } => write!(f, "PROCESS-PATH"),
-            RuleType::RuleSet { .. } => write!(f, "RULE-SET"),
-            RuleType::Match { .. } => write!(f, "MATCH"),
-            RuleType::Network { .. } => write!(f, "NETWORK"),
-            RuleType::Composite { .. } => write!(f, "COMPOSITE"),
-            RuleType::WithInterface { rule, interface } => {
-                write!(f, "{rule},interface={interface}")
-            }
+            RuleKind::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
+            RuleKind::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
+            RuleKind::GeoIP { .. } => write!(f, "GEOIP"),
+            RuleKind::GeoSite { .. } => write!(f, "GEOSITE"),
+            RuleKind::IpCidr { .. } => write!(f, "IP-CIDR"),
+            RuleKind::SrcCidr { .. } => write!(f, "SRC-IP-CIDR"),
+            RuleKind::SRCPort { .. } => write!(f, "SRC-PORT"),
+            RuleKind::DSTPort { .. } => write!(f, "DST-PORT"),
+            RuleKind::ProcessName { .. } => write!(f, "PROCESS-NAME"),
+            RuleKind::ProcessPath { .. } => write!(f, "PROCESS-PATH"),
+            RuleKind::RuleSet { .. } => write!(f, "RULE-SET"),
+            RuleKind::Match { .. } => write!(f, "MATCH"),
+            RuleKind::Network { .. } => write!(f, "NETWORK"),
+            RuleKind::Composite { .. } => write!(f, "COMPOSITE"),
+        }?;
+
+        if let Some(interface) = &self.options.interface {
+            write!(f, ",interface={interface}")?;
         }
+
+        Ok(())
     }
 }
 
@@ -191,73 +215,67 @@ impl RuleType {
         target: &str,
         params: Option<Vec<&str>>,
     ) -> Result<Self, Error> {
-        let (interface, params) = split_rule_options(params)?;
-        let no_resolve = params
-            .as_ref()
-            .is_some_and(|params| params.contains(&"no-resolve"));
+        let options = RuleOptions::parse(params)?;
 
-        let rule = match proto {
-            "DOMAIN" => Ok(RuleType::Domain {
+        let kind = match proto {
+            "DOMAIN" => Ok(RuleKind::Domain {
                 domain: payload.to_string(),
                 target: target.to_string(),
             }),
-            "DOMAIN-REGEX" => Ok(RuleType::DomainRegex {
+            "DOMAIN-REGEX" => Ok(RuleKind::DomainRegex {
                 regex: regex::Regex::new(payload)
                     .map_err(|e| Error::InvalidConfig(e.to_string()))?,
                 target: target.to_string(),
             }),
-            "DOMAIN-SUFFIX" => Ok(RuleType::DomainSuffix {
+            "DOMAIN-SUFFIX" => Ok(RuleKind::DomainSuffix {
                 domain_suffix: payload.to_string(),
                 target: target.to_string(),
             }),
-            "DOMAIN-KEYWORD" => Ok(RuleType::DomainKeyword {
+            "DOMAIN-KEYWORD" => Ok(RuleKind::DomainKeyword {
                 domain_keyword: payload.to_string(),
                 target: target.to_string(),
             }),
-            "GEOSITE" => Ok(RuleType::GeoSite {
+            "GEOSITE" => Ok(RuleKind::GeoSite {
                 target: target.to_string(),
                 country_code: payload.to_string(),
             }),
-            "GEOIP" => Ok(RuleType::GeoIP {
+            "GEOIP" => Ok(RuleKind::GeoIP {
                 target: target.to_string(),
                 country_code: payload.to_string(),
-                no_resolve,
             }),
-            "IP-CIDR" | "IP-CIDR6" => Ok(RuleType::IpCidr {
+            "IP-CIDR" | "IP-CIDR6" => Ok(RuleKind::IpCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
-                no_resolve,
             }),
-            "SRC-IP-CIDR" => Ok(RuleType::SrcCidr {
+            "SRC-IP-CIDR" => Ok(RuleKind::SrcCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
-                no_resolve,
             }),
-            "SRC-PORT" => Ok(RuleType::SRCPort {
+            "SRC-PORT" => Ok(RuleKind::SRCPort {
                 target: target.to_string(),
                 port: payload.parse().unwrap_or_else(|_| {
                     print_and_exit!("invalid port: {}", payload)
                 }),
             }),
-            "DST-PORT" => Ok(RuleType::DSTPort {
+            "DST-PORT" => Ok(RuleKind::DSTPort {
                 target: target.to_string(),
                 port: payload.parse().unwrap_or_else(|_| {
                     print_and_exit!("invalid port: {}", payload)
                 }),
             }),
-            "PROCESS-NAME" => Ok(RuleType::ProcessName {
+            "PROCESS-NAME" => Ok(RuleKind::ProcessName {
                 process_name: payload.to_string(),
                 target: target.to_string(),
             }),
-            "PROCESS-PATH" => Ok(RuleType::ProcessPath {
+            "PROCESS-PATH" => Ok(RuleKind::ProcessPath {
                 process_path: payload.to_string(),
                 target: target.to_string(),
             }),
-            "RULE-SET" => Ok(RuleType::RuleSet {
+            "RULE-SET" => Ok(RuleKind::RuleSet {
                 rule_set: payload.to_string(),
                 target: target.to_string(),
             }),
-            "MATCH" => Ok(RuleType::Match {
+            "MATCH" => Ok(RuleKind::Match {
                 target: target.to_string(),
             }),
             "NETWORK" => {
@@ -271,12 +289,12 @@ impl RuleType {
                         )));
                     }
                 };
-                Ok(RuleType::Network {
+                Ok(RuleKind::Network {
                     network,
                     target: target.to_string(),
                 })
             }
-            "AND" | "OR" | "NOT" => Ok(RuleType::Composite {
+            "AND" | "OR" | "NOT" => Ok(RuleKind::Composite {
                 operator: proto.to_string(),
                 expression: payload.to_string(),
                 target: target.to_string(),
@@ -287,13 +305,20 @@ impl RuleType {
             ))),
         }?;
 
-        Ok(match interface {
-            Some(interface) => RuleType::WithInterface {
-                rule: Box::new(rule),
-                interface,
-            },
-            None => rule,
-        })
+        if options.no_resolve
+            && !matches!(
+                &kind,
+                RuleKind::GeoIP { .. }
+                    | RuleKind::IpCidr { .. }
+                    | RuleKind::SrcCidr { .. }
+            )
+        {
+            return Err(Error::InvalidConfig(format!(
+                "rule option `no-resolve` is not supported for {proto}"
+            )));
+        }
+
+        Ok(Self { kind, options })
     }
 }
 
@@ -333,8 +358,8 @@ mod tests {
     fn test_network_rule_parsing() {
         // Test TCP network rule
         let rule = RuleType::try_from("NETWORK,TCP,PROXY".to_string()).unwrap();
-        match rule {
-            RuleType::Network {
+        match rule.kind {
+            RuleKind::Network {
                 network, target, ..
             } => {
                 assert_eq!(network, crate::session::Network::Tcp);
@@ -345,8 +370,8 @@ mod tests {
 
         // Test UDP network rule
         let rule = RuleType::try_from("NETWORK,UDP,PROXY".to_string()).unwrap();
-        match rule {
-            RuleType::Network {
+        match rule.kind {
+            RuleKind::Network {
                 network, target, ..
             } => {
                 assert_eq!(network, crate::session::Network::Udp);
@@ -357,8 +382,8 @@ mod tests {
 
         // Test lowercase network types
         let rule = RuleType::try_from("NETWORK,tcp,PROXY".to_string()).unwrap();
-        match rule {
-            RuleType::Network {
+        match rule.kind {
+            RuleKind::Network {
                 network, target, ..
             } => {
                 assert_eq!(network, crate::session::Network::Tcp);
@@ -407,5 +432,23 @@ mod tests {
 
         assert_eq!(rule.target(), "PROXY");
         assert_eq!(rule.interface(), Some("en0"));
+    }
+
+    #[test]
+    fn test_rule_options_are_strictly_typed() {
+        assert!(
+            RuleType::try_from("DOMAIN,google.com,PROXY,unknown-option".to_string())
+                .is_err()
+        );
+        assert!(
+            RuleType::try_from("DOMAIN,google.com,PROXY,no-resolve".to_string())
+                .is_err()
+        );
+        assert!(
+            RuleType::try_from(
+                "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve,interface=en0".to_string()
+            )
+            .is_ok()
+        );
     }
 }
