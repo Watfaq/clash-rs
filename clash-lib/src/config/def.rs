@@ -355,6 +355,7 @@ impl Display for LogLevel {
 ///   - DOMAIN-SUFFIX,facebook.com,REJECT
 ///   - DOMAIN-KEYWORD,google,select
 ///   - DOMAIN,google.com,select
+///   - DOMAIN,google.com,select,interface=en0
 ///   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
 ///   - GEOIP,CN,DIRECT
 ///   - DST-PORT,53,trojan

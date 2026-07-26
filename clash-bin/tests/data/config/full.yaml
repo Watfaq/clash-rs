@@ -778,11 +778,13 @@ rule-providers:
 
 # ── Rules ─────────────────────────────────────────────────────────────────────
 # Evaluated top-to-bottom; first match wins.
-# Format: RULE-TYPE,payload,proxy[,no-resolve]
+# Format: RULE-TYPE,payload,proxy[,no-resolve][,interface=<name>]
 # `no-resolve` skips DNS resolution for IP-based rules — use for LAN/private ranges.
+# `interface=<name>` binds matched connections to that exact network interface.
 rules:
   # ── Domain rules ────────────────────────────────────────────────────────────
   - DOMAIN,example.com,Manual                    # exact domain match
+  - DOMAIN,ios.example.com,DIRECT,interface=pdp_ip0 # bind to an exact iOS interface
   - DOMAIN-SUFFIX,example.com,Manual             # domain + all subdomains
   - DOMAIN-KEYWORD,google,Auto                   # substring match in any domain label
   - DOMAIN-REGEX,^www\.google\.com$,Auto         # full regex match
