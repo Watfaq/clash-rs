@@ -1,6 +1,6 @@
 use axum::{body::Body, extract::Query, http::Request, response::Response};
 use futures::future::BoxFuture;
-
+use http::Method;
 use serde::Deserialize;
 use tower::{Layer, Service};
 
@@ -65,6 +65,14 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         if self.token.is_empty() {
+            return Box::pin(self.inner.call(req));
+        }
+
+        // CORS preflight requests never include credentials per the CORS spec.
+        // Pass them through so the CorsLayer can add proper CORS headers.
+        if req.method() == Method::OPTIONS
+            && req.headers().contains_key(http::header::ORIGIN)
+        {
             return Box::pin(self.inner.call(req));
         }
 
