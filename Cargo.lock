@@ -1495,7 +1495,7 @@ dependencies = [
  "protox",
  "public-suffix",
  "quinn 0.11.9",
- "quinn-proto 0.11.14",
+ "quinn-proto 0.11.16",
  "rand 0.10.1",
  "rand_chacha 0.10.0",
  "rcgen 0.14.8",
@@ -4066,7 +4066,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.56.0",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -6712,7 +6712,7 @@ dependencies = [
  "cfg_aliases",
  "futures-io",
  "pin-project-lite",
- "quinn-proto 0.11.14",
+ "quinn-proto 0.11.16",
  "quinn-udp 0.5.14",
  "rustc-hash 2.1.2",
  "rustls",
@@ -6775,15 +6775,16 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.14"
+version = "0.11.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
+checksum = "2f4bfc015262b9df63c8845072ce59068853ff5872180c2ce2f13038b970e560"
 dependencies = [
  "aws-lc-rs",
  "bytes",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "lru-slab",
- "rand 0.9.4",
+ "rand 0.10.1",
+ "rand_pcg 0.10.2",
  "ring",
  "rustc-hash 2.1.2",
  "rustls",
@@ -8015,7 +8016,7 @@ checksum = "dcc7fe48e34d02a97bc8e6253b8b91e5a47fe2c47eaacb5149cefbb69922eaf0"
 dependencies = [
  "ahash",
  "annotate-snippets",
- "base64 0.21.7",
+ "base64 0.22.1",
  "encoding_rs_io",
  "getrandom 0.3.4",
  "granit-parser",
