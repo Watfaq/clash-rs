@@ -11783,7 +11783,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",
@@ -12756,8 +12756,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "shadowquic"
-version = "0.3.11"
-source = "git+https://github.com/spongebob888/shadowquic.git?rev=295034e1b6478706a4348565bfc3ecea8378da98#295034e1b6478706a4348565bfc3ecea8378da98"
