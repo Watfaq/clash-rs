@@ -48,7 +48,7 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git add Cargo.toml clash-bin/Cargo.toml clash-dns/Cargo.toml clash-doc/Cargo.toml clash-ffi/Cargo.toml clash-lib/Cargo.toml Cargo.lock
+          git add Cargo.toml clash-bin/Cargo.toml clash-dns/Cargo.toml clash-doc/Cargo.toml clash-ffi/Cargo.toml clash-lib/Cargo.toml clash-netstack/Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
 
       - name: Create tag
