@@ -16,7 +16,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU16, Ordering},
+        atomic::{AtomicU16, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -52,6 +52,7 @@ const SYSTEM_WRITE_QUEUE: usize = 1024;
 const DEFAULT_MTU: u16 = 1500;
 /// Floor for the receive-buffer payload, so a nonsensical MTU cannot produce
 /// buffers too short to hold one segment. Matches the IPv6 minimum MTU.
+#[cfg(target_os = "linux")]
 const MIN_BUFFER_PAYLOAD: usize = 1280;
 const UDP_DOWNLINK_QUEUE: usize = 4096;
 /// How long a NAT entry may stay un-accepted before it is reclaimed. The
@@ -68,6 +69,11 @@ const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
 /// Shorter pause for any other accept error, so a recurring one cannot spin
 /// the loop while a one-off barely delays the next connection.
 const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(1);
+/// How many consecutive batched-read errors are tolerated before the read
+/// loop gives up. A single bad GRO read is dropped; a persistent error means
+/// the device is gone.
+#[cfg(target_os = "linux")]
+const MAX_CONSECUTIVE_READ_ERRORS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TcpKey {
@@ -80,6 +86,11 @@ struct TcpEntry {
     key: TcpKey,
     last_seen: Instant,
     accepted: bool,
+    /// Bumped every time the port is accepted, so the linger task that owns a
+    /// finished connection can tell whether the mapping is still *its* mapping
+    /// or has since been taken over by a fresh connection reusing the same
+    /// five-tuple.
+    generation: u64,
 }
 
 /// Bidirectional map between an original TCP five-tuple and the NAT source
@@ -97,7 +108,16 @@ struct TcpNat {
     forward: Box<[Mutex<HashMap<TcpKey, u16>>]>,
     reverse: Box<[Mutex<HashMap<u16, TcpEntry>>]>,
     next_port: AtomicU16,
+    next_generation: AtomicU64,
 }
+
+/// Upper bound on how many ports `lookup_or_insert` probes before giving up.
+///
+/// When the table has room a free port is found in a handful of tries. The cap
+/// matters only when the table is near full: without it a single packet to a
+/// saturated table would scan the whole 55k-port space while holding a forward
+/// shard lock, turning one uplink packet into tens of thousands of lock ops.
+const NAT_PROBE_LIMIT: usize = 4096;
 
 /// Ignore mutex poisoning: every critical section below is a plain map
 /// operation that cannot leave the map in an inconsistent state.
@@ -115,6 +135,7 @@ impl TcpNat {
                 .map(|_| Mutex::new(HashMap::new()))
                 .collect(),
             next_port: AtomicU16::new(FIRST_NAT_PORT),
+            next_generation: AtomicU64::new(0),
         })
     }
 
@@ -148,17 +169,22 @@ impl TcpNat {
         if let Some(port) = forward.get(&key).copied() {
             if let Some(entry) =
                 lock(&self.reverse[Self::reverse_shard(port)]).get_mut(&port)
+                && entry.key == key
             {
+                // The `entry.key == key` guard matters: the reverse entry can
+                // have been reclaimed and the port handed to a *different*
+                // flow between our forward read and this reverse read.
+                // Returning it blindly would emit this flow under another
+                // flow's NAT port and cross-deliver both.
                 entry.last_seen = Instant::now();
                 return Ok(port);
             }
-            // Cleanup removes reverse state before the forward index. Do not
-            // let a packet reuse that brief stale mapping after the NAT port
-            // has become available again.
+            // The forward entry is stale — the port was reclaimed, or now
+            // belongs to another flow. Drop it and allocate a fresh port.
             forward.remove(&key);
         }
 
-        for _ in FIRST_NAT_PORT..=u16::MAX {
+        for _ in 0..NAT_PROBE_LIMIT {
             let mut port = self.next_port.fetch_add(1, Ordering::Relaxed);
             if port < FIRST_NAT_PORT {
                 port = FIRST_NAT_PORT;
@@ -175,6 +201,7 @@ impl TcpNat {
                     key,
                     last_seen: Instant::now(),
                     accepted: false,
+                    generation: 0,
                 },
             );
             forward.insert(key, port);
@@ -190,19 +217,50 @@ impl TcpNat {
         Some(*entry)
     }
 
-    fn remove(&self, port: u16) {
-        let entry = lock(&self.reverse[Self::reverse_shard(port)]).remove(&port);
-        if let Some(entry) = entry {
-            lock(&self.forward[Self::forward_shard(&entry.key)]).remove(&entry.key);
+    /// Marks a port accepted and returns the original tuple plus the fresh
+    /// generation stamped on it, in one critical section.
+    ///
+    /// Folding the lookup and the mark together closes the window in which
+    /// `cleanup` could reclaim the entry between a separate lookup and mark.
+    /// The generation lets the caller's later teardown check the mapping is
+    /// still the one it accepted.
+    fn accept(&self, port: u16) -> Option<(TcpKey, u64)> {
+        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
+        let mut reverse = lock(&self.reverse[Self::reverse_shard(port)]);
+        let entry = reverse.get_mut(&port)?;
+        entry.accepted = true;
+        entry.last_seen = Instant::now();
+        entry.generation = generation;
+        Some((entry.key, generation))
+    }
+
+    /// Removes the forward index for `key`, but only if it still points at
+    /// `port`. A bare `forward.remove(&key)` would delete a newer mapping that
+    /// `lookup_or_insert` had since re-created for the same flow under a
+    /// different port.
+    fn remove_forward_if(&self, key: TcpKey, port: u16) {
+        let mut forward = lock(&self.forward[Self::forward_shard(&key)]);
+        if forward.get(&key) == Some(&port) {
+            forward.remove(&key);
         }
     }
 
-    fn mark_accepted(&self, port: u16) {
-        if let Some(entry) =
-            lock(&self.reverse[Self::reverse_shard(port)]).get_mut(&port)
-        {
-            entry.accepted = true;
-            entry.last_seen = Instant::now();
+    /// Removes `port` only if it still carries `generation`, i.e. it has not
+    /// been taken over by a newer accepted connection reusing the same tuple.
+    fn remove_if_generation(&self, port: u16, generation: u64) {
+        let key = {
+            let mut reverse = lock(&self.reverse[Self::reverse_shard(port)]);
+            match reverse.get(&port) {
+                Some(entry) if entry.generation == generation => {
+                    reverse.remove(&port).map(|entry| entry.key)
+                }
+                _ => None,
+            }
+        };
+        // Drop the reverse guard before taking forward: `lookup_or_insert`
+        // takes forward first, so the reverse order could deadlock.
+        if let Some(key) = key {
+            self.remove_forward_if(key, port);
         }
     }
 
@@ -210,9 +268,9 @@ impl TcpNat {
     ///
     /// `cleanup` collects candidates without holding the shard lock, and in
     /// that gap `lookup_or_insert` may have refreshed `last_seen` for a new
-    /// packet of the same flow, or `mark_accepted` may have claimed the
-    /// entry. Removing it regardless would blackhole a live connection: the
-    /// downlink path would find no mapping and drop every kernel packet.
+    /// packet of the same flow, or `accept` may have claimed the entry.
+    /// Removing it regardless would blackhole a live connection: the downlink
+    /// path would find no mapping and drop every kernel packet.
     fn remove_if_still_expired(&self, port: u16, timeout: Duration) {
         let key = {
             let mut reverse = lock(&self.reverse[Self::reverse_shard(port)]);
@@ -229,7 +287,7 @@ impl TcpNat {
         // taken: `lookup_or_insert` acquires forward first, so holding
         // reverse while waiting on forward could deadlock.
         if let Some(key) = key {
-            lock(&self.forward[Self::forward_shard(&key)]).remove(&key);
+            self.remove_forward_if(key, port);
         }
     }
 
@@ -708,18 +766,21 @@ async fn tcp_accept_loop(
         if peer.ip() != nat_ip {
             continue;
         }
-        let Some(entry) = nat.lookup_back(peer.port()) else {
+        // One critical section recovers the tuple and stamps a generation, so
+        // cleanup cannot reclaim the entry between the two. `None` means the
+        // mapping was already gone — the connection cannot be translated, so
+        // drop it.
+        let Some((key, generation)) = nat.accept(peer.port()) else {
             continue;
         };
-        nat.mark_accepted(peer.port());
         let nat = Arc::clone(&nat);
         let dispatcher = Arc::clone(&dispatcher);
         tokio::spawn(async move {
             let sess = Session {
                 network: Network::Tcp,
                 typ: Type::Tun,
-                source: entry.key.source,
-                destination: entry.key.destination.into(),
+                source: key.source,
+                destination: key.destination.into(),
                 iface: DEFAULT_OUTBOUND_INTERFACE.read().await.clone().inspect(
                     |x| {
                         debug!(
@@ -740,7 +801,11 @@ async fn tcp_accept_loop(
             // mapping immediately would blackhole them, leaving the client
             // to wait out its own timeout while the kernel retransmits.
             time::sleep(NAT_LINGER).await;
-            nat.remove(peer.port());
+            // Remove only if this is still the mapping we accepted: a new
+            // connection reusing the same five-tuple within the linger window
+            // takes over the port with a newer generation, and must not be
+            // torn down by this finished connection's timer.
+            nat.remove_if_generation(peer.port(), generation);
         });
     }
 }
@@ -1165,31 +1230,42 @@ fn mtu(cfg: &TunConfig) -> usize {
 
 /// How many receive buffers one batch needs.
 ///
-/// `recv_multiple` splits a GRO read — up to 64 KiB — into one buffer per TCP
-/// segment, and errors out with `ErrTooManySegments` if it runs out, which
-/// would tear the backend down. The segment size is the MSS, so the worst case
-/// is a full read divided by the smallest plausible MSS for this MTU. Small
-/// MTUs therefore need *more* buffers than `IDEAL_BATCH_SIZE`, not fewer.
+/// `recv_multiple` splits a GRO read — up to 64 KiB — into one buffer per
+/// segment, and returns `ErrTooManySegments` if it runs out. Crucially the
+/// segment size is the flow's *MSS*, not our MTU: the kernel GSOs the listener
+/// replies by the connection's MSS, which can be far below the MTU (an old
+/// path, an `advmss` route, or a local `setsockopt(TCP_MAXSEG, …)`). So this
+/// is sized from the segment floor, independent of MTU — a large MTU does not
+/// make the count safe, and a tiny MTU must not inflate it (that once produced
+/// tens of MB of buffers).
+///
+/// The batched read additionally treats `ErrTooManySegments` as a droppable
+/// per-read error rather than a fatal one, so an adversarially tiny segment
+/// size (e.g. UDP GSO with a 1-byte segment) degrades to packet loss instead
+/// of tearing the backend down.
 #[cfg(target_os = "linux")]
-fn receive_batch_size(mtu: usize) -> usize {
+fn receive_batch_size() -> usize {
     use tun_rs::IDEAL_BATCH_SIZE;
 
-    // Allow for a maximal IPv6 header plus TCP header with options.
-    const MAX_HEADERS: usize = 60 + 60;
-    let min_segment = mtu.saturating_sub(MAX_HEADERS).max(1);
-    let worst_case = (u16::MAX as usize).div_ceil(min_segment) + 1;
+    // Linux's `TCP_MIN_SND_MSS`. Covers every legitimate low-MTU flow; smaller
+    // segments than this are handled by the non-fatal error path.
+    const SEGMENT_FLOOR: usize = 48;
+    let worst_case = (u16::MAX as usize).div_ceil(SEGMENT_FLOOR) + 1;
     worst_case.max(IDEAL_BATCH_SIZE)
 }
 
 /// Batched TUN I/O, available when the device was opened with offload.
 ///
-/// `recv_multiple` takes one large GRO read from the kernel and splits it into
-/// individual IP packets, and `send_multiple` coalesces outgoing packets back
-/// into fewer, larger writes. That amortises the per-packet syscall, which is
-/// what this backend is bound by: every payload crosses the TUN device twice
-/// (uplink is re-injected for the kernel listener, and the listener's reply is
-/// read back out again), so it issues roughly twice the device operations the
-/// userspace stack does.
+/// The win is on the receive side: `recv_multiple` takes one large GRO read
+/// from the kernel and splits it into individual packets, so a burst of
+/// segments costs one syscall instead of one per packet. That is what this
+/// backend is bound by — every payload crosses the TUN device twice (uplink
+/// is re-injected for the kernel listener, and the listener's reply is read
+/// back out again), roughly twice the device operations the userspace stack
+/// does. `send_multiple` runs GRO coalescing on the way out too, though with
+/// MTU-sized buffers most merges are skipped and it falls back to one write
+/// per packet; enlarging the write buffers to enable it is a possible
+/// follow-up.
 ///
 /// Both helpers degrade to single-packet I/O when the device has no virtio
 /// header, so this path is correct whether or not offload was negotiated.
@@ -1225,13 +1301,11 @@ async fn batched_read_loop(
     use tun_rs::{GROTable, VIRTIO_NET_HDR_LEN};
 
     // Prefer the device's own MTU: for `fd://` devices the interface was set up
-    // by someone else and `cfg.mtu` may not describe it.
+    // by someone else and `cfg.mtu` may not describe it. The buffer *length*
+    // is floored so a nonsensical MTU cannot yield buffers too short for one
+    // segment; the buffer *count* is MTU-independent (see receive_batch_size).
     let mtu = device.mtu().map(usize::from).unwrap_or(mtu);
-    // The batch count must come from the real MTU — clamping it upwards here
-    // would under-size the set for a genuinely small MTU. The buffer *length*
-    // is floored separately, so a nonsensical MTU cannot yield buffers too
-    // short to hold one segment.
-    let count = receive_batch_size(mtu);
+    let count = receive_batch_size();
     let buf_len = VIRTIO_NET_HDR_LEN + mtu.max(MIN_BUFFER_PAYLOAD);
     debug!("system TUN batched io: mtu {mtu}, {count} receive buffers");
 
@@ -1240,14 +1314,40 @@ async fn batched_read_loop(
         (0..count).map(|_| BytesMut::zeroed(buf_len)).collect();
     let mut sizes = vec![0usize; count];
     let mut gro = GROTable::new();
+    let mut consecutive_read_errors = 0usize;
 
     loop {
-        let received = device
+        let received = match device
             .recv_multiple(&mut original, &mut bufs, &mut sizes, VIRTIO_NET_HDR_LEN)
             .await
-            .map_err(|e| {
-                Error::Operation(format!("system TUN batched read failed: {e}"))
-            })?;
+        {
+            Ok(received) => {
+                consecutive_read_errors = 0;
+                received
+            }
+            Err(e) => {
+                // A GRO read that splits into more segments than the buffer
+                // set holds (an adversarially tiny segment size) fails the
+                // whole read. Treat it — and any other read error — as
+                // droppable rather than fatal, so one bad read cannot tear
+                // down all TUN traffic. Bail only if errors persist, which
+                // signals the device is genuinely gone rather than fed a bad
+                // packet.
+                consecutive_read_errors += 1;
+                warn!(
+                    "system TUN batched read failed ({consecutive_read_errors}): \
+                     {e}"
+                );
+                if consecutive_read_errors >= MAX_CONSECUTIVE_READ_ERRORS {
+                    return Err(Error::Operation(format!(
+                        "system TUN batched read failed {consecutive_read_errors} \
+                         times, giving up: {e}"
+                    )));
+                }
+                time::sleep(ACCEPT_RETRY_DELAY).await;
+                continue;
+            }
+        };
 
         // Compact the packets that need writing back into the front of the
         // buffer set: `send_multiple` writes every buffer handed to it, so it
@@ -1605,7 +1705,8 @@ mod tests {
         let port = nat.lookup_or_insert(key).unwrap();
         assert_eq!(nat.lookup_or_insert(key).unwrap(), port);
         assert_eq!(nat.lookup_back(port).unwrap().key, key);
-        nat.remove(port);
+        let (_, generation) = nat.accept(port).unwrap();
+        nat.remove_if_generation(port, generation);
         assert!(nat.lookup_back(port).is_none());
     }
 
@@ -1631,10 +1732,71 @@ mod tests {
             ..key
         };
         let accepted_port = nat.lookup_or_insert(accepted_key).unwrap();
-        nat.mark_accepted(accepted_port);
+        assert!(nat.accept(accepted_port).is_some());
         nat.cleanup(Duration::ZERO);
         assert!(nat.lookup_back(port).is_none());
         assert!(nat.lookup_back(accepted_port).is_some());
+    }
+
+    #[test]
+    fn linger_removal_spares_a_reused_port() {
+        // A finished connection's linger must not tear down a fresh
+        // connection that reused the same five-tuple (and thus NAT port)
+        // within the linger window.
+        let nat = TcpNat::new();
+        let key = TcpKey {
+            source: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(10, 0, 0, 2),
+                34567,
+            )),
+            destination: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(1, 1, 1, 1),
+                443,
+            )),
+        };
+        let port = nat.lookup_or_insert(key).unwrap();
+        let (_, gen_a) = nat.accept(port).unwrap(); // connection A
+        // A finishes; a new connection B reuses the same tuple → same port,
+        // fresh generation.
+        assert_eq!(nat.lookup_or_insert(key).unwrap(), port);
+        let (_, gen_b) = nat.accept(port).unwrap();
+        assert_ne!(gen_a, gen_b);
+        // A's linger fires with the stale generation — must be a no-op.
+        nat.remove_if_generation(port, gen_a);
+        assert!(nat.lookup_back(port).is_some(), "B's mapping was torn down");
+        // B's own linger removes it.
+        nat.remove_if_generation(port, gen_b);
+        assert!(nat.lookup_back(port).is_none());
+    }
+
+    #[test]
+    fn lookup_or_insert_does_not_return_another_flows_port() {
+        // Forcing a forward entry to point at a port owned by a different key
+        // must not hand that port to this key.
+        let nat = TcpNat::new();
+        let key_a = TcpKey {
+            source: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(10, 0, 0, 2),
+                1111,
+            )),
+            destination: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(1, 1, 1, 1),
+                443,
+            )),
+        };
+        let key_b = TcpKey {
+            source: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(10, 0, 0, 3),
+                2222,
+            )),
+            ..key_a
+        };
+        let port_a = nat.lookup_or_insert(key_a).unwrap();
+        let port_b = nat.lookup_or_insert(key_b).unwrap();
+        assert_ne!(port_a, port_b);
+        // Both flows keep their own distinct ports on re-lookup.
+        assert_eq!(nat.lookup_or_insert(key_a).unwrap(), port_a);
+        assert_eq!(nat.lookup_or_insert(key_b).unwrap(), port_b);
     }
 
     #[test]
@@ -1789,32 +1951,23 @@ mod tests {
         );
     }
 
-    /// A batch too small to hold every segment of a GRO read makes
-    /// `recv_multiple` fail with `ErrTooManySegments`, which would tear the
-    /// backend down — so small MTUs must scale the set *up*.
+    /// The buffer set must hold every segment a full 64 KiB GRO read can split
+    /// into down to the MSS floor; otherwise `recv_multiple` errors. The count
+    /// is MTU-independent — sized from the segment floor, not the MTU, since
+    /// the flow's MSS (not our MTU) determines the segment size.
     #[cfg(target_os = "linux")]
     #[test]
-    fn receive_batch_size_covers_a_full_gro_read() {
+    fn receive_batch_size_covers_the_segment_floor() {
         use tun_rs::IDEAL_BATCH_SIZE;
 
-        for mtu in [1280usize, 1500, 9000, 65535] {
-            assert_eq!(
-                receive_batch_size(mtu),
-                IDEAL_BATCH_SIZE,
-                "mtu {mtu} should not need more than the ideal batch"
-            );
-        }
-        // Small MTUs split a 64 KiB read into more pieces than the ideal
-        // batch holds, so the count has to grow.
-        for mtu in [576usize, 500, 296, 128] {
-            let count = receive_batch_size(mtu);
-            let min_segment = mtu.saturating_sub(120).max(1);
-            let needed = (u16::MAX as usize).div_ceil(min_segment);
-            assert!(
-                count >= needed,
-                "mtu {mtu}: {count} buffers cannot hold {needed} segments"
-            );
-        }
+        let count = receive_batch_size();
+        // Must cover a 64 KiB read split at the 48-byte TCP_MIN_SND_MSS floor.
+        let needed = (u16::MAX as usize).div_ceil(48);
+        assert!(
+            count >= needed,
+            "{count} buffers cannot hold {needed} floor-sized segments"
+        );
+        assert!(count >= IDEAL_BATCH_SIZE);
     }
 
     #[test]

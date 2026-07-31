@@ -52,19 +52,21 @@ impl Default for DnsHijack {
 pub enum TunStack {
     /// Userspace network stack based on smoltcp
     #[default]
-    #[serde(alias = "gvisor", alias = "Smoltcp")]
+    #[serde(alias = "gvisor", alias = "gVisor", alias = "Smoltcp")]
     Smoltcp,
     /// Kernel TCP stack: TCP flows are source-NATed in place to a local
     /// listener so the OS owns TCP state (congestion control, window
-    /// scaling), which usually outperforms the userspace stack. UDP and
-    /// ICMP stay on the userspace path.
+    /// scaling), which usually outperforms the userspace stack. UDP stays on
+    /// the userspace path.
     /// # Note
     /// - requires `gateway` to match the actual TUN interface address
     /// - the address right after `gateway` within the prefix is reserved as the
     ///   NAT source address and must not be used by anything else
     /// - if `gateway_v6` is set, the address right after it within its prefix
     ///   is reserved the same way
-    #[serde(alias = "mixed", alias = "System")]
+    /// - only ICMP echo to the `gateway` address is answered; pings to other
+    ///   addresses through the TUN get no reply, unlike the `smoltcp` stack
+    #[serde(alias = "mixed", alias = "Mixed", alias = "System")]
     System,
 }
 
