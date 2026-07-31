@@ -70,6 +70,17 @@ struct TcpEntry {
     accepted: bool,
 }
 
+/// Bidirectional map between an original TCP five-tuple and the NAT source
+/// port that stands in for it.
+///
+/// Both directions are needed on the hot path: uplink packets look up by
+/// five-tuple to find their NAT port, and downlink packets (plus `accept`)
+/// look up by NAT port to recover the original tuple. Both maps are sharded
+/// to keep concurrent flows off a single lock.
+///
+/// Lock order is **forward before reverse** — `lookup_or_insert` holds
+/// forward while taking reverse, so anything that needs both must acquire
+/// them in that order, or release one before taking the other.
 struct TcpNat {
     forward: Box<[Mutex<HashMap<TcpKey, u16>>]>,
     reverse: Box<[Mutex<HashMap<u16, TcpEntry>>]>,
@@ -235,6 +246,11 @@ struct Ipv4View {
     destination: Ipv4Addr,
 }
 
+/// Validates an IPv4 packet and locates its transport header.
+///
+/// Rejects fragments: this backend rewrites transport ports, which are only
+/// present in the first fragment, so reassembly would be required to handle
+/// them correctly.
 fn parse_ipv4(packet: &[u8]) -> io::Result<Ipv4View> {
     if packet.len() < IPV4_MIN_HEADER || packet[0] >> 4 != 4 {
         return Err(io::Error::other("invalid IPv4 packet"));
@@ -270,6 +286,11 @@ struct Ipv6View {
     destination: Ipv6Addr,
 }
 
+/// Validates an IPv6 packet and walks its extension-header chain to find the
+/// transport header.
+///
+/// Rejects fragment (44) and ESP (50) headers: the former needs reassembly
+/// before ports are visible, the latter hides them entirely.
 fn parse_ipv6(packet: &[u8]) -> io::Result<Ipv6View> {
     if packet.len() < IPV6_HEADER || packet[0] >> 4 != 6 {
         return Err(io::Error::other("invalid IPv6 packet"));
@@ -374,6 +395,12 @@ fn checksum(data: &[u8]) -> u16 {
     !checksum_fold(sum)
 }
 
+/// Rewrites an IPv4 TCP packet's four-tuple in place.
+///
+/// Both the IP header checksum and the TCP checksum are updated
+/// incrementally (RFC 1624) rather than recomputed, so cost is independent
+/// of payload size. A TCP checksum that lands on zero is written as 0xffff,
+/// since zero means "no checksum" and would be rejected.
 fn rewrite_ipv4_tcp(
     packet: &mut [u8],
     header_len: usize,
@@ -430,6 +457,11 @@ fn rewrite_ipv4_tcp(
     Ok(())
 }
 
+/// Rewrites an IPv6 TCP packet's four-tuple in place.
+///
+/// Like the IPv4 path this updates the TCP checksum incrementally; IPv6 has
+/// no header checksum to maintain. Addresses are folded in word by word
+/// because they participate in the TCP pseudo-header.
 fn rewrite_ipv6_tcp(
     packet: &mut [u8],
     transport_offset: usize,
@@ -476,6 +508,12 @@ fn rewrite_ipv6_tcp(
     Ok(())
 }
 
+/// Computes an IPv6 transport checksum from scratch, over the RFC 2460
+/// pseudo-header (source, destination, payload length, next header) followed
+/// by the transport payload.
+///
+/// Used where no prior checksum exists to update incrementally: synthesized
+/// UDP downlink packets and ICMPv6 echo replies.
 fn checksum_ipv6_transport(
     packet: &[u8],
     transport_offset: usize,
@@ -547,6 +585,12 @@ fn make_icmpv6_echo_reply(
     true
 }
 
+/// Derives the NAT source address as `gateway + 1`.
+///
+/// Uplink packets are rewritten to come *from* this address so the kernel
+/// routes the listener's replies back out the TUN rather than to the real
+/// client. It must therefore be inside the TUN prefix, and must not be the
+/// network or broadcast address.
 fn ipv4_nat_address(gateway: ipnet::Ipv4Net) -> Result<Ipv4Addr, Error> {
     let tun_address = gateway.addr();
     let netmask = gateway.netmask();
@@ -607,6 +651,11 @@ fn ipv6_adjacent_address(
     Ok(nat_address)
 }
 
+/// Accepts redirected connections and dispatches them under their original
+/// five-tuple.
+///
+/// Only peers coming from `nat_ip` are ours; the listener is reachable by
+/// other local traffic, so anything else is dropped rather than proxied.
 async fn tcp_accept_loop(
     listener: TcpListener,
     nat_ip: IpAddr,
@@ -732,6 +781,13 @@ fn bind_v6_listener(address: Ipv6Addr) -> io::Result<TcpListener> {
     }
 }
 
+/// Runs the system stack until one of its tasks fails.
+///
+/// Drives seven concurrent futures: the TUN reader (which rewrites TCP and
+/// hands UDP to the codec), the single TUN writer that owns the device sink,
+/// the UDP downlink pump, the IPv4 and IPv6 accept loops, the datagram
+/// dispatcher, and the periodic NAT cleanup. They are selected over, so the
+/// first failure tears the backend down and surfaces the error.
 pub(crate) async fn run(
     cfg: TunConfig,
     tun: tun_rs::AsyncDevice,
