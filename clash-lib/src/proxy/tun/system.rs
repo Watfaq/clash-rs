@@ -22,10 +22,11 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
+#[cfg(not(target_os = "linux"))]
 use futures::{SinkExt, StreamExt};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type as SocketType};
 use tokio::{net::TcpListener, sync::mpsc, time};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::{
     Error,
@@ -43,7 +44,12 @@ const IPV6_HEADER: usize = 40;
 const TCP_MIN_HEADER: usize = 20;
 const TCP_NAT_SHARDS: usize = 64;
 const FIRST_NAT_PORT: u16 = 10_000;
+/// Depth of the queue feeding the single device writer on platforms without
+/// the batched API.
+#[cfg(not(target_os = "linux"))]
 const SYSTEM_WRITE_QUEUE: usize = 1024;
+/// Fallback when the config does not pin an MTU; matches the device default.
+const DEFAULT_MTU: u16 = 1500;
 const UDP_DOWNLINK_QUEUE: usize = 4096;
 /// How long a NAT entry may stay un-accepted before it is reclaimed. The
 /// kernel retries SYNs well within this window; anything older is a dead
@@ -781,6 +787,143 @@ fn bind_v6_listener(address: Ipv6Addr) -> io::Result<TcpListener> {
     }
 }
 
+/// What the I/O driver should do with a packet after processing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Disposition {
+    /// Rewritten in place; hand it back to the TUN device.
+    WriteBack,
+    /// Consumed (forwarded to the UDP codec) or not ours; nothing to write.
+    Done,
+}
+
+/// Everything the packet path needs, so the batched and per-packet I/O
+/// drivers can share a single processing function.
+struct PacketContext {
+    tun_address: Ipv4Addr,
+    nat_address: Ipv4Addr,
+    listener_port: u16,
+    /// `(tun address, NAT address, listener port)`, absent when IPv6 is off.
+    ipv6: Option<(Ipv6Addr, Ipv6Addr, u16)>,
+    nat: Arc<TcpNat>,
+    udp_inbound: mpsc::UnboundedSender<watfaq_netstack::Packet>,
+}
+
+impl PacketContext {
+    /// Rewrites one IP packet in place and says what to do with it.
+    ///
+    /// Synchronous on purpose: the UDP hand-off uses an unbounded channel, so
+    /// nothing here needs to await, which lets a batched driver run a whole
+    /// batch without yielding.
+    fn process(&self, packet: &mut [u8]) -> Disposition {
+        if packet.is_empty() {
+            return Disposition::Done;
+        }
+        match packet[0] >> 4 {
+            4 => self.process_v4(packet),
+            6 => self.process_v6(packet),
+            _ => {
+                trace!("system TUN ignored packet with unknown IP version");
+                Disposition::Done
+            }
+        }
+    }
+
+    fn process_v4(&self, packet: &mut [u8]) -> Disposition {
+        let view = match parse_ipv4(packet) {
+            Ok(view) => view,
+            Err(e) => {
+                trace!("system TUN ignored IPv4 packet: {e}");
+                return Disposition::Done;
+            }
+        };
+        match view.protocol {
+            6 => {
+                if process_tcp_v4(
+                    packet,
+                    view,
+                    &self.nat,
+                    self.tun_address,
+                    self.nat_address,
+                    self.listener_port,
+                )
+                .is_some()
+                {
+                    Disposition::WriteBack
+                } else {
+                    Disposition::Done
+                }
+            }
+            17 => {
+                // Handed over as a whole IP packet; the codec re-parses it and
+                // passes the payload to the datagram path. This copies,
+                // because a batched driver reuses its receive buffers.
+                self.udp_inbound
+                    .send(watfaq_netstack::Packet::new(Bytes::copy_from_slice(
+                        packet,
+                    )))
+                    .ok();
+                Disposition::Done
+            }
+            1 => {
+                if make_icmp_echo_reply(packet, view, self.tun_address) {
+                    Disposition::WriteBack
+                } else {
+                    Disposition::Done
+                }
+            }
+            _ => Disposition::Done,
+        }
+    }
+
+    fn process_v6(&self, packet: &mut [u8]) -> Disposition {
+        let view = match parse_ipv6(packet) {
+            Ok(view) => view,
+            Err(e) => {
+                trace!("system TUN ignored IPv6 packet: {e}");
+                return Disposition::Done;
+            }
+        };
+        let Some((tun_v6, nat_v6, v6_port)) = self.ipv6 else {
+            return Disposition::Done;
+        };
+        match view.protocol {
+            6 => {
+                if process_tcp_v6(packet, view, &self.nat, tun_v6, nat_v6, v6_port)
+                    .is_some()
+                {
+                    Disposition::WriteBack
+                } else {
+                    Disposition::Done
+                }
+            }
+            17 => {
+                // The UDP codec assumes a fixed 40-byte IPv6 header; packets
+                // carrying extension headers would be parsed incorrectly.
+                if view.transport_offset != IPV6_HEADER {
+                    trace!(
+                        "system TUN dropped IPv6 UDP packet with extension headers"
+                    );
+                    return Disposition::Done;
+                }
+                self.udp_inbound
+                    .send(watfaq_netstack::Packet::new(Bytes::copy_from_slice(
+                        packet,
+                    )))
+                    .ok();
+                Disposition::Done
+            }
+            58 => {
+                if make_icmpv6_echo_reply(packet, view, tun_v6) {
+                    Disposition::WriteBack
+                } else {
+                    Disposition::Done
+                }
+            }
+            _ => Disposition::Done,
+        }
+    }
+}
+
 /// Runs the system stack until one of its tasks fails.
 ///
 /// Drives seven concurrent futures: the TUN reader (which rewrites TCP and
@@ -812,60 +955,29 @@ pub(crate) async fn run(
         None => (None, None),
     };
 
-    let framed = tun_rs::async_framed::DeviceFramed::new(
-        tun,
-        tun_rs::async_framed::BytesCodec::new(),
-    );
-    let (mut tun_sink, mut tun_stream) = framed.split::<Bytes>();
-
-    // Everything written back to the TUN device goes through this queue so
-    // the device sink has a single owner.
-    let (writer_tx, mut writer_rx) = mpsc::channel::<Bytes>(SYSTEM_WRITE_QUEUE);
-
     // UDP reuses the userspace packet codec and the existing datagram path.
     let (udp_inbound_tx, udp_inbound_rx) =
         mpsc::unbounded_channel::<watfaq_netstack::Packet>();
-    let (udp_outbound_tx, mut udp_outbound_rx) =
+    let (udp_outbound_tx, udp_outbound_rx) =
         mpsc::channel::<watfaq_netstack::Packet>(UDP_DOWNLINK_QUEUE);
     let udp_socket =
         watfaq_netstack::UdpSocket::new(udp_inbound_rx, udp_outbound_tx);
 
     let tcp_nat = TcpNat::new();
 
-    let fut_writer = async {
-        while let Some(packet) = writer_rx.recv().await {
-            if let Err(e) = tun_sink.send(packet).await {
-                // TimedOut means the Wintun/TUN send ring buffer was full for
-                // too long (driver backpressure). Drop the packet and keep
-                // the runner alive — packet loss is normal at the IP layer.
-                if e.kind() == io::ErrorKind::TimedOut
-                    || e.kind() == io::ErrorKind::WouldBlock
-                {
-                    warn!("tun send buffer full, dropping packet: {}", e);
-                    continue;
-                }
-                error!("failed to send pkt to tun: {}", e);
-                break;
-            }
-        }
-        Err(Error::Operation(
-            "tun system stack writer stopped unexpectedly".to_string(),
-        ))
+    let ctx = PacketContext {
+        tun_address,
+        nat_address,
+        listener_port,
+        ipv6: ipv6_addresses,
+        nat: Arc::clone(&tcp_nat),
+        udp_inbound: udp_inbound_tx,
     };
 
-    let fut_udp_downlink = {
-        let writer_tx = writer_tx.clone();
-        async move {
-            while let Some(packet) = udp_outbound_rx.recv().await {
-                if writer_tx.send(packet.into_bytes()).await.is_err() {
-                    break;
-                }
-            }
-            Err(Error::Operation(
-                "tun system stack UDP downlink stopped unexpectedly".to_string(),
-            ))
-        }
-    };
+    // One task owns the device and drives both directions, so the packets a
+    // batch receives are the same buffers it writes back — no channel hop and
+    // no copy on the TCP path.
+    let fut_tun_io = tun_io(tun, ctx, udp_outbound_rx, mtu(&cfg));
 
     let fut_accept_v4 = {
         let nat = Arc::clone(&tcp_nat);
@@ -934,173 +1046,274 @@ pub(crate) async fn run(
         ))
     };
 
-    let fut_read_loop = {
-        let tcp_nat = Arc::clone(&tcp_nat);
-        async move {
-            while let Some(packet) = tun_stream.next().await {
-                let mut packet: BytesMut = match packet {
-                    Ok(packet) => packet,
-                    Err(e) => {
-                        error!("tun stream error: {}", e);
-                        break;
-                    }
-                };
-                if packet.is_empty() {
-                    continue;
-                }
-                match packet[0] >> 4 {
-                    4 => {
-                        let view = match parse_ipv4(&packet) {
-                            Ok(view) => view,
-                            Err(e) => {
-                                trace!("system TUN ignored IPv4 packet: {}", e);
-                                continue;
-                            }
-                        };
-                        match view.protocol {
-                            6 => {
-                                if process_tcp_v4(
-                                    &mut packet,
-                                    view,
-                                    &tcp_nat,
-                                    tun_address,
-                                    nat_address,
-                                    listener_port,
-                                )
-                                .is_none()
-                                {
-                                    continue;
-                                }
-                                if writer_tx.send(packet.freeze()).await.is_err() {
-                                    break;
-                                }
-                            }
-                            17 => {
-                                // Forwarded as a whole IP packet; the codec
-                                // re-parses and hands the payload to the
-                                // datagram path.
-                                udp_inbound_tx
-                                    .send(watfaq_netstack::Packet::new(
-                                        packet.freeze(),
-                                    ))
-                                    .ok();
-                            }
-                            1 => {
-                                if !make_icmp_echo_reply(
-                                    &mut packet,
-                                    view,
-                                    tun_address,
-                                ) {
-                                    continue;
-                                }
-                                if writer_tx.send(packet.freeze()).await.is_err() {
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    6 => {
-                        let view = match parse_ipv6(&packet) {
-                            Ok(view) => view,
-                            Err(e) => {
-                                trace!("system TUN ignored IPv6 packet: {}", e);
-                                continue;
-                            }
-                        };
-                        match view.protocol {
-                            6 => {
-                                let Some((
-                                    tun_v6_address,
-                                    nat_v6_address,
-                                    v6_listener_port,
-                                )) = ipv6_addresses
-                                else {
-                                    continue;
-                                };
-                                if process_tcp_v6(
-                                    &mut packet,
-                                    view,
-                                    &tcp_nat,
-                                    tun_v6_address,
-                                    nat_v6_address,
-                                    v6_listener_port,
-                                )
-                                .is_none()
-                                {
-                                    continue;
-                                }
-                                if writer_tx.send(packet.freeze()).await.is_err() {
-                                    break;
-                                }
-                            }
-                            17 => {
-                                // The UDP codec assumes a fixed 40-byte IPv6
-                                // header; packets carrying extension headers
-                                // would be parsed incorrectly, so drop them.
-                                if view.transport_offset != IPV6_HEADER {
-                                    trace!(
-                                        "system TUN dropped IPv6 UDP packet with \
-                                         extension headers"
-                                    );
-                                    continue;
-                                }
-                                udp_inbound_tx
-                                    .send(watfaq_netstack::Packet::new(
-                                        packet.freeze(),
-                                    ))
-                                    .ok();
-                            }
-                            58 => {
-                                let Some((tun_v6_address, ..)) = ipv6_addresses
-                                else {
-                                    continue;
-                                };
-                                if !make_icmpv6_echo_reply(
-                                    &mut packet,
-                                    view,
-                                    tun_v6_address,
-                                ) {
-                                    continue;
-                                }
-                                if writer_tx.send(packet.freeze()).await.is_err() {
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {
-                        trace!("system TUN ignored packet with unknown IP version");
-                    }
-                }
-            }
-            Err(Error::Operation(
-                "tun system stack read loop stopped unexpectedly".to_string(),
-            ))
-        }
-    };
-
-    debug!(
-        "tun system stack ready: gateway {} nat {} listener port {}",
-        tun_address, nat_address, listener_port
-    );
-
     tokio::select! {
-        res = fut_writer => res,
-        res = fut_udp_downlink => res,
+        res = fut_tun_io => res,
         res = fut_accept_v4 => res,
         res = fut_accept_v6 => res,
         _ = fut_nat_cleanup => Ok(()),
         res = fut_udp_dispatch => res,
-        res = fut_read_loop => res,
+    }
+}
+
+/// Effective MTU, which sizes the per-packet receive buffers.
+fn mtu(cfg: &TunConfig) -> usize {
+    cfg.mtu.unwrap_or(DEFAULT_MTU) as usize
+}
+
+/// Batched TUN I/O, available when the device was opened with offload.
+///
+/// `recv_multiple` takes one large GRO read from the kernel and splits it into
+/// individual IP packets, and `send_multiple` coalesces outgoing packets back
+/// into fewer, larger writes. That amortises the per-packet syscall, which is
+/// what this backend is bound by: every payload crosses the TUN device twice
+/// (uplink is re-injected for the kernel listener, and the listener's reply is
+/// read back out again), so it issues roughly twice the device operations the
+/// userspace stack does.
+///
+/// Both helpers degrade to single-packet I/O when the device has no virtio
+/// header, so this path is correct whether or not offload was negotiated.
+#[cfg(target_os = "linux")]
+async fn tun_io(
+    device: tun_rs::AsyncDevice,
+    ctx: PacketContext,
+    udp_outbound_rx: mpsc::Receiver<watfaq_netstack::Packet>,
+    mtu: usize,
+) -> Result<(), Error> {
+    let device = Arc::new(device);
+    tokio::select! {
+        res = batched_read_loop(Arc::clone(&device), ctx, mtu) => res,
+        res = batched_udp_downlink(device, udp_outbound_rx, mtu) => res,
+    }
+}
+
+/// Reads a batch, rewrites each packet, and writes back the ones that need it
+/// — reusing the very buffers the batch was received into, so the TCP path
+/// copies nothing.
+///
+/// Receive and send are inline in one loop rather than split across tasks with
+/// a buffer hand-off. A ping-pong arrangement was measured and was clearly
+/// slower: the per-batch channel round-trip (task wake-up, scheduler hop,
+/// cross-thread hand-back) costs far more than the write stall it removes, and
+/// with a bounded set count the reader ends up waiting on the writer anyway.
+#[cfg(target_os = "linux")]
+async fn batched_read_loop(
+    device: Arc<tun_rs::AsyncDevice>,
+    ctx: PacketContext,
+    mtu: usize,
+) -> Result<(), Error> {
+    use tun_rs::{GROTable, IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
+
+    // One GRO read can carry up to 64 KiB, split across the buffer set, so the
+    // set must be able to absorb that many MTU-sized pieces; IDEAL_BATCH_SIZE
+    // (128) covers a 1500-byte MTU with room spare.
+    let buf_len = VIRTIO_NET_HDR_LEN + mtu.max(IPV4_MIN_HEADER);
+    let mut original = vec![0u8; VIRTIO_NET_HDR_LEN + u16::MAX as usize];
+    let mut bufs: Vec<BytesMut> = (0..IDEAL_BATCH_SIZE)
+        .map(|_| BytesMut::zeroed(buf_len))
+        .collect();
+    let mut sizes = vec![0usize; IDEAL_BATCH_SIZE];
+    let mut gro = GROTable::new();
+
+    loop {
+        let received = device
+            .recv_multiple(&mut original, &mut bufs, &mut sizes, VIRTIO_NET_HDR_LEN)
+            .await
+            .map_err(|e| {
+                Error::Operation(format!("system TUN batched read failed: {e}"))
+            })?;
+
+        // Compact the packets that need writing back into the front of the
+        // buffer set: `send_multiple` writes every buffer handed to it, so it
+        // needs a contiguous slice. Swapping moves buffer handles, not bytes.
+        //
+        // Invariant per iteration: `..write_back` holds trimmed write-backs,
+        // `write_back..i` holds processed packets we are done with, and `i..`
+        // still holds freshly received ones.
+        let mut write_back = 0;
+        for i in 0..received {
+            let len = sizes[i];
+            if len == 0 {
+                continue;
+            }
+            let packet = &mut bufs[i][VIRTIO_NET_HDR_LEN..VIRTIO_NET_HDR_LEN + len];
+            if ctx.process(packet) == Disposition::WriteBack {
+                // send_multiple takes each packet's length from the buffer's
+                // length, so trim to exactly this packet.
+                bufs[i].truncate(VIRTIO_NET_HDR_LEN + len);
+                if write_back != i {
+                    bufs.swap(write_back, i);
+                }
+                write_back += 1;
+            }
+        }
+
+        if write_back == 0 {
+            continue;
+        }
+        let sent = device
+            .send_multiple(&mut gro, &mut bufs[..write_back], VIRTIO_NET_HDR_LEN)
+            .await;
+        // Restore the full length the next receive needs. Only the trimmed
+        // buffers are touched, and a full-MTU packet leaves almost nothing to
+        // re-zero.
+        for buf in &mut bufs[..write_back] {
+            buf.resize(buf_len, 0);
+        }
+        if let Err(e) = sent {
+            // A full device queue is ordinary IP-layer loss: TCP retransmits.
+            if e.kind() == io::ErrorKind::WouldBlock
+                || e.kind() == io::ErrorKind::TimedOut
+            {
+                warn!("system TUN send queue full, dropping batch: {e}");
+                continue;
+            }
+            return Err(Error::Operation(format!(
+                "system TUN batched write failed: {e}"
+            )));
+        }
+    }
+}
+
+/// Drains UDP downlink packets in batches and writes them with one coalesced
+/// device operation per batch.
+#[cfg(target_os = "linux")]
+async fn batched_udp_downlink(
+    device: Arc<tun_rs::AsyncDevice>,
+    mut udp_outbound_rx: mpsc::Receiver<watfaq_netstack::Packet>,
+    mtu: usize,
+) -> Result<(), Error> {
+    use tun_rs::{GROTable, IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
+
+    let mut gro = GROTable::new();
+    let mut queued: Vec<watfaq_netstack::Packet> =
+        Vec::with_capacity(IDEAL_BATCH_SIZE);
+    let mut bufs: Vec<BytesMut> = Vec::with_capacity(IDEAL_BATCH_SIZE);
+
+    loop {
+        queued.clear();
+        // recv_many blocks for the first packet, then takes whatever else is
+        // already queued, so a quiet link still gets single-packet latency.
+        if udp_outbound_rx
+            .recv_many(&mut queued, IDEAL_BATCH_SIZE)
+            .await
+            == 0
+        {
+            return Err(Error::Operation(
+                "tun system stack UDP downlink stopped unexpectedly".to_string(),
+            ));
+        }
+
+        bufs.clear();
+        for packet in &queued {
+            let data = packet.data();
+            // The codec hands us a plain IP packet; give it the headroom
+            // send_multiple needs for the virtio header.
+            let mut buf =
+                BytesMut::with_capacity(VIRTIO_NET_HDR_LEN + data.len().max(mtu));
+            buf.resize(VIRTIO_NET_HDR_LEN, 0);
+            buf.extend_from_slice(data);
+            bufs.push(buf);
+        }
+
+        if let Err(e) = device
+            .send_multiple(&mut gro, &mut bufs, VIRTIO_NET_HDR_LEN)
+            .await
+        {
+            if e.kind() == io::ErrorKind::WouldBlock
+                || e.kind() == io::ErrorKind::TimedOut
+            {
+                warn!("system TUN send queue full, dropping UDP batch: {e}");
+                continue;
+            }
+            return Err(Error::Operation(format!(
+                "system TUN UDP downlink write failed: {e}"
+            )));
+        }
+    }
+}
+
+/// Per-packet TUN I/O for platforms without the batched offload API.
+#[cfg(not(target_os = "linux"))]
+async fn tun_io(
+    device: tun_rs::AsyncDevice,
+    ctx: PacketContext,
+    mut udp_outbound_rx: mpsc::Receiver<watfaq_netstack::Packet>,
+    _mtu: usize,
+) -> Result<(), Error> {
+    let framed = tun_rs::async_framed::DeviceFramed::new(
+        device,
+        tun_rs::async_framed::BytesCodec::new(),
+    );
+    let (mut tun_sink, mut tun_stream) = framed.split::<Bytes>();
+    // The sink has a single owner, so both producers funnel through a queue.
+    let (writer_tx, mut writer_rx) = mpsc::channel::<Bytes>(SYSTEM_WRITE_QUEUE);
+
+    let fut_writer = async move {
+        while let Some(packet) = writer_rx.recv().await {
+            if let Err(e) = tun_sink.send(packet).await {
+                // TimedOut means the Wintun/TUN send ring buffer was full for
+                // too long (driver backpressure). Drop the packet and keep the
+                // runner alive — packet loss is normal at the IP layer.
+                if e.kind() == io::ErrorKind::TimedOut
+                    || e.kind() == io::ErrorKind::WouldBlock
+                {
+                    warn!("tun send buffer full, dropping packet: {e}");
+                    continue;
+                }
+                return Err(Error::Operation(format!(
+                    "failed to send pkt to tun: {e}"
+                )));
+            }
+        }
+        Err(Error::Operation(
+            "tun system stack writer stopped unexpectedly".to_string(),
+        ))
+    };
+
+    let fut_udp_downlink = {
+        let writer_tx = writer_tx.clone();
+        async move {
+            while let Some(packet) = udp_outbound_rx.recv().await {
+                if writer_tx.send(packet.into_bytes()).await.is_err() {
+                    break;
+                }
+            }
+            Err(Error::Operation(
+                "tun system stack UDP downlink stopped unexpectedly".to_string(),
+            ))
+        }
+    };
+
+    let fut_read = async move {
+        while let Some(packet) = tun_stream.next().await {
+            let mut packet: BytesMut = match packet {
+                Ok(packet) => packet,
+                Err(e) => {
+                    return Err(Error::Operation(format!("tun stream error: {e}")));
+                }
+            };
+            if ctx.process(&mut packet) == Disposition::WriteBack
+                && writer_tx.send(packet.freeze()).await.is_err()
+            {
+                break;
+            }
+        }
+        Err(Error::Operation(
+            "tun system stack read loop stopped unexpectedly".to_string(),
+        ))
+    };
+
+    tokio::select! {
+        res = fut_writer => res,
+        res = fut_udp_downlink => res,
+        res = fut_read => res,
     }
 }
 
 /// Rewrites an uplink or downlink IPv4 TCP packet in place. Returns `None`
 /// when the packet should be dropped.
 fn process_tcp_v4(
-    packet: &mut BytesMut,
+    packet: &mut [u8],
     view: Ipv4View,
     nat: &TcpNat,
     tun_address: Ipv4Addr,
@@ -1155,7 +1368,7 @@ fn process_tcp_v4(
 /// Rewrites an uplink or downlink IPv6 TCP packet in place. Returns `None`
 /// when the packet should be dropped.
 fn process_tcp_v6(
-    packet: &mut BytesMut,
+    packet: &mut [u8],
     view: Ipv6View,
     nat: &TcpNat,
     tun_address: Ipv6Addr,

@@ -200,6 +200,18 @@ impl TunRunner {
                             if cfg!(windows) { 65535u16 } else { 1500u16 },
                         ));
 
+                    // Offload (TSO/GSO) is only for the system stack, which
+                    // reads and writes through the batched recv_multiple /
+                    // send_multiple API. It must stay off for the userspace
+                    // stack: enabling it prepends a virtio header to every
+                    // device read and write, which the plain framed codec
+                    // there does not expect.
+                    #[cfg(target_os = "linux")]
+                    if cfg.stack == TunStack::System {
+                        debug!("enabling tun offload for the system stack");
+                        tun_builder = tun_builder.offload(true);
+                    }
+
                     if !tun_exist {
                         debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
                         tun_builder = tun_builder.ipv4(
