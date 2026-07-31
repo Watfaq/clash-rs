@@ -50,6 +50,12 @@ const UDP_DOWNLINK_QUEUE: usize = 4096;
 /// half-open connection.
 const TCP_HALF_OPEN_TIMEOUT: Duration = Duration::from_secs(30);
 const NAT_CLEANUP_INTERVAL: Duration = Duration::from_secs(30);
+/// How long a mapping outlives its dispatched stream, so the kernel's
+/// closing FIN and final ACK can still be translated.
+const NAT_LINGER: Duration = Duration::from_secs(10);
+/// Pause before retrying `accept` after a resource-exhaustion error, which
+/// would otherwise recur immediately and spin the accept loop.
+const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TcpKey {
@@ -177,6 +183,33 @@ impl TcpNat {
         }
     }
 
+    /// Removes `port`, but only if it is *still* expired.
+    ///
+    /// `cleanup` collects candidates without holding the shard lock, and in
+    /// that gap `lookup_or_insert` may have refreshed `last_seen` for a new
+    /// packet of the same flow, or `mark_accepted` may have claimed the
+    /// entry. Removing it regardless would blackhole a live connection: the
+    /// downlink path would find no mapping and drop every kernel packet.
+    fn remove_if_still_expired(&self, port: u16, timeout: Duration) {
+        let key = {
+            let mut reverse = lock(&self.reverse[Self::reverse_shard(port)]);
+            match reverse.get(&port) {
+                Some(entry)
+                    if !entry.accepted && entry.last_seen.elapsed() >= timeout =>
+                {
+                    reverse.remove(&port).map(|entry| entry.key)
+                }
+                _ => None,
+            }
+        };
+        // The reverse guard is dropped above before the forward lock is
+        // taken: `lookup_or_insert` acquires forward first, so holding
+        // reverse while waiting on forward could deadlock.
+        if let Some(key) = key {
+            lock(&self.forward[Self::forward_shard(&key)]).remove(&key);
+        }
+    }
+
     fn cleanup(&self, timeout: Duration) {
         let now = Instant::now();
         let mut expired = Vec::new();
@@ -188,7 +221,7 @@ impl TcpNat {
             }));
         }
         for port in expired {
-            self.remove(port);
+            self.remove_if_still_expired(port, timeout);
         }
     }
 }
@@ -582,8 +615,28 @@ async fn tcp_accept_loop(
     so_mark: Option<u32>,
 ) {
     loop {
-        let Ok((stream, peer)) = listener.accept().await else {
-            return;
+        let (stream, peer) = match listener.accept().await {
+            Ok(accepted) => accepted,
+            Err(e) => {
+                // Accept errors are per-connection or transient. Returning
+                // here would resolve this future and, because `run` selects
+                // over it, tear down the whole TUN backend — so a single
+                // aborted handshake or file-descriptor shortage would kill
+                // all TUN traffic.
+                warn!("system TUN TCP accept failed: {e}");
+                if matches!(
+                    e.raw_os_error(),
+                    Some(libc::EMFILE)
+                        | Some(libc::ENFILE)
+                        | Some(libc::ENOBUFS)
+                        | Some(libc::ENOMEM)
+                ) {
+                    // Resource exhaustion repeats immediately; back off so
+                    // the loop does not spin at 100% CPU while it lasts.
+                    time::sleep(ACCEPT_BACKOFF).await;
+                }
+                continue;
+            }
         };
         if peer.ip() != nat_ip {
             continue;
@@ -614,6 +667,12 @@ async fn tcp_accept_loop(
             };
             debug!("new tun TCP session assigned: {}", sess);
             dispatcher.dispatch_stream(sess, Box::new(stream)).await;
+            // The kernel closes the accepted socket only once it is dropped
+            // here, and the FIN plus final ACK it then sends still have to
+            // be translated back to the original five-tuple. Dropping the
+            // mapping immediately would blackhole them, leaving the client
+            // to wait out its own timeout while the kernel retransmits.
+            time::sleep(NAT_LINGER).await;
             nat.remove(peer.port());
         });
     }
@@ -627,21 +686,50 @@ fn bind_v4_listener(address: Ipv4Addr) -> io::Result<TcpListener> {
     TcpListener::from_std(socket.into())
 }
 
-/// The IPv6 listener binds the unspecified address because the TUN address
-/// may still be tentative (DAD) when we start; the accept loop filters on
-/// the NAT source address instead.
-fn bind_v6_listener() -> io::Result<TcpListener> {
-    let socket = Socket::new(Domain::IPV6, SocketType::STREAM, Some(Protocol::TCP))?;
-    socket.set_only_v6(true)?;
-    socket.bind(&SockAddr::from(SocketAddr::V6(SocketAddrV6::new(
-        Ipv6Addr::UNSPECIFIED,
-        0,
-        0,
-        0,
-    ))))?;
-    socket.listen(1024)?;
-    socket.set_nonblocking(true)?;
-    TcpListener::from_std(socket.into())
+/// Binds the IPv6 listener to the TUN address.
+///
+/// The address can still be tentative (duplicate address detection) at this
+/// point, which makes `bind` fail with `EADDRNOTAVAIL`. On Linux
+/// `IPV6_FREEBIND` lifts that restriction; elsewhere we fall back to the
+/// unspecified address, which works but leaves the port reachable on every
+/// IPv6 interface until `tcp_accept_loop`'s peer filter rejects the
+/// connection.
+fn bind_v6_listener(address: Ipv6Addr) -> io::Result<TcpListener> {
+    fn new_socket() -> io::Result<Socket> {
+        let socket =
+            Socket::new(Domain::IPV6, SocketType::STREAM, Some(Protocol::TCP))?;
+        socket.set_only_v6(true)?;
+        Ok(socket)
+    }
+
+    fn listen(socket: Socket) -> io::Result<TcpListener> {
+        socket.listen(1024)?;
+        socket.set_nonblocking(true)?;
+        TcpListener::from_std(socket.into())
+    }
+
+    let socket = new_socket()?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    socket.set_freebind_v6(true)?;
+    match socket.bind(&SockAddr::from(SocketAddr::V6(SocketAddrV6::new(
+        address, 0, 0, 0,
+    )))) {
+        Ok(()) => listen(socket),
+        Err(e) => {
+            warn!(
+                "system TUN could not bind the IPv6 listener to {address}: {e}; \
+                 falling back to the unspecified address"
+            );
+            let socket = new_socket()?;
+            socket.bind(&SockAddr::from(SocketAddr::V6(SocketAddrV6::new(
+                Ipv6Addr::UNSPECIFIED,
+                0,
+                0,
+                0,
+            ))))?;
+            listen(socket)
+        }
+    }
 }
 
 pub(crate) async fn run(
@@ -661,7 +749,7 @@ pub(crate) async fn run(
             let tun_address = gateway_v6.addr();
             let nat_address =
                 ipv6_adjacent_address(tun_address, gateway_v6.prefix_len())?;
-            let listener = bind_v6_listener()?;
+            let listener = bind_v6_listener(tun_address)?;
             let port = listener.local_addr()?.port();
             (Some(listener), Some((tun_address, nat_address, port)))
         }
@@ -1189,6 +1277,10 @@ mod tests {
         write_u16(&mut packet, 40, 12345);
         write_u16(&mut packet, 42, 443);
         packet[52] = 0x50;
+        // Start from a correct checksum: an incremental update applied to a
+        // zero checksum would look plausible while being wrong.
+        let original = checksum_ipv6_transport(&packet, 40, 6);
+        write_u16(&mut packet, 56, original);
         rewrite_ipv6_tcp(
             &mut packet,
             40,
@@ -1206,6 +1298,120 @@ mod tests {
         );
         assert_eq!(read_u16(&packet, 40), 10000);
         assert_eq!(read_u16(&packet, 42), 20000);
+        // the incrementally updated checksum must match a full recomputation
+        let updated = read_u16(&packet, 56);
+        write_u16(&mut packet, 56, 0);
+        assert_eq!(updated, checksum_ipv6_transport(&packet, 40, 6));
+    }
+
+    /// The downlink branch of `process_tcp_v4`: a reply from the kernel
+    /// listener must be rewritten back to the original five-tuple.
+    #[test]
+    fn downlink_tcp_v4_is_restored_to_the_original_tuple() {
+        let client = SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 9), 12345);
+        let server = SocketAddrV4::new(Ipv4Addr::new(1, 1, 1, 1), 443);
+        let tun_address = Ipv4Addr::new(198, 18, 0, 1);
+        let nat_address = Ipv4Addr::new(198, 18, 0, 2);
+        let listener_port = 40000;
+
+        let nat = TcpNat::new();
+        let key = TcpKey {
+            source: SocketAddr::V4(client),
+            destination: SocketAddr::V4(server),
+        };
+        let nat_port = nat.lookup_or_insert(key).unwrap();
+
+        // a reply travelling tun_address:listener_port -> nat_address:nat_port
+        let mut packet = BytesMut::zeroed(40);
+        packet[0] = 0x45;
+        write_u16(&mut packet, 2, 40);
+        packet[9] = 6;
+        packet[12..16].copy_from_slice(&tun_address.octets());
+        packet[16..20].copy_from_slice(&nat_address.octets());
+        write_u16(&mut packet, 20, listener_port);
+        write_u16(&mut packet, 22, nat_port);
+        packet[32] = 0x50;
+        let ip_checksum = checksum(&packet[..20]);
+        write_u16(&mut packet, 10, ip_checksum);
+
+        let view = parse_ipv4(&packet).unwrap();
+        assert!(
+            process_tcp_v4(
+                &mut packet,
+                view,
+                &nat,
+                tun_address,
+                nat_address,
+                listener_port,
+            )
+            .is_some()
+        );
+
+        // the client must see the packet as coming straight from the server
+        assert_eq!(&packet[12..16], &server.ip().octets());
+        assert_eq!(&packet[16..20], &client.ip().octets());
+        assert_eq!(read_u16(&packet, 20), server.port());
+        assert_eq!(read_u16(&packet, 22), client.port());
+        let updated = read_u16(&packet, 10);
+        write_u16(&mut packet, 10, 0);
+        assert_eq!(updated, checksum(&packet[..20]));
+    }
+
+    /// A downlink packet whose NAT port is unknown must be dropped rather
+    /// than forwarded with a bogus tuple.
+    #[test]
+    fn downlink_tcp_v4_without_a_mapping_is_dropped() {
+        let tun_address = Ipv4Addr::new(198, 18, 0, 1);
+        let nat_address = Ipv4Addr::new(198, 18, 0, 2);
+        let listener_port = 40000;
+        let nat = TcpNat::new();
+
+        let mut packet = BytesMut::zeroed(40);
+        packet[0] = 0x45;
+        write_u16(&mut packet, 2, 40);
+        packet[9] = 6;
+        packet[12..16].copy_from_slice(&tun_address.octets());
+        packet[16..20].copy_from_slice(&nat_address.octets());
+        write_u16(&mut packet, 20, listener_port);
+        write_u16(&mut packet, 22, 55555); // never allocated
+        packet[32] = 0x50;
+
+        let view = parse_ipv4(&packet).unwrap();
+        assert!(
+            process_tcp_v4(
+                &mut packet,
+                view,
+                &nat,
+                tun_address,
+                nat_address,
+                listener_port,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn cleanup_keeps_an_entry_refreshed_after_the_scan() {
+        let nat = TcpNat::new();
+        let key = TcpKey {
+            source: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(10, 0, 0, 2),
+                34567,
+            )),
+            destination: SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::new(1, 1, 1, 1),
+                443,
+            )),
+        };
+        let port = nat.lookup_or_insert(key).unwrap();
+        // Simulates cleanup having already decided the port was expired,
+        // with a packet for the same flow arriving before the removal.
+        nat.lookup_or_insert(key).unwrap();
+        nat.remove_if_still_expired(port, Duration::from_secs(30));
+        assert!(
+            nat.lookup_back(port).is_some(),
+            "a refreshed mapping must survive cleanup"
+        );
     }
 
     #[test]

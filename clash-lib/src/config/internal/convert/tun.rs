@@ -50,7 +50,7 @@ mod tests {
     use crate::config::def::{TunConfig, TunStack};
 
     #[test]
-    fn tun_stack_parses_names_and_aliases() {
+    fn tun_stack_parses_and_converts_names_and_aliases() {
         for (yaml, expected) in [
             ("enable: true", TunStack::Smoltcp),
             ("enable: true\nstack: smoltcp", TunStack::Smoltcp),
@@ -59,7 +59,14 @@ mod tests {
             ("enable: true\nstack: mixed", TunStack::System),
         ] {
             let parsed: TunConfig = serde_yaml::from_str(yaml).unwrap();
-            assert_eq!(parsed.stack, expected, "yaml: {yaml}");
+            assert_eq!(parsed.stack, expected, "parse: {yaml}");
+            let converted = super::convert(Some(parsed)).unwrap();
+            assert_eq!(converted.stack, expected, "convert: {yaml}");
         }
+    }
+
+    #[test]
+    fn absent_tun_config_defaults_to_smoltcp() {
+        assert_eq!(super::convert(None).unwrap().stack, TunStack::Smoltcp);
     }
 }

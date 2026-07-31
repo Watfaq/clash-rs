@@ -62,6 +62,8 @@ pub enum TunStack {
     /// - requires `gateway` to match the actual TUN interface address
     /// - the address right after `gateway` within the prefix is reserved as the
     ///   NAT source address and must not be used by anything else
+    /// - if `gateway_v6` is set, the address right after it within its prefix
+    ///   is reserved the same way
     #[serde(alias = "mixed", alias = "System")]
     System,
 }

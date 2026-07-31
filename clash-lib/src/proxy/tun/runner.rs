@@ -30,6 +30,53 @@ struct TunInitializationConfig {
     guid: Option<u128>,
 }
 
+/// Checks that a reused TUN device actually carries the configured gateway
+/// addresses, which the system stack requires.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn verify_existing_tun_addresses(
+    cfg: &TunConfig,
+    tun_name: &str,
+) -> Result<(), Error> {
+    use network_interface::NetworkInterfaceConfig;
+
+    let addrs = network_interface::NetworkInterface::show()
+        .map_err(|e| {
+            Error::Operation(format!("failed to enumerate interfaces: {e}"))
+        })?
+        .into_iter()
+        .find(|x| x.name == tun_name)
+        .map(|x| x.addr)
+        .unwrap_or_default();
+
+    let has_v4 = addrs
+        .iter()
+        .any(|a| a.ip() == std::net::IpAddr::V4(cfg.gateway.addr()));
+    if !has_v4 {
+        return Err(Error::InvalidConfig(format!(
+            "tun device {} already exists but does not have the configured gateway \
+             {}; the system stack requires them to match. Either remove the device \
+             or set `gateway` to its actual address.",
+            tun_name,
+            cfg.gateway.addr()
+        )));
+    }
+
+    if let Some(gateway_v6) = cfg.gateway_v6
+        && !addrs
+            .iter()
+            .any(|a| a.ip() == std::net::IpAddr::V6(gateway_v6.addr()))
+    {
+        return Err(Error::InvalidConfig(format!(
+            "tun device {} already exists but does not have the configured \
+             gateway-v6 {}; the system stack requires them to match.",
+            tun_name,
+            gateway_v6.addr()
+        )));
+    }
+
+    Ok(())
+}
+
 pub struct TunRunner {
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
@@ -133,6 +180,16 @@ impl TunRunner {
 
                     if tun_exist {
                         info!("tun device {} already exists, using it.", &tun_name);
+                        // The address is only assigned when we create the
+                        // device, so a pre-existing one may carry a
+                        // different address than `gateway`. The system stack
+                        // binds its listener on `gateway` and derives the
+                        // NAT source address from it, so a mismatch makes it
+                        // bind an address the device does not have. Fail
+                        // with a clear message instead.
+                        if cfg.stack == TunStack::System {
+                            verify_existing_tun_addresses(cfg, &tun_name)?;
+                        }
                     } else {
                         info!("tun device {} does not exist, creating.", &tun_name);
                     }
