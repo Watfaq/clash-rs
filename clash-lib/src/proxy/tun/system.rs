@@ -893,7 +893,7 @@ pub(crate) async fn run(
                             17 => {
                                 // The UDP codec assumes a fixed 40-byte IPv6
                                 // header; packets carrying extension headers
-                                // would be mis-parsed, so drop them.
+                                // would be parsed incorrectly, so drop them.
                                 if view.transport_offset != IPV6_HEADER {
                                     trace!(
                                         "system TUN dropped IPv6 UDP packet with \
