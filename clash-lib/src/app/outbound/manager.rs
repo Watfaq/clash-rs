@@ -248,15 +248,22 @@ impl OutboundManager {
         );
     }
 
-    /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
+    /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed.
+    ///
+    /// `force` is forwarded to [`ProxyManager::check`]: `true` for manual
+    /// user-triggered latency tests (bypass backoff, test every node),
+    /// `false` for automatic health checks (honour backoff for dead nodes).
     pub async fn url_test(
         &self,
         outbounds: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Duration,
+        force: bool,
     ) -> Vec<std::io::Result<(Duration, Duration)>> {
         let proxy_manager = self.proxy_manager.clone();
-        proxy_manager.check(outbounds, url, Some(timeout)).await
+        proxy_manager
+            .check(outbounds, url, Some(timeout), force)
+            .await
     }
 
     pub fn get_proxy_providers(&self) -> HashMap<String, ArcProxyProvider> {
@@ -858,7 +865,8 @@ impl OutboundManager {
                             providers,
                             proxy_manager.clone(),
                             cache_store.clone(),
-                        )),
+                        )
+                        .await),
                     );
                 }
             }

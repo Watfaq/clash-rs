@@ -451,8 +451,7 @@ impl EnhancedResolver {
     }
 
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
-        if let (Some(_fallback), Some(_fallback_domain_filters), Some(policy)) =
-            (&self.fallback, &self.fallback_domain_filters, &self.policy)
+        if let Some(policy) = &self.policy
             && let Some(domain) = EnhancedResolver::domain_name_of_message(m)
         {
             return policy.search(&domain).map(|n| n.get_data().unwrap());

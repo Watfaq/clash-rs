@@ -106,6 +106,16 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
 
             while !payload.is_empty() {
                 let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
+                if n == 0 {
+                    // poll_write returning Ok(0) means the stream is closed
+                    // (per AsyncWrite contract). Without this check, the loop
+                    // would spin forever since payload.advance(0) makes no
+                    // progress. Mirror std::io::Write::write_all behavior.
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write whole trojan udp packet: stream closed",
+                    )));
+                }
                 *written.as_mut().unwrap() += n;
                 payload.advance(n);
 

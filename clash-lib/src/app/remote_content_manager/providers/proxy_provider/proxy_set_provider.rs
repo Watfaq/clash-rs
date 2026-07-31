@@ -98,7 +98,10 @@ impl ProxySetProvider {
                     }
                     hc.update(input).await;
                     tokio::spawn(async move {
-                        hc.check().await;
+                        // Post-update check is automatic: honour backoff so
+                        // that a subscription refresh doesn't suddenly hammer
+                        // every dead node.
+                        hc.check(false).await;
                     });
                 })
             },

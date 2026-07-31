@@ -319,21 +319,33 @@ impl Handler {
             ));
         }
 
-        writer.write_u8(command).await?;
-        writer.write_u32(stream_id).await?;
-        writer.write_u16(data.len() as u16).await?;
+        // Build the entire frame in a single buffer to minimize syscalls.
+        // Frame format: [cmd:1B][stream_id:4B][len:2B][data:NB]
+        // This reduces 4 write syscalls to 1, which is critical for
+        // high-throughput scenarios on resource-constrained devices.
+        let mut buf = BytesMut::with_capacity(7 + data.len());
+        buf.put_u8(command);
+        buf.put_u32(stream_id);
+        buf.put_u16(data.len() as u16);
         if !data.is_empty() {
-            writer.write_all(data).await?;
+            buf.put_slice(data);
         }
-        Ok(())
+        writer.write_all(&buf).await
     }
 
     async fn read_frame(
         reader: &mut (impl AsyncRead + Unpin),
     ) -> io::Result<(u8, u32, Vec<u8>)> {
-        let command = reader.read_u8().await?;
-        let stream_id = reader.read_u32().await?;
-        let data_len = reader.read_u16().await? as usize;
+        // Read the 7-byte header in one syscall instead of 3 separate
+        // reads (read_u8 + read_u32 + read_u16). This halves the number
+        // of read syscalls per frame, improving latency on slow links.
+        let mut header = [0u8; 7];
+        reader.read_exact(&mut header).await?;
+        let command = header[0];
+        let stream_id = u32::from_be_bytes([
+            header[1], header[2], header[3], header[4],
+        ]);
+        let data_len = u16::from_be_bytes([header[5], header[6]]) as usize;
         let mut data = vec![0u8; data_len];
         if data_len > 0 {
             reader.read_exact(&mut data).await?;

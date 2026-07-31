@@ -60,7 +60,7 @@ impl FakeDns {
             max,
             min,
             gateway: min - 1,
-            offset: 0,
+            offset: total - 1,
             skipped_hostnames: opt.skipped_hostnames,
             ipnet: opt.ipnet,
             store: opt.store,
@@ -136,22 +136,22 @@ impl FakeDns {
         let current = self.offset;
 
         loop {
-            self.offset = (self.offset + 1) % (self.max - self.min);
+            self.offset = (self.offset + 1) % (self.max - self.min + 1);
 
             if self.offset == current {
-                self.offset = (self.offset + 1) % (self.max - self.min);
-                let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
+                self.offset = (self.offset + 1) % (self.max - self.min + 1);
+                let ip = net::Ipv4Addr::from(self.min + self.offset);
                 self.store.del_by_ip(std::net::IpAddr::V4(ip)).await;
                 break;
             }
 
-            let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
+            let ip = net::Ipv4Addr::from(self.min + self.offset);
             if !self.store.exist(std::net::IpAddr::V4(ip)).await {
                 break;
             }
         }
 
-        let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
+        let ip = net::Ipv4Addr::from(self.min + self.offset);
         self.store.put_by_ip(std::net::IpAddr::V4(ip), host).await;
         std::net::IpAddr::V4(ip)
     }
@@ -215,11 +215,16 @@ mod tests {
         let foo = pool.lookup("foo.com").await;
         let bar = pool.lookup("bar.com").await;
 
-        for i in 0..3 {
+        // Fill all 6 IPs in the /29 pool (min=192.168.0.2, max=192.168.0.7).
+        // foo and bar already use 2, so 4 more are needed to fill the pool.
+        for i in 0..4 {
             pool.lookup(&format!("{}.com", i)).await;
         }
 
+        // Pool is now full — baz must recycle foo's IP (oldest entry).
         let baz = pool.lookup("baz.com").await;
+        // foo.com's forward mapping was cleaned up by put_by_ip, so the next
+        // lookup allocates a fresh IP (bar's recycled IP).
         let next = pool.lookup("foo.com").await;
         assert_eq!(foo, baz);
         assert_eq!(next, bar);

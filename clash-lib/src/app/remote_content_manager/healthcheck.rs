@@ -49,7 +49,7 @@ impl HealthCheck {
         let proxies = self.inner.read().await.proxies.clone();
         let url = self.url.clone();
         let pm = proxy_manager.clone();
-        tokio::spawn(async move { pm.check(&proxies, &url, None).await });
+        tokio::spawn(async move { pm.check(&proxies, &url, None, false).await });
 
         let inner = self.inner.clone();
         let proxy_manager = self.proxy_manager.clone();
@@ -65,7 +65,7 @@ impl HealthCheck {
                         let last_check = inner.read().await.last_check;
                         if !lazy || now.duration_since(last_check).as_secs() >= interval {
                             let proxies = inner.read().await.proxies.clone();
-                            proxy_manager.check(&proxies, &url, None).await;
+                            proxy_manager.check(&proxies, &url, None, false).await;
                             inner.write().await.last_check = now;
                         }
                     },
@@ -80,9 +80,17 @@ impl HealthCheck {
         self.inner.write().await.last_check = tokio::time::Instant::now();
     }
 
-    pub async fn check(&self) {
+    /// Run a health check pass.
+    ///
+    /// `force` is forwarded to [`ProxyManager::check`]: pass `true` for a
+    /// user-triggered health check (e.g. via the `/providers/:name/healthcheck`
+    /// API) so that proxies currently in backoff are still tested; pass
+    /// `false` for automatic post-update checks where backoff should apply.
+    pub async fn check(&self, force: bool) {
         let proxies = self.inner.read().await.proxies.clone();
-        self.proxy_manager.check(&proxies, &self.url, None).await;
+        self.proxy_manager
+            .check(&proxies, &self.url, None, force)
+            .await;
     }
 
     pub async fn update(&self, proxies: Vec<AnyOutboundHandler>) {
