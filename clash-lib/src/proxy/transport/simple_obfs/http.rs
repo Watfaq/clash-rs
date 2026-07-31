@@ -255,3 +255,5 @@ impl From<HTTPObfs> for AnyStream {
         Box::new(obfs)
     }
 }
+
+impl crate::proxy::ProxyStream for HTTPObfs {}

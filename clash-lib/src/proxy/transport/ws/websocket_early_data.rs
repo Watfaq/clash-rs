@@ -211,3 +211,5 @@ impl AsyncWrite for WebsocketEarlyDataConn {
         }
     }
 }
+
+impl crate::proxy::ProxyStream for WebsocketEarlyDataConn {}

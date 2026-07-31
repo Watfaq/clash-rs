@@ -64,3 +64,5 @@ impl AsyncWrite for StreamWrapper {
         }
     }
 }
+
+impl crate::proxy::ProxyStream for StreamWrapper {}

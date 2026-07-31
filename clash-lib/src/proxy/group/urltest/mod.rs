@@ -5,7 +5,7 @@ use tracing::trace;
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             ProxyManager, providers::proxy_provider::ArcProxyProvider,
@@ -72,89 +72,64 @@ impl Handler {
             return None;
         }
 
-        // Clamp the stored index to the valid range. Providers may shrink/grow
-        // between calls, so the saved index can be stale.
-        let current_index = std::cmp::min(
+        let current_fastest_index = std::cmp::min(
             self.fastest_proxy_index
                 .load(std::sync::atomic::Ordering::Relaxed),
-            (proxies.len() - 1) as u16,
+            proxies.len() as u16 - 1,
         ) as usize;
-        let current_proxy = &proxies[current_index];
-        let current_alive = proxy_manager.alive(current_proxy.name()).await;
-        let current_delay = proxy_manager
-            .last_delay(current_proxy.name())
-            .await
-            .unwrap_or(Duration::from_secs(u64::MAX));
 
-        // Find the fastest alive proxy across ALL proxies (not skip(1)).
-        let mut fastest: Option<&AnyOutboundHandler> = None;
-        let mut fastest_delay = Duration::from_secs(u64::MAX);
-        for proxy in proxies.iter() {
-            if !proxy_manager.alive(proxy.name()).await {
+        let mut fastest = None;
+        let mut current_alive = false;
+        let mut current_delay = Duration::MAX;
+        for (index, proxy) in proxies.iter().enumerate() {
+            let (alive, delay) =
+                proxy_manager.alive_and_last_delay(proxy.name()).await;
+            if index == current_fastest_index {
+                current_alive = alive;
+            }
+            if !alive {
                 continue;
             }
-            let delay = proxy_manager
-                .last_delay(proxy.name())
-                .await
-                .unwrap_or(Duration::from_secs(u64::MAX));
-            if delay < fastest_delay {
-                fastest = Some(proxy);
-                fastest_delay = delay;
+
+            let delay = delay.unwrap_or(Duration::MAX);
+            if index == current_fastest_index {
+                current_delay = delay;
+            }
+            if match fastest {
+                None => true,
+                Some((_, fastest_delay)) => delay < fastest_delay,
+            } {
+                fastest = Some((index, delay));
             }
         }
 
-        // No alive proxy: fall back to the currently selected one (or the first
-        // if the selected one is no longer in the list). The caller will get an
-        // error from connect_stream/connect_datagram, which is the expected
-        // behavior when all nodes are down.
-        let selected = if let Some(fastest) = fastest {
-            // Tolerance logic: only switch away from the current selection when
-            //   - the current selection is no longer alive, OR
-            //   - the fastest alive proxy beats the current delay by MORE THAN
-            //     `tolerance` milliseconds.
-            // This prevents flapping between proxies whose latencies are within
-            // the tolerance band.
-            // Use saturating_add to avoid overflow when both delays are
-            // Duration::MAX (proxy alive but never tested yet).
-            let should_switch = !current_alive
-                || fastest_delay.saturating_add(Duration::from_millis(
-                    self.tolerance as u64,
-                )) < current_delay;
-
-            if should_switch {
-                if let Some(new_index) = proxies
-                    .iter()
-                    .position(|p| p.name() == fastest.name())
-                {
-                    self.fastest_proxy_index.store(
-                        new_index as u16,
-                        std::sync::atomic::Ordering::Relaxed,
-                    );
-                    trace!(
-                        fastest = %fastest.name(),
-                        delay = ?fastest_delay,
-                        prev = %current_proxy.name(),
-                        prev_delay = ?current_delay,
-                        "`{}` switched (tolerance={})",
-                        self.name(),
-                        self.tolerance,
-                    );
-                    fastest
-                } else {
-                    // fastest not found in proxies (shouldn't happen) — keep current
-                    current_proxy
-                }
-            } else {
-                // Stay on current selection — within tolerance band
-                current_proxy
-            }
+        // Keep the historical first-proxy fallback when every candidate is
+        // unavailable, while never preferring an unavailable proxy when a live
+        // candidate exists (even if it has no delay sample yet).
+        let (fastest_index, fastest_delay) = fastest.unwrap_or((0, Duration::MAX));
+        let tolerance = Duration::from_millis(self.tolerance as u64);
+        let switch_threshold = fastest_delay
+            .checked_add(tolerance)
+            .unwrap_or(Duration::MAX);
+        let selected_index = if !current_alive || current_delay > switch_threshold {
+            fastest_index
         } else {
-            // No alive proxy at all — return current selection (will fail on connect)
-            current_proxy
+            current_fastest_index
+        };
+
+        self.fastest_proxy_index
+            .store(selected_index as u16, std::sync::atomic::Ordering::Relaxed);
+
+        let selected = &proxies[selected_index];
+        let selected_delay = if selected_index == fastest_index {
+            fastest_delay
+        } else {
+            current_delay
         };
 
         trace!(
             fastest = %selected.name(),
+            delay = ?selected_delay,
             "`{}` fastest",
             self.name(),
         );
@@ -193,7 +168,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let fastest = self.fastest(false).await.ok_or_else(|| {
             io::Error::other(format!("no proxy found for {}", self.name()))
         })?;
@@ -209,7 +184,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let fastest = self.fastest(false).await.ok_or_else(|| {
             io::Error::other(format!("no proxy found for {}", self.name()))
         })?;
@@ -232,7 +207,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let s = self
             .fastest(true)
             .await
@@ -251,7 +226,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         self.fastest(true)
             .await
             .ok_or_else(|| {
@@ -287,13 +262,15 @@ impl GroupProxyAPIResponse for Handler {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
     use crate::{
         app::remote_content_manager::ProxyManager,
         proxy::{
-            group::GroupProxyAPIResponse, mocks::MockDummyProxyProvider,
-            utils::test_utils::noop::NoopResolver,
+            AnyOutboundHandler,
+            group::GroupProxyAPIResponse,
+            mocks::MockDummyProxyProvider,
+            utils::test_utils::noop::{NoopOutboundHandler, NoopResolver},
         },
     };
 
@@ -316,5 +293,57 @@ mod tests {
         );
 
         assert!(handler.get_active_proxy().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_tolerance_and_liveness_select_proxy() {
+        let proxies: Vec<AnyOutboundHandler> = vec![
+            Arc::new(NoopOutboundHandler { name: "a".into() }),
+            Arc::new(NoopOutboundHandler { name: "b".into() }),
+        ];
+        let mut provider = MockDummyProxyProvider::new();
+        provider.expect_proxies().returning({
+            let proxies = proxies.clone();
+            move || proxies.clone()
+        });
+
+        let proxy_manager = ProxyManager::new(Arc::new(NoopResolver), None);
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(100))
+            .await;
+        proxy_manager
+            .report_delay("b", true, Duration::from_millis(50))
+            .await;
+        let handler = super::Handler::new(
+            super::HandlerOptions {
+                name: "url-test".to_owned(),
+                ..Default::default()
+            },
+            20,
+            vec![Arc::new(provider)],
+            proxy_manager.clone(),
+        );
+
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(40))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("a", true, Duration::from_millis(20))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "a");
+
+        proxy_manager
+            .report_delay("a", false, Duration::from_millis(20))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "b");
+
+        proxy_manager
+            .report_delay("b", false, Duration::from_millis(50))
+            .await;
+        assert_eq!(handler.get_active_proxy().await.unwrap().name(), "a");
     }
 }

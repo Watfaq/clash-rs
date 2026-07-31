@@ -7,8 +7,9 @@ use tracing::debug;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ArcProxyProvider,
@@ -88,7 +89,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let proxies: Vec<AnyOutboundHandler> =
             stream::iter(self.get_proxies(true).await).collect().await;
 
@@ -122,7 +123,7 @@ impl OutboundHandler for Handler {
                     )
                     .await?;
 
-                let chained = ChainedStreamWrapper::new(s);
+                let chained = InstrumentedStreamWrapper::new(s);
                 chained.append_to_chain(self.name()).await;
                 Ok(Box::new(chained))
             }
@@ -133,7 +134,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let proxies: Vec<AnyOutboundHandler> =
             stream::iter(self.get_proxies(true).await).collect().await;
 
@@ -167,7 +168,7 @@ impl OutboundHandler for Handler {
                     )
                     .await?;
 
-                let chained = ChainedDatagramWrapper::new(d);
+                let chained = InstrumentedDatagramWrapper::new(d);
                 chained.append_to_chain(self.name()).await;
                 Ok(Box::new(chained))
             }

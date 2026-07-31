@@ -5,7 +5,7 @@ use hickory_proto::op;
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::{ClashResolver, ResolverKind, ThreadSafeDNSResolver},
     },
     proxy::{ConnectorType, DialWithConnector, OutboundHandler, OutboundType},
@@ -103,7 +103,7 @@ impl OutboundHandler for NoopOutboundHandler {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         Err(io::Error::other("noop"))
     }
 
@@ -111,7 +111,7 @@ impl OutboundHandler for NoopOutboundHandler {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         Err(io::Error::other("noop"))
     }
 

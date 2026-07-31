@@ -9,7 +9,7 @@ use tracing::warn;
 use crate::{
     Error,
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ArcProxyProvider,
     },
@@ -153,7 +153,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let selected = self.selected_proxy(true).await.ok_or_else(|| {
             io::Error::other(format!("no proxy found for {}", self.name()))
         })?;
@@ -168,7 +168,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let selected = self.selected_proxy(true).await.ok_or_else(|| {
             io::Error::other(format!("no proxy found for {}", self.name()))
         })?;
@@ -188,7 +188,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let s = self
             .selected_proxy(true)
             .await
@@ -207,7 +207,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         self.selected_proxy(true)
             .await
             .ok_or_else(|| {

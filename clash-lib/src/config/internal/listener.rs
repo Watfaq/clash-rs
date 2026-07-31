@@ -98,6 +98,25 @@ pub enum InboundOpts {
         #[serde(default)]
         fallback: Option<String>,
     },
+    #[serde(alias = "hysteria2")]
+    Hysteria2 {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        password: String,
+        /// File path or inline PEM certificate chain. When absent, an
+        /// ephemeral self-signed certificate is generated at startup.
+        #[serde(default)]
+        certificate: Option<String>,
+        /// File path or inline PEM private key. When absent, an ephemeral
+        /// self-signed certificate is generated at startup.
+        #[serde(rename = "private-key", default)]
+        private_key: Option<String>,
+        /// Optional multi-user list. Each entry's `password` field is the
+        /// plaintext Hysteria2 auth password; `name` is used for traffic
+        /// attribution. When empty, `password` is used directly.
+        #[serde(default)]
+        users: Vec<InboundUser>,
+    },
 }
 
 /// Equality and hashing for `InboundOpts` intentionally exclude the `users`
@@ -194,6 +213,22 @@ impl PartialEq for InboundOpts {
                     ..
                 },
             ) => a == b && pa == pb && ca == cb && pka == pkb && fa == fb,
+            (
+                InboundOpts::Hysteria2 {
+                    common_opts: a,
+                    password: pa,
+                    certificate: ca,
+                    private_key: pka,
+                    ..
+                },
+                InboundOpts::Hysteria2 {
+                    common_opts: b,
+                    password: pb,
+                    certificate: cb,
+                    private_key: pkb,
+                    ..
+                },
+            ) => a == b && pa == pb && ca == cb && pka == pkb,
             _ => false,
         }
     }
@@ -259,6 +294,19 @@ impl std::hash::Hash for InboundOpts {
                 fallback.hash(state);
                 // `users` intentionally excluded — handled via watch channel
             }
+            InboundOpts::Hysteria2 {
+                common_opts,
+                password,
+                certificate,
+                private_key,
+                ..
+            } => {
+                common_opts.hash(state);
+                password.hash(state);
+                certificate.hash(state);
+                private_key.hash(state);
+                // `users` intentionally excluded — handled via watch channel
+            }
         }
     }
 }
@@ -277,6 +325,7 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
+            InboundOpts::Hysteria2 { common_opts, .. } => common_opts,
         }
     }
 
@@ -293,6 +342,7 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
             InboundOpts::Anytls { common_opts, .. } => common_opts,
+            InboundOpts::Hysteria2 { common_opts, .. } => common_opts,
         }
     }
 
@@ -309,6 +359,7 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { .. } => "shadowsocks",
             InboundOpts::Anytls { .. } => "anytls",
+            InboundOpts::Hysteria2 { .. } => "hysteria2",
         }
     }
 }

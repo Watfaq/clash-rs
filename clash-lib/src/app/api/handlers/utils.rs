@@ -40,6 +40,7 @@ pub async fn group_url_test(
             &[vec![proxy], members].concat(),
             latency_test_url.as_deref().unwrap_or(fallback_url),
             timeout,
+            true,
         )
         .await;
 

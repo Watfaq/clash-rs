@@ -235,11 +235,15 @@ impl Router {
 
                     // Default to yaml if not specified
                     let format = file.format.unwrap_or_default();
+                    // `interval` is optional for file providers: content is
+                    // loaded at startup and live-reloaded via an OS file
+                    // watcher, so polling is only an occasional fallback.
+                    let interval = file.interval.map(Duration::from_secs);
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         file.behavior,
                         format,
-                        Some(Duration::from_secs(file.interval.unwrap_or_default())),
+                        interval,
                         Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),

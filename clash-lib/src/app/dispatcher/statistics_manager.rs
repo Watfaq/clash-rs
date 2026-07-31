@@ -88,6 +88,34 @@ pub struct TrackerInfo {
     pub user_download: AtomicU64,
 }
 
+impl TrackerInfo {
+    pub fn account_download(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
+        mgr.push_downloaded(n);
+        self.download_total
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.session_holder.inbound_user.is_some() {
+            self.user_download
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub fn account_upload(&self, mgr: &Manager, n: usize) {
+        if n == 0 {
+            return;
+        }
+        mgr.push_uploaded(n);
+        self.upload_total
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.session_holder.inbound_user.is_some() {
+            self.user_upload
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -419,7 +447,7 @@ impl Manager {
         // their user counters to 0. upload_total/download_total are untouched
         // so /connections keeps seeing the correct cumulative values.
         let connections = self.connections.lock().await;
-        for (_, (tracked, _)) in connections.iter() {
+        for (tracked, _) in connections.values() {
             let info = tracked.tracker_info();
             if let Some(ref user) = info.session_holder.inbound_user {
                 let upload = info.user_upload.swap(0, Ordering::AcqRel);
@@ -492,7 +520,7 @@ impl Manager {
     pub async fn snapshot(&self) -> Snapshot {
         let mut connections = vec![];
         let conns = self.connections.lock().await;
-        for (_, v) in conns.iter() {
+        for v in conns.values() {
             let t = v.0.tracker_info();
             let chain = t.proxy_chain_holder.0.read().await;
             connections.push(TrackerInfo {

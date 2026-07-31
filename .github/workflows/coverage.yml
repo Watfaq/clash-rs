@@ -19,11 +19,11 @@ jobs:
       matrix:
         os: ["macos-latest", "windows-latest", "ubuntu-latest"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -50,7 +50,7 @@ jobs:
           RUST_LOG: ts_control=debug,ts_runtime=debug,tailscale=debug
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: codecov.json

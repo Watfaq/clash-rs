@@ -304,3 +304,5 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+impl crate::proxy::ProxyStream for VlessStream {}

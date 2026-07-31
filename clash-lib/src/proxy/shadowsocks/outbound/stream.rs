@@ -45,3 +45,5 @@ impl AsyncWrite for ShadowSocksStream {
         Pin::new(&mut self.get_mut().0).poll_shutdown(cx)
     }
 }
+
+impl crate::proxy::ProxyStream for ShadowSocksStream {}

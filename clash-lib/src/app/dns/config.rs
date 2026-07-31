@@ -185,13 +185,13 @@ impl Config {
         let mut policy = HashMap::new();
 
         for (domain, server) in policy_map {
-            let nameservers = Config::parse_nameserver(&[server.to_owned()])?;
+            let nameservers =
+                Config::parse_nameserver(std::slice::from_ref(server))?;
 
             let (_, valid) = trie::valid_and_split_domain(domain);
             if !valid {
                 return Err(Error::InvalidConfig(format!(
-                    "DNS ResolverRule invalid domain: {}",
-                    &domain
+                    "DNS ResolverRule invalid domain: {domain}"
                 )));
             }
             policy.insert(domain.into(), nameservers[0].clone());

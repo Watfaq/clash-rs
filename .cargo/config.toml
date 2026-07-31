@@ -10,3 +10,20 @@ RUSTC_BOOTSTRAP = { value = "1" }
 [target.x86_64-pc-windows-msvc]
 linker = "link.exe"
 rustflags = ["-C", "link-arg=/threads:0"]
+
+# Use rsproxy.cn (ByteDance) mirror for crates.io - required in CN where
+# crates.io registry index download is throttled/blocked.
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[registries.rsproxy]
+index = "https://rsproxy.cn/crates.io-index"
+
+[net]
+git-fetch-with-cli = true
+
+[http]
+check-revoke = false

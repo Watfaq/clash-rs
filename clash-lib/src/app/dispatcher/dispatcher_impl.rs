@@ -1,8 +1,6 @@
 use crate::{
     app::{
-        dispatcher::tracked::{TrackedDatagram, TrackedStream},
-        dns::ClashResolver,
-        outbound::manager::ThreadSafeOutboundManager,
+        dns::ClashResolver, outbound::manager::ThreadSafeOutboundManager,
         router::ArcRouter,
     },
     common::io::copy_bidirectional,
@@ -11,7 +9,7 @@ use crate::{
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
     proxy::{
-        AnyInboundDatagram, ClientStream, datagram::UdpPacket, utils::ToCanonical,
+        AnyInboundDatagram, ProxyStream, datagram::UdpPacket, utils::ToCanonical,
     },
     session::{Session, SocksAddr},
 };
@@ -84,7 +82,7 @@ impl Dispatcher {
     pub async fn dispatch_stream(
         &self,
         mut sess: Session,
-        mut lhs: Box<dyn ClientStream>,
+        mut lhs: Box<dyn ProxyStream>,
     ) {
         let dest: SocksAddr =
             match reverse_lookup(&self.resolver, &sess.destination).await {
@@ -120,13 +118,12 @@ impl Dispatcher {
             .instrument(info_span!("connect_stream", outbound_name = outbound_name,))
             .await
         {
-            Ok(rhs) => {
+            Ok(mut rhs) => {
                 debug!("remote connection established {}", sess);
-                let rhs = TrackedStream::new(
-                    rhs,
+                rhs.install_tracking(
                     self.manager.clone(),
                     sess.clone(),
-                    rule,
+                    rule.map(|r| r.as_ref()),
                 )
                 .await;
                 match copy_bidirectional(
@@ -344,7 +341,7 @@ impl Dispatcher {
                 {
                     None => {
                         debug!("building {} outbound datagram connecting", sess);
-                        let outbound_datagram = match handler
+                        let mut outbound_datagram = match handler
                             .connect_datagram(&sess, resolver.clone())
                             .await
                         {
@@ -357,13 +354,13 @@ impl Dispatcher {
 
                         debug!("{} outbound datagram connected", sess);
 
-                        let outbound_datagram = TrackedDatagram::new(
-                            outbound_datagram,
-                            manager.clone(),
-                            sess.clone(),
-                            rule,
-                        )
-                        .await;
+                        outbound_datagram
+                            .install_tracking(
+                                manager.clone(),
+                                sess.clone(),
+                                rule.map(|r| r.as_ref()),
+                            )
+                            .await;
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =

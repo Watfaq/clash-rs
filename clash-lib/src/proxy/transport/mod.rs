@@ -5,8 +5,6 @@ mod reality;
 mod shadow_tls;
 #[cfg(feature = "shadowsocks")]
 mod simple_obfs;
-#[cfg(feature = "shadowsocks")]
-mod sip003;
 pub mod splice_tls;
 mod tls;
 #[cfg(feature = "shadowsocks")]
@@ -22,8 +20,6 @@ pub use shadow_tls::Client as Shadowtls;
 pub use simple_obfs::{
     SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp, SimpleObfsTLS,
 };
-#[cfg(feature = "shadowsocks")]
-pub use sip003::Plugin as Sip003Plugin;
 pub use splice_tls::VisionOptions;
 pub use tls::Client as TlsClient;
 #[cfg(feature = "shadowsocks")]
@@ -46,5 +42,61 @@ pub trait Transport: Send + Sync {
         stream: super::AnyStream,
     ) -> std::io::Result<(super::AnyStream, Option<VisionOptions>)> {
         Ok((self.proxy_stream(stream).await?, None))
+    }
+}
+
+/// A closed set of transport layers.
+///
+/// Replaces `Box<dyn Transport>` storage: the transport set is small and
+/// stable, so a closed enum gives static dispatch with no per-layer heap
+/// allocation while keeping the same runtime, config-driven composition
+/// (a handler holds an ordered stack of these and applies them in turn).
+#[allow(clippy::large_enum_variant)]
+pub enum TransportLayer {
+    Tls(TlsClient),
+    Reality(RealityClient),
+    Grpc(GrpcClient),
+    H2(H2Client),
+    Ws(WsClient),
+    #[cfg(feature = "shadowsocks")]
+    ShadowTls(Shadowtls),
+    #[cfg(feature = "shadowsocks")]
+    SimpleObfsHttp(SimpleObfsHttp),
+    #[cfg(feature = "shadowsocks")]
+    SimpleObfsTls(SimpleObfsTLS),
+    #[cfg(feature = "shadowsocks")]
+    V2rayWs(V2rayWsClient),
+}
+
+impl TransportLayer {
+    pub async fn wrap(
+        &self,
+        stream: super::AnyStream,
+    ) -> std::io::Result<super::AnyStream> {
+        match self {
+            Self::Tls(t) => Transport::proxy_stream(t, stream).await,
+            Self::Reality(t) => Transport::proxy_stream(t, stream).await,
+            Self::Grpc(t) => Transport::proxy_stream(t, stream).await,
+            Self::H2(t) => Transport::proxy_stream(t, stream).await,
+            Self::Ws(t) => Transport::proxy_stream(t, stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::ShadowTls(t) => Transport::proxy_stream(t, stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::SimpleObfsHttp(t) => Transport::proxy_stream(t, stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::SimpleObfsTls(t) => Transport::proxy_stream(t, stream).await,
+            #[cfg(feature = "shadowsocks")]
+            Self::V2rayWs(t) => Transport::proxy_stream(t, stream).await,
+        }
+    }
+
+    pub async fn wrap_spliced(
+        &self,
+        stream: super::AnyStream,
+    ) -> std::io::Result<(super::AnyStream, Option<VisionOptions>)> {
+        match self {
+            Self::Reality(t) => Transport::proxy_stream_spliced(t, stream).await,
+            other => Ok((other.wrap(stream).await?, None)),
+        }
     }
 }

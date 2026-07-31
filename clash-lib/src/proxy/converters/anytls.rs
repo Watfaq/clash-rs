@@ -5,7 +5,7 @@ use crate::{
     proxy::{
         HandlerCommonOptions,
         anytls::{Handler, HandlerOptions},
-        transport::TlsClient,
+        transport::{TlsClient, TransportLayer},
     },
 };
 
@@ -68,7 +68,7 @@ impl TryFrom<&OutboundAnytls> for Handler {
                     s.tls_cert.as_deref(),
                     s.tls_key.as_deref(),
                 )?;
-                Some(Box::new(client))
+                Some(TransportLayer::Tls(client))
             },
             transport: None,
         }))

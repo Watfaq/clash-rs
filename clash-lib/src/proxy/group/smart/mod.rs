@@ -14,7 +14,7 @@ use tracing::{debug, info};
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             ProxyManager, providers::proxy_provider::ArcProxyProvider,
@@ -475,7 +475,7 @@ impl Handler {
         &self,
         sess: &Session,
         resolver: &ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let site = sess.destination.host();
         let dest_ip = sess.destination.ip().map(|ip| ip.to_string());
         let mut tried = HashSet::new();
@@ -683,7 +683,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         debug!("{} starting smart proxy selection", self.name());
         match self.adaptive_retry(sess, &resolver).await {
             Ok(stream) => {
@@ -708,7 +708,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         // For UDP we use the best proxy without retries for simplicity
         if let Some(proxy) = self.pick_smart(sess, &HashSet::new()).await {
             debug!("{} use proxy {} (smart)", self.name(), proxy.name());
@@ -731,7 +731,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         if let Some(proxy) = self.pick_smart(sess, &HashSet::new()).await {
             debug!("{} use proxy {} (smart)", self.name(), proxy.name());
             proxy

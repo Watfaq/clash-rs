@@ -1,7 +1,7 @@
 use self::docker_runner::RunAndCleanup;
 use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, ChainedStream},
+        dispatcher::{BoxedInstrumentedDatagram, InstrumentedStream},
         remote_content_manager::ProxyManager,
     },
     proxy::{OutboundHandler, datagram::UdpPacket},
@@ -253,7 +253,7 @@ pub async fn ping_pong_test(
         }
     });
 
-    async fn proxy_fn(stream: Box<dyn ChainedStream>) -> anyhow::Result<()> {
+    async fn proxy_fn(stream: Box<dyn InstrumentedStream>) -> anyhow::Result<()> {
         let (mut read_half, mut write_half) = split(stream);
 
         let chunk = "hello";
@@ -460,7 +460,7 @@ pub async fn ping_pong_udp_test(
     > = tokio::spawn(async move { destination_fn(rx, listener).await });
 
     async fn proxy_fn(
-        mut datagram: BoxedChainedDatagram,
+        mut datagram: BoxedInstrumentedDatagram,
         src_addr: SocksAddr,
         dst_addr: SocksAddr,
     ) -> anyhow::Result<()> {

@@ -3,7 +3,7 @@ use crate::{
     proxy::{
         HandlerCommonOptions,
         socks::outbound::{Handler, HandlerOptions},
-        transport::TlsClient,
+        transport::{TlsClient, TransportLayer},
     },
 };
 
@@ -20,14 +20,14 @@ impl TryFrom<&OutboundSocks5> for Handler {
 
     fn try_from(s: &OutboundSocks5) -> Result<Self, Self::Error> {
         let tls_client = if s.tls {
-            Some(Box::new(TlsClient::new(
+            Some(TransportLayer::Tls(TlsClient::new(
                 s.skip_cert_verify,
                 s.sni.clone().unwrap_or(s.common_opts.server.to_owned()),
                 None,
                 None,
                 None,
                 None,
-            )?) as _)
+            )?))
         } else {
             None
         };

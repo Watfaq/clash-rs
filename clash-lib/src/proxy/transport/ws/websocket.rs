@@ -121,3 +121,5 @@ impl AsyncWrite for WebsocketConn {
         pin.poll_close(cx).map_err(map_io_error)
     }
 }
+
+impl crate::proxy::ProxyStream for WebsocketConn {}

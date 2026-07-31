@@ -81,7 +81,7 @@ pub fn proxy_groups_dag_sort(
         let name = queue.pop_front().unwrap().to_owned();
         let node = graph
             .get(&name)
-            .unwrap_or_else(|| panic!("node {} not found", &name));
+            .unwrap_or_else(|| panic!("node {name} not found"));
 
         if node.borrow().proto.is_some() {
             index += 1;

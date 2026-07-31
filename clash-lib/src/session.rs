@@ -386,6 +386,7 @@ pub enum Type {
     Tunnel,
     Shadowsocks,
     Anytls,
+    Hysteria2,
     Ignore,
 }
 

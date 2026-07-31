@@ -688,3 +688,5 @@ mod tests {
         assert_eq!(out, expected);
     }
 }
+
+impl crate::proxy::ProxyStream for VisionStream {}

@@ -1,14 +1,15 @@
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
-    transport::Transport,
+    transport::TransportLayer,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            BoxedInstrumentedDatagram, BoxedInstrumentedStream,
+            InstrumentedDatagram, InstrumentedDatagramWrapper, InstrumentedStream,
+            InstrumentedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -32,9 +33,9 @@ pub struct HandlerOptions {
     pub alter_id: u16,
     pub security: String,
     pub udp: bool,
-    pub transport: Option<Box<dyn Transport>>,
+    pub transport: Option<TransportLayer>,
     // maybe shadow-tls?
-    pub tls: Option<Box<dyn Transport>>,
+    pub tls: Option<TransportLayer>,
 }
 
 pub struct Handler {
@@ -68,13 +69,13 @@ impl Handler {
         udp: bool,
     ) -> io::Result<AnyStream> {
         let s = if let Some(tls) = self.opts.tls.as_ref() {
-            tls.proxy_stream(s).await?
+            tls.wrap(s).await?
         } else {
             s
         };
 
         let s = if let Some(transport) = self.opts.transport.as_ref() {
-            transport.proxy_stream(s).await?
+            transport.wrap(s).await?
         } else {
             s
         };
@@ -115,7 +116,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -137,7 +138,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -164,7 +165,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> io::Result<BoxedInstrumentedStream> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -177,7 +178,7 @@ impl OutboundHandler for Handler {
             .await?;
 
         let s = self.inner_proxy_stream(stream, sess, false).await?;
-        let chained = ChainedStreamWrapper::new(s);
+        let chained = InstrumentedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -187,7 +188,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> io::Result<BoxedInstrumentedDatagram> {
         let stream = connector
             .connect_stream(
                 resolver,
@@ -203,7 +204,7 @@ impl OutboundHandler for Handler {
 
         let d = OutboundDatagramVmess::new(stream, sess.destination.clone());
 
-        let chained = ChainedDatagramWrapper::new(d);
+        let chained = InstrumentedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
@@ -239,7 +240,7 @@ mod tests {
     use super::*;
     use crate::{
         proxy::{
-            transport::{GrpcClient, H2Client, TlsClient, WsClient},
+            transport::{GrpcClient, H2Client, TlsClient, TransportLayer, WsClient},
             utils::test_utils::{
                 Suite,
                 config_helper::test_config_base_dir,
@@ -370,8 +371,8 @@ mod tests {
     }
 }"#;
 
-    fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
-        Some(Box::new(
+    fn tls_client(alpn: Option<Vec<String>>) -> Option<TransportLayer> {
+        Some(TransportLayer::Tls(
             TlsClient::new(true, "example.org".to_owned(), alpn, None, None, None)
                 .expect("failed to create TLS client"),
         ))
@@ -429,7 +430,7 @@ mod tests {
             security: "auto".into(),
             udp: true,
             tls: tls_client(None),
-            transport: Some(Box::new(ws_client)),
+            transport: Some(TransportLayer::Ws(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
 
@@ -477,7 +478,7 @@ mod tests {
             security: "auto".into(),
             udp: true,
             tls: tls_client(None),
-            transport: Some(Box::new(grpc_client)),
+            transport: Some(TransportLayer::Grpc(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
@@ -526,7 +527,7 @@ mod tests {
             security: "auto".into(),
             udp: false,
             tls: tls_client(Some(vec!["h2".to_string()])),
-            transport: Some(Box::new(h2_client)),
+            transport: Some(TransportLayer::H2(h2_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler

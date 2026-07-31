@@ -30,8 +30,8 @@ pub struct OutboundDatagramImpl {
     /// In-flight DNS resolution task for the current queued packet.
     /// Using a JoinHandle (Send + Sync) rather than a raw BoxFuture so that
     /// OutboundDatagramImpl satisfies the Sync bound required by
-    /// ChainedDatagram. The task is spawned once and awaited across polls —
-    /// no query restarts.
+    /// InstrumentedDatagram. The task is spawned once and awaited across polls
+    /// — no query restarts.
     pending_dns: Option<JoinHandle<io::Result<SocketAddr>>>,
     /// Resolved IP for the current queued packet; reused across poll_send_to
     /// retries so we never re-poll an already-completed DNS task.

@@ -361,3 +361,5 @@ impl From<TLSObfs> for AnyStream {
         Box::new(obfs)
     }
 }
+
+impl crate::proxy::ProxyStream for TLSObfs {}

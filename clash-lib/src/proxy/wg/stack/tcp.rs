@@ -88,3 +88,5 @@ impl AsyncWrite for SocketPair {
         std::task::Poll::Ready(Ok(()))
     }
 }
+
+impl crate::proxy::ProxyStream for SocketPair {}

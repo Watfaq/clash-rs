@@ -8,7 +8,7 @@ use crate::{
         shadowsocks::outbound::{Handler, HandlerOptions},
         transport::{
             Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
-            SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
+            SimpleObfsTLS, TransportLayer, V2RayOBFSOption, V2rayWsClient,
         },
     },
 };
@@ -50,14 +50,12 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                             ))?
                             .try_into()?;
                         let plugin = match opt.mode {
-                            SimpleOBFSMode::Http => Box::new(SimpleObfsHttp::new(
-                                opt.host,
-                                s.common_opts.port,
-                            ))
-                                as _,
-                            SimpleOBFSMode::Tls => {
-                                Box::new(SimpleObfsTLS::new(opt.host)) as _
-                            }
+                            SimpleOBFSMode::Http => TransportLayer::SimpleObfsHttp(
+                                SimpleObfsHttp::new(opt.host, s.common_opts.port),
+                            ),
+                            SimpleOBFSMode::Tls => TransportLayer::SimpleObfsTls(
+                                SimpleObfsTLS::new(opt.host),
+                            ),
                         };
                         Some(plugin)
                     }
@@ -72,7 +70,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                         // TODO: support more transport options, replace it with
                         // `V2rayClient`
                         let plugin = V2rayWsClient::try_from(opt)?;
-                        Some(Box::new(plugin) as _)
+                        Some(TransportLayer::V2rayWs(plugin))
                     }
                     "shadow-tls" => {
                         let plugin: Shadowtls = s
@@ -82,7 +80,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                                 "plugin_opts is required for plugin obfs".to_owned(),
                             ))?
                             .try_into()?;
-                        Some(Box::new(plugin) as _)
+                        Some(TransportLayer::ShadowTls(plugin))
                     }
                     _ => {
                         return Err(Error::InvalidConfig(format!(

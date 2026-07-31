@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    HysteriaConnection,
     codec::{Defragger, HysUdpPacket},
+    outbound::HysteriaConnection,
 };
 
 pub struct UdpSession {
