@@ -976,13 +976,23 @@ fn verify_device_addresses(
         ))
     };
 
+    // A matching address under a different mask still breaks us: the NAT
+    // address is derived from the prefix and could fall outside the
+    // interface's network. But an *absent* mask is not a mismatch — some
+    // platforms simply do not report one, and rejecting on that would refuse
+    // a perfectly good device.
+    let mask_ok = |reported: Option<std::net::IpAddr>,
+                   configured: std::net::IpAddr| {
+        reported.is_none_or(|mask| mask == configured)
+    };
+
     let has_v4 = iface.addr.iter().any(|addr| match addr {
         network_interface::Addr::V4(v4) => {
             v4.ip == cfg.gateway.addr()
-                // A matching address under a different mask still breaks us:
-                // the NAT address is derived from the prefix and could fall
-                // outside the interface's network.
-                && v4.netmask == Some(cfg.gateway.netmask())
+                && mask_ok(
+                    v4.netmask.map(std::net::IpAddr::V4),
+                    std::net::IpAddr::V4(cfg.gateway.netmask()),
+                )
         }
         network_interface::Addr::V6(_) => false,
     });
@@ -994,7 +1004,10 @@ fn verify_device_addresses(
         let has_v6 = iface.addr.iter().any(|addr| match addr {
             network_interface::Addr::V6(v6) => {
                 v6.ip == gateway_v6.addr()
-                    && v6.netmask == Some(gateway_v6.netmask())
+                    && mask_ok(
+                        v6.netmask.map(std::net::IpAddr::V6),
+                        std::net::IpAddr::V6(gateway_v6.netmask()),
+                    )
             }
             network_interface::Addr::V4(_) => false,
         });
@@ -1317,20 +1330,23 @@ async fn batched_udp_downlink(
             ));
         }
 
-        bufs.clear();
-        for packet in &queued {
+        // Grow the buffer pool to this batch, then reuse the buffers rather
+        // than reallocating one per packet: the pool settles at the largest
+        // batch seen and stays allocated for the connection's lifetime.
+        while bufs.len() < queued.len() {
+            bufs.push(BytesMut::with_capacity(VIRTIO_NET_HDR_LEN + mtu));
+        }
+        for (buf, packet) in bufs.iter_mut().zip(&queued) {
             let data = packet.data();
+            buf.clear();
             // The codec hands us a plain IP packet; give it the headroom
             // send_multiple needs for the virtio header.
-            let mut buf =
-                BytesMut::with_capacity(VIRTIO_NET_HDR_LEN + data.len().max(mtu));
             buf.resize(VIRTIO_NET_HDR_LEN, 0);
             buf.extend_from_slice(data);
-            bufs.push(buf);
         }
 
         if let Err(e) = device
-            .send_multiple(&mut gro, &mut bufs, VIRTIO_NET_HDR_LEN)
+            .send_multiple(&mut gro, &mut bufs[..queued.len()], VIRTIO_NET_HDR_LEN)
             .await
         {
             if e.kind() == io::ErrorKind::WouldBlock
