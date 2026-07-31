@@ -46,6 +46,26 @@ impl Default for DnsHijack {
     }
 }
 
+/// The TCP/IP stack implementation used by the TUN inbound
+#[derive(Serialize, Deserialize, Default, Copy, Clone, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum TunStack {
+    /// Userspace network stack based on smoltcp
+    #[default]
+    #[serde(alias = "gvisor", alias = "Smoltcp")]
+    Smoltcp,
+    /// Kernel TCP stack: TCP flows are source-NATed in place to a local
+    /// listener so the OS owns TCP state (congestion control, window
+    /// scaling), which usually outperforms the userspace stack. UDP and
+    /// ICMP stay on the userspace path.
+    /// # Note
+    /// - requires `gateway` to match the actual TUN interface address
+    /// - the address right after `gateway` within the prefix is reserved as the
+    ///   NAT source address and must not be used by anything else
+    #[serde(alias = "mixed", alias = "System")]
+    System,
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
@@ -83,6 +103,10 @@ pub struct TunConfig {
     /// setting to a list has the same effect as setting to true
     #[serde(default)]
     pub dns_hijack: DnsHijack,
+    /// TCP/IP stack implementation: `smoltcp` (default, alias `gvisor`) or
+    /// `system` (alias `mixed`)
+    #[serde(default)]
+    pub stack: TunStack,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]

@@ -39,7 +39,27 @@ pub fn convert(
                 def::DnsHijack::Switch(b) => b,
                 def::DnsHijack::List(_) => true,
             },
+            stack: t.stack,
         }),
         None => Ok(config::TunConfig::default()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::def::{TunConfig, TunStack};
+
+    #[test]
+    fn tun_stack_parses_names_and_aliases() {
+        for (yaml, expected) in [
+            ("enable: true", TunStack::Smoltcp),
+            ("enable: true\nstack: smoltcp", TunStack::Smoltcp),
+            ("enable: true\nstack: gvisor", TunStack::Smoltcp),
+            ("enable: true\nstack: system", TunStack::System),
+            ("enable: true\nstack: mixed", TunStack::System),
+        ] {
+            let parsed: TunConfig = serde_yaml::from_str(yaml).unwrap();
+            assert_eq!(parsed.stack, expected, "yaml: {yaml}");
+        }
     }
 }
