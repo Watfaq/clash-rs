@@ -750,6 +750,12 @@ pub struct EdnsClientSubnet {
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
+    /// buffer size for AnyTLS duplex pipe (default 16384 = 16KB)
+    pub anytls_duplex_buffer_size: Option<usize>,
+    /// buffer size for AnyTLS relay read buffer (default 4096 = 4KB)
+    pub anytls_relay_buffer_size: Option<usize>,
+    /// max entries in the closed-flows ring buffer (default 50, lower saves RAM)
+    pub closed_flows_cap: Option<usize>,
     #[serde(default)]
     pub ignore_resolve_fail: bool,
 }

@@ -241,7 +241,7 @@ impl EnhancedResolver {
                 None
             },
             lru_cache: Some(hickory_resolver::ResponseCache::new(
-                4096,
+                1024,
                 hickory_resolver::TtlConfig::default(),
             )),
             policy: if !cfg.nameserver_policy.is_empty() {
@@ -306,7 +306,7 @@ impl EnhancedResolver {
                                              * different server after the ip is
                                              * reverse mapped to hostname and
                                              * being resolved again */
-                    4096,
+                    1024,
                 ),
             ))),
         }
@@ -726,6 +726,18 @@ impl ClashResolver for EnhancedResolver {
 
     fn kind(&self) -> ResolverKind {
         ResolverKind::Clash
+    }
+
+    /// Clear DNS caches under memory pressure.
+    /// - reverse_lookup_cache: cleared immediately (Arc<RwLock<LruCache>>)
+    /// - lru_cache (ResponseCache): no public clear(), relies on TTL expiry.
+    ///   Capacity is kept small (1024) to bound memory.
+    async fn clear_cache(&self) {
+        if let Some(lru) = &self.reverse_lookup_cache {
+            let mut guard = lru.write().await;
+            guard.clear();
+            trace!("reverse_lookup_cache cleared due to memory pressure");
+        }
     }
 
     fn fake_ip_enabled(&self) -> bool {

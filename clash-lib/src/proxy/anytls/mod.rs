@@ -26,6 +26,7 @@ use super::{
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
+
 mod datagram;
 use datagram::OutboundDatagramAnytls;
 pub mod inbound;
@@ -47,6 +48,34 @@ const STREAM_ID: u32 = 1;
 /// The MD5 is pre-computed over the literal string "stop=0" (no trailing
 /// newline), matching how anytls-go serialises a single-entry scheme.
 const CLIENT_PADDING_SCHEME_MD5: &str = "47edb1f4ed8a99480bf416d178311f10";
+
+/// Default duplex buffer size (16KB). Can be overridden via
+/// `experimental.anytls-duplex-buffer-size` in config.
+const DEFAULT_DUPLEX_BUFFER_SIZE: usize = 16 * 1024;
+/// Default relay buffer size (4KB). Can be overridden via
+/// `experimental.anytls-relay-buffer-size` in config.
+const DEFAULT_RELAY_BUFFER_SIZE: usize = 4 * 1024;
+
+/// Global buffer size configuration. Uses AtomicUsize so it can be
+/// updated on config reload (unlike OnceLock which is set-once).
+static DUPLEX_BUFFER_SIZE: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(DEFAULT_DUPLEX_BUFFER_SIZE);
+static RELAY_BUFFER_SIZE_CONFIG: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(DEFAULT_RELAY_BUFFER_SIZE);
+
+/// Set the global AnyTLS buffer sizes. Called during config loading.
+pub fn set_buffer_config(duplex: usize, relay: usize) {
+    DUPLEX_BUFFER_SIZE.store(duplex, std::sync::atomic::Ordering::Release);
+    RELAY_BUFFER_SIZE_CONFIG.store(relay, std::sync::atomic::Ordering::Release);
+}
+
+fn duplex_buffer_size() -> usize {
+    DUPLEX_BUFFER_SIZE.load(std::sync::atomic::Ordering::Acquire)
+}
+
+fn relay_buffer_size() -> usize {
+    RELAY_BUFFER_SIZE_CONFIG.load(std::sync::atomic::Ordering::Acquire)
+}
 
 pub struct HandlerOptions {
     pub name: String,
@@ -76,8 +105,6 @@ impl std::fmt::Debug for Handler {
 }
 
 impl Handler {
-    const DUPLEX_BUFFER_SIZE: usize = 64 * 1024;
-    const RELAY_BUFFER_SIZE: usize = 16 * 1024;
     const UDP_OVER_TCP_V2_MAGIC_ADDR: &str = "sp.v2.udp-over-tcp.arpa";
 
     pub fn new(opts: HandlerOptions) -> Self {
@@ -141,7 +168,7 @@ impl Handler {
         stream.flush().await?;
 
         let (mut remote_read, mut remote_write) = tokio::io::split(stream);
-        let (app_stream, relay_stream) = tokio::io::duplex(Self::DUPLEX_BUFFER_SIZE);
+        let (app_stream, relay_stream) = tokio::io::duplex(duplex_buffer_size());
         let (mut relay_read, mut relay_write) = tokio::io::split(relay_stream);
         let name_a = self.opts.name.clone();
         let name_b = self.opts.name.clone();
@@ -151,7 +178,7 @@ impl Handler {
         let cancel_b = cancel;
 
         tokio::spawn(async move {
-            let mut buf = vec![0u8; Self::RELAY_BUFFER_SIZE];
+            let mut buf = vec![0u8; relay_buffer_size()];
             loop {
                 tokio::select! {
                     biased;

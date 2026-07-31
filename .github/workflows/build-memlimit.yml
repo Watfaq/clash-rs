@@ -1,0 +1,56 @@
+name: Build clash-rs with memory limit (armv7-musl)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mem_limit_default:
+        description: 'Default memory limit in MB (0=unlimited, just build feature in)'
+        required: false
+        default: '0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Install zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild || true
+
+      - name: Install Node.js for dashboard
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TypeScript for dashboard
+        run: npm install -g typescript
+
+      - name: Build clash-rs
+        run: |
+          cargo zigbuild --release --target armv7-unknown-linux-musleabihf \
+            --no-default-features --features standard,ring,dashboard,jemallocator
+
+      - name: Strip binary
+        run: |
+          armv7-unknown-linux-musleabihf-strip \
+            target/armv7-unknown-linux-musleabihf/release/clash-rs || \
+          strip target/armv7-unknown-linux-musleabihf/release/clash-rs || true
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: clash-rs-armv7-musl-memlimit
+          path: target/armv7-unknown-linux-musleabihf/release/clash-rs
+          retention-days: 30
