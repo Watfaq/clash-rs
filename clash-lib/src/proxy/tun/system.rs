@@ -50,6 +50,9 @@ const FIRST_NAT_PORT: u16 = 10_000;
 const SYSTEM_WRITE_QUEUE: usize = 1024;
 /// Fallback when the config does not pin an MTU; matches the device default.
 const DEFAULT_MTU: u16 = 1500;
+/// Floor for the receive-buffer payload, so a nonsensical MTU cannot produce
+/// buffers too short to hold one segment. Matches the IPv6 minimum MTU.
+const MIN_BUFFER_PAYLOAD: usize = 1280;
 const UDP_DOWNLINK_QUEUE: usize = 4096;
 /// How long a NAT entry may stay un-accepted before it is reclaimed. The
 /// kernel retries SYNs well within this window; anything older is a dead
@@ -62,6 +65,9 @@ const NAT_LINGER: Duration = Duration::from_secs(10);
 /// Pause before retrying `accept` after a resource-exhaustion error, which
 /// would otherwise recur immediately and spin the accept loop.
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
+/// Shorter pause for any other accept error, so a recurring one cannot spin
+/// the loop while a one-off barely delays the next connection.
+const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(1);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TcpKey {
@@ -679,17 +685,23 @@ async fn tcp_accept_loop(
                 // aborted handshake or file-descriptor shortage would kill
                 // all TUN traffic.
                 warn!("system TUN TCP accept failed: {e}");
-                if matches!(
+                // Back off after every failure, not just the classified ones:
+                // any error that recurs — including platform codes that do not
+                // match these errnos — would otherwise spin the loop at full
+                // CPU and flood the log. Resource exhaustion takes longer to
+                // clear, so it waits longer.
+                let backoff = if matches!(
                     e.raw_os_error(),
                     Some(libc::EMFILE)
                         | Some(libc::ENFILE)
                         | Some(libc::ENOBUFS)
                         | Some(libc::ENOMEM)
                 ) {
-                    // Resource exhaustion repeats immediately; back off so
-                    // the loop does not spin at 100% CPU while it lasts.
-                    time::sleep(ACCEPT_BACKOFF).await;
-                }
+                    ACCEPT_BACKOFF
+                } else {
+                    ACCEPT_RETRY_DELAY
+                };
+                time::sleep(backoff).await;
                 continue;
             }
         };
@@ -924,19 +936,90 @@ impl PacketContext {
     }
 }
 
+/// Checks the device actually carries the configured gateway prefixes.
+///
+/// The listener binds `gateway` and the NAT source address is derived from its
+/// prefix, so a device whose address or mask differs would leave us binding an
+/// address it does not have. This is checked against the live interface rather
+/// than the config alone, which covers all three ways a device gets here:
+/// freshly created, an existing interface reused as-is, and `fd://`, where the
+/// interface was configured by someone else entirely.
+///
+/// Enumeration failing is not treated as a mismatch — on some platforms it is
+/// simply unavailable, and a genuinely wrong address still surfaces when the
+/// listener bind fails.
+fn verify_device_addresses(
+    cfg: &TunConfig,
+    device: &tun_rs::AsyncDevice,
+) -> Result<(), Error> {
+    use network_interface::NetworkInterfaceConfig;
+
+    let Ok(name) = device.name() else {
+        debug!("system TUN could not read the device name; skipping check");
+        return Ok(());
+    };
+    let Ok(interfaces) = network_interface::NetworkInterface::show() else {
+        debug!("system TUN could not enumerate interfaces; skipping check");
+        return Ok(());
+    };
+    let Some(iface) = interfaces.into_iter().find(|x| x.name == name) else {
+        debug!("system TUN device {name} not enumerable; skipping check");
+        return Ok(());
+    };
+
+    let mismatch = |what: &str, want: String| {
+        Error::InvalidConfig(format!(
+            "tun device {name} does not have the configured {what} {want}; the \
+             system stack derives its listener and NAT addresses from it, so they \
+             must match. Either let clash-rs create the device or set {what} to \
+             the interface's actual value."
+        ))
+    };
+
+    let has_v4 = iface.addr.iter().any(|addr| match addr {
+        network_interface::Addr::V4(v4) => {
+            v4.ip == cfg.gateway.addr()
+                // A matching address under a different mask still breaks us:
+                // the NAT address is derived from the prefix and could fall
+                // outside the interface's network.
+                && v4.netmask == Some(cfg.gateway.netmask())
+        }
+        network_interface::Addr::V6(_) => false,
+    });
+    if !has_v4 {
+        return Err(mismatch("gateway", cfg.gateway.to_string()));
+    }
+
+    if let Some(gateway_v6) = cfg.gateway_v6 {
+        let has_v6 = iface.addr.iter().any(|addr| match addr {
+            network_interface::Addr::V6(v6) => {
+                v6.ip == gateway_v6.addr()
+                    && v6.netmask == Some(gateway_v6.netmask())
+            }
+            network_interface::Addr::V4(_) => false,
+        });
+        if !has_v6 {
+            return Err(mismatch("gateway-v6", gateway_v6.to_string()));
+        }
+    }
+
+    Ok(())
+}
+
 /// Runs the system stack until one of its tasks fails.
 ///
-/// Drives seven concurrent futures: the TUN reader (which rewrites TCP and
-/// hands UDP to the codec), the single TUN writer that owns the device sink,
-/// the UDP downlink pump, the IPv4 and IPv6 accept loops, the datagram
-/// dispatcher, and the periodic NAT cleanup. They are selected over, so the
-/// first failure tears the backend down and surfaces the error.
+/// Drives the TUN I/O (batched on Linux, per-packet elsewhere), the IPv4 and
+/// IPv6 accept loops, the datagram dispatcher, and the periodic NAT cleanup.
+/// They are selected over, so the first failure tears the backend down and
+/// surfaces the error.
 pub(crate) async fn run(
     cfg: TunConfig,
     tun: tun_rs::AsyncDevice,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) -> Result<(), Error> {
+    verify_device_addresses(&cfg, &tun)?;
+
     let tun_address = cfg.gateway.addr();
     let nat_address = ipv4_nat_address(cfg.gateway)?;
 
@@ -956,6 +1039,13 @@ pub(crate) async fn run(
     };
 
     // UDP reuses the userspace packet codec and the existing datagram path.
+    //
+    // The ingest queue is unbounded because `watfaq_netstack::UdpSocket` takes
+    // an `UnboundedReceiver`, which the userspace stack relies on too. That
+    // means a UDP flood arriving faster than `handle_inbound_datagram` drains
+    // it grows memory without a limit; bounding it needs an API change in
+    // clash-netstack and would alter the userspace stack's behaviour, so it is
+    // left as-is here rather than changed for one backend only.
     let (udp_inbound_tx, udp_inbound_rx) =
         mpsc::unbounded_channel::<watfaq_netstack::Packet>();
     let (udp_outbound_tx, udp_outbound_rx) =
@@ -1060,6 +1150,24 @@ fn mtu(cfg: &TunConfig) -> usize {
     cfg.mtu.unwrap_or(DEFAULT_MTU) as usize
 }
 
+/// How many receive buffers one batch needs.
+///
+/// `recv_multiple` splits a GRO read — up to 64 KiB — into one buffer per TCP
+/// segment, and errors out with `ErrTooManySegments` if it runs out, which
+/// would tear the backend down. The segment size is the MSS, so the worst case
+/// is a full read divided by the smallest plausible MSS for this MTU. Small
+/// MTUs therefore need *more* buffers than `IDEAL_BATCH_SIZE`, not fewer.
+#[cfg(target_os = "linux")]
+fn receive_batch_size(mtu: usize) -> usize {
+    use tun_rs::IDEAL_BATCH_SIZE;
+
+    // Allow for a maximal IPv6 header plus TCP header with options.
+    const MAX_HEADERS: usize = 60 + 60;
+    let min_segment = mtu.saturating_sub(MAX_HEADERS).max(1);
+    let worst_case = (u16::MAX as usize).div_ceil(min_segment) + 1;
+    worst_case.max(IDEAL_BATCH_SIZE)
+}
+
 /// Batched TUN I/O, available when the device was opened with offload.
 ///
 /// `recv_multiple` takes one large GRO read from the kernel and splits it into
@@ -1101,17 +1209,23 @@ async fn batched_read_loop(
     ctx: PacketContext,
     mtu: usize,
 ) -> Result<(), Error> {
-    use tun_rs::{GROTable, IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
+    use tun_rs::{GROTable, VIRTIO_NET_HDR_LEN};
 
-    // One GRO read can carry up to 64 KiB, split across the buffer set, so the
-    // set must be able to absorb that many MTU-sized pieces; IDEAL_BATCH_SIZE
-    // (128) covers a 1500-byte MTU with room spare.
-    let buf_len = VIRTIO_NET_HDR_LEN + mtu.max(IPV4_MIN_HEADER);
+    // Prefer the device's own MTU: for `fd://` devices the interface was set up
+    // by someone else and `cfg.mtu` may not describe it.
+    let mtu = device.mtu().map(usize::from).unwrap_or(mtu);
+    // The batch count must come from the real MTU — clamping it upwards here
+    // would under-size the set for a genuinely small MTU. The buffer *length*
+    // is floored separately, so a nonsensical MTU cannot yield buffers too
+    // short to hold one segment.
+    let count = receive_batch_size(mtu);
+    let buf_len = VIRTIO_NET_HDR_LEN + mtu.max(MIN_BUFFER_PAYLOAD);
+    debug!("system TUN batched io: mtu {mtu}, {count} receive buffers");
+
     let mut original = vec![0u8; VIRTIO_NET_HDR_LEN + u16::MAX as usize];
-    let mut bufs: Vec<BytesMut> = (0..IDEAL_BATCH_SIZE)
-        .map(|_| BytesMut::zeroed(buf_len))
-        .collect();
-    let mut sizes = vec![0usize; IDEAL_BATCH_SIZE];
+    let mut bufs: Vec<BytesMut> =
+        (0..count).map(|_| BytesMut::zeroed(buf_len)).collect();
+    let mut sizes = vec![0usize; count];
     let mut gro = GROTable::new();
 
     loop {
@@ -1657,6 +1771,34 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    /// A batch too small to hold every segment of a GRO read makes
+    /// `recv_multiple` fail with `ErrTooManySegments`, which would tear the
+    /// backend down — so small MTUs must scale the set *up*.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn receive_batch_size_covers_a_full_gro_read() {
+        use tun_rs::IDEAL_BATCH_SIZE;
+
+        for mtu in [1280usize, 1500, 9000, 65535] {
+            assert_eq!(
+                receive_batch_size(mtu),
+                IDEAL_BATCH_SIZE,
+                "mtu {mtu} should not need more than the ideal batch"
+            );
+        }
+        // Small MTUs split a 64 KiB read into more pieces than the ideal
+        // batch holds, so the count has to grow.
+        for mtu in [576usize, 500, 296, 128] {
+            let count = receive_batch_size(mtu);
+            let min_segment = mtu.saturating_sub(120).max(1);
+            let needed = (u16::MAX as usize).div_ceil(min_segment);
+            assert!(
+                count >= needed,
+                "mtu {mtu}: {count} buffers cannot hold {needed} segments"
+            );
+        }
     }
 
     #[test]
