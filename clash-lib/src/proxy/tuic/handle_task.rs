@@ -4,21 +4,13 @@ use bytes::Bytes;
 use std::{sync::Arc, time::Duration};
 use tuic_core::{
     Address,
-    quinn::{Connect, Packet, ZeroRttAccepted},
+    quinn::{Connect, Packet},
 };
 
 use super::types::{TuicConnection, UdpRelayMode};
 
 impl TuicConnection {
-    pub async fn tuic_auth(
-        self: Arc<Self>,
-        zero_rtt_accepted: Option<ZeroRttAccepted>,
-    ) {
-        if let Some(zero_rtt_accepted) = zero_rtt_accepted {
-            tracing::debug!("[auth] waiting for connection to be fully established");
-            zero_rtt_accepted.await;
-        }
-
+    pub async fn tuic_auth(self: Arc<Self>) {
         tracing::debug!("[auth] sending authentication");
 
         match self

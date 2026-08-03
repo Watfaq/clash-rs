@@ -236,11 +236,13 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
         aad: &[u8],
         buffer: &mut [u8],
     ) {
-        use chacha20poly1305::aead::AeadInPlace as _;
+        use chacha20poly1305::aead::AeadInOut as _;
+        let nonce = chacha20poly1305::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
         let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
-            .encrypt_in_place_detached(nonce.into(), aad, msg)
+            .encrypt_inout_detached(&nonce, aad, msg.into())
             .expect("encryption failure!");
         tag.copy_from_slice(x.as_slice());
     }
@@ -251,16 +253,15 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
         aad: &[u8],
         buffer: &mut [u8],
     ) -> Result<(), aes_gcm::Error> {
-        use chacha20poly1305::aead::AeadInPlace as _;
+        use chacha20poly1305::aead::AeadInOut as _;
+        let nonce = chacha20poly1305::aead::Nonce::<Self>::try_from(nonce)
+            .expect("invalid nonce length");
         let tag_pos = buffer.len() - AEAD_TAG_SIZE;
         let (msg, tag) = buffer.split_at_mut(tag_pos);
-        self.decrypt_in_place_detached(
-            nonce.into(),
-            aad,
-            msg,
-            chacha20poly1305::aead::Tag::<Self>::from_slice(tag),
-        )
-        .map_err(|_| aes_gcm::Error)
+        let tag = chacha20poly1305::aead::Tag::<Self>::try_from(&*tag)
+            .expect("invalid tag length");
+        self.decrypt_inout_detached(&nonce, aad, msg.into(), &tag)
+            .map_err(|_| aes_gcm::Error)
     }
 }
 #[cfg(test)]
