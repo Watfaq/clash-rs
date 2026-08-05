@@ -103,7 +103,7 @@ byteorder = "1"
 lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "v5", "fast-rng", "macro-diagnostics", "serde"] }
 network-interface = { version = "2" }
-base64 = "0.22"
+base64 = "0.23"
 hex = "0.4"
 zstd = "0.13"
 portable-atomic = { version = "1", features = ["serde"] }
@@ -122,7 +122,7 @@ hmac = "0.13"
 sha1 = "0.11"
 sha2 = "0.11"
 md-5 = "0.11"
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 aead = { version = "0.5", features = ["std"] }
 aes = "0.9"
 blake3 = { version = "1", optional = true }
@@ -163,7 +163,7 @@ erased-serde = "0.4"
 
 
 # Macro Magic
-educe = "0.6"
+educe = "0.7"
 
 # DNS
 watfaq-dns = { path = "../clash-dns", default-features = false }
@@ -178,7 +178,7 @@ rand = "0.10"
 tracing = "0.1"
 
 shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher", "aead-cipher-extra"], git = "https://github.com/shadowsocks/shadowsocks-rust.git", rev = "c4d8d18527289d12470cad1ce718754c908a75fe" }
-maxminddb = "0.29"
+maxminddb = "0.30"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
@@ -218,12 +218,12 @@ totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 shadowquic = { version = "0.3.12", optional = true, default-features = false}
 
 # experimental
-tailscale = { version = "0.3.3", optional = true }
+tailscale = { version = "0.4.0", optional = true }
 
 aws-lc-rs = { version = "1", default-features = false, optional = true }
 
 # tproxy
-etherparse = {version = "0.20", optional = true }
+etherparse = {version = "0.21", optional = true }
 tempfile = "3.27"
 notify = "8"
 percent-encoding = "2.3.2"
@@ -234,7 +234,7 @@ tokio-test = "0.4.5"
 axum-macros = "0.5.1"
 bollard = "0.21"
 tar = "0.4"
-serial_test = "3.5"
+serial_test = "4.0"
 env_logger = "0.11"
 rand_chacha = "0.10"
 httpmock = "0.8.3" # TODO replace with wiremock
