@@ -124,13 +124,20 @@ impl ClientInner {
                 None => verifier,
             };
 
-        Ok(
-            ClientConfig::builder_with_provider(fingerprint.crypto_provider(base))
-                .with_safe_default_protocol_versions()
-                .map_err(io::Error::other)?
-                .dangerous()
-                .with_custom_certificate_verifier(verifier),
-        )
+        let builder =
+            ClientConfig::builder_with_provider(fingerprint.crypto_provider(base));
+
+        // GREASE ECH is stored on the builder, not on the finished config, so
+        // it has to be decided here.
+        let builder = match fingerprint.ech_mode() {
+            Some(mode) => builder.with_ech(mode),
+            None => builder.with_safe_default_protocol_versions(),
+        }
+        .map_err(io::Error::other)?;
+
+        Ok(builder
+            .dangerous()
+            .with_custom_certificate_verifier(verifier))
     }
 }
 

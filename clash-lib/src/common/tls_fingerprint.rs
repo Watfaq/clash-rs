@@ -16,7 +16,7 @@ use std::{str::FromStr, sync::Arc};
 
 use rustls::{
     RawExtension, SignatureScheme,
-    client::ClientHelloProfile,
+    client::{ClientHelloProfile, EchGreaseConfig, EchMode},
     crypto::{CryptoProvider, SupportedKxGroup},
 };
 use tracing::warn;
@@ -157,6 +157,47 @@ impl ClientFingerprint {
                 grease: true,
                 ..Default::default()
             },
+        }
+    }
+
+    /// The GREASE ECH placeholder this profile sends, if it sends one.
+    ///
+    /// Chrome has carried an encrypted_client_hello extension full of random
+    /// data since it started GREASEing ECH, and its absence is as visible as
+    /// any other missing extension. It negotiates nothing: the payload is
+    /// noise and the server ignores it.
+    ///
+    /// `None` without the `aws-lc-rs` feature - that is the only provider
+    /// rustls ships HPKE for, and there is nothing to build the placeholder
+    /// with otherwise.
+    pub fn ech_mode(&self) -> Option<EchMode> {
+        if !matches!(self, Self::Chrome) {
+            return None;
+        }
+
+        #[cfg(feature = "aws-lc-rs")]
+        {
+            use rustls::crypto::{
+                aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128, hpke::Hpke,
+            };
+
+            // X25519 because that is what browsers GREASE with, and the KEM
+            // decides the length of the encapsulated key on the wire.
+            let suite = DH_KEM_X25519_HKDF_SHA256_AES_128 as &'static dyn Hpke;
+            match suite.generate_key_pair() {
+                Ok((public_key, _)) => {
+                    Some(EchMode::Grease(EchGreaseConfig::new(suite, public_key)))
+                }
+                Err(e) => {
+                    warn!("could not build a GREASE ECH placeholder: {e}");
+                    None
+                }
+            }
+        }
+
+        #[cfg(not(feature = "aws-lc-rs"))]
+        {
+            None
         }
     }
 
@@ -603,6 +644,30 @@ mod wire {
     }
 
     #[test]
+    fn chrome_sends_a_grease_ech_placeholder() {
+        let hello = capture(Some(ClientFingerprint::Chrome));
+
+        let body = hello.body(0xfe0d).expect("no encrypted_client_hello");
+        assert_eq!(body[0], 0x00, "not an outer ECH");
+
+        // 0x00 outer, kdf u16, aead u16, config_id u8, then the encapsulated
+        // key as a length-prefixed payload. Thirty-two bytes means X25519,
+        // which is the KEM browsers GREASE with; P-256 would be sixty-five and
+        // would stand out for it.
+        assert_eq!(u16::from_be_bytes([body[6], body[7]]), 32);
+    }
+
+    #[test]
+    fn grease_ech_does_not_cost_us_tls12() {
+        // rustls pins TLS 1.3 for real ECH. GREASE negotiates nothing, so it
+        // must not - Chrome offers both versions and a placeholder extension.
+        let hello = capture(Some(ClientFingerprint::Chrome));
+        let versions = hello.u16_list(0x002b, 1);
+
+        assert_eq!(&versions[1..], &[0x0304, 0x0303], "{versions:04x?}");
+    }
+
+    #[test]
     fn chrome_does_not_send_the_scsv() {
         let hello = capture(Some(ClientFingerprint::Chrome));
 
@@ -637,6 +702,7 @@ mod wire {
         assert!(!hello.types().into_iter().any(is_grease));
         assert!(hello.body(EXT_SIGNED_CERTIFICATE_TIMESTAMP).is_none());
         assert!(hello.body(EXT_APPLICATION_SETTINGS).is_none());
+        assert!(hello.body(0xfe0d).is_none(), "unasked-for GREASE ECH");
         // The SCSV is still how rustls signals no renegotiation.
         assert!(hello.cipher_suites.contains(&0x00ff));
     }
@@ -649,6 +715,7 @@ mod wire {
         // Not a browser and not claiming to be: no browser-specific extension
         // and no invented cipher list.
         assert!(hello.body(EXT_APPLICATION_SETTINGS).is_none());
+        assert!(hello.body(0xfe0d).is_none());
         assert!(hello.cipher_suites.contains(&0x00ff));
     }
 }

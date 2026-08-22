@@ -186,9 +186,16 @@ fn client_config_builder(
         std::io::Error::other("no default crypto provider installed")
     })?;
 
-    ClientConfig::builder_with_provider(fingerprint.crypto_provider(base))
-        .with_safe_default_protocol_versions()
-        .map_err(std::io::Error::other)
+    let builder =
+        ClientConfig::builder_with_provider(fingerprint.crypto_provider(base));
+
+    // GREASE ECH has to be decided here too: it is stored on the builder, not
+    // on the finished config.
+    match fingerprint.ech_mode() {
+        Some(mode) => builder.with_ech(mode),
+        None => builder.with_safe_default_protocol_versions(),
+    }
+    .map_err(std::io::Error::other)
 }
 
 /// Narrow the signature algorithms to the ones the fingerprint advertises.
