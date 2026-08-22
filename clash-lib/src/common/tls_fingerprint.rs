@@ -647,6 +647,17 @@ mod wire {
     }
 
     #[test]
+    fn chrome_offers_brotli_certificate_compression() {
+        let hello = capture(Some(ClientFingerprint::Chrome));
+
+        // compress_certificate(27): a u8 list length, then u16 algorithm ids.
+        // Brotli is 2, and it is the only one Chrome offers. Without it the
+        // extension is absent entirely, and the extension set is exactly what
+        // the common fingerprints hash.
+        assert_eq!(hello.body(0x001b), Some(&[0x02, 0x00, 0x02][..]));
+    }
+
+    #[test]
     fn chrome_sends_a_grease_ech_placeholder() {
         let hello = capture(Some(ClientFingerprint::Chrome));
 
