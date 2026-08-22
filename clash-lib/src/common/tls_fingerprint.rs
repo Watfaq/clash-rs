@@ -16,7 +16,7 @@ use std::{str::FromStr, sync::Arc};
 
 use rustls::{
     RawExtension, SignatureScheme,
-    client::{ClientHelloProfile, EchGreaseConfig, EchMode},
+    client::{ClientHelloProfile, EchMode},
     crypto::{CryptoProvider, SupportedKxGroup},
 };
 use tracing::warn;
@@ -177,8 +177,11 @@ impl ClientFingerprint {
 
         #[cfg(feature = "aws-lc-rs")]
         {
-            use rustls::crypto::{
-                aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128, hpke::Hpke,
+            use rustls::{
+                client::EchGreaseConfig,
+                crypto::{
+                    aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128, hpke::Hpke,
+                },
             };
 
             // X25519 because that is what browsers GREASE with, and the KEM
