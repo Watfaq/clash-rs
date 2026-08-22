@@ -200,6 +200,14 @@ impl ClientFingerprint {
 
         #[cfg(not(feature = "aws-lc-rs"))]
         {
+            // Said out loud rather than left to be discovered in a packet
+            // capture. Routers are built with ring - aws-lc-rs has no MIPS
+            // support - so this is the common case, not the exotic one, and
+            // the hello ends up one extension short of the browser's.
+            warn!(
+                "GREASE ECH needs the aws-lc-rs provider, which this build does \
+                 not have; the hello will be one extension short of the profile"
+            );
             None
         }
     }
