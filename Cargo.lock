@@ -7656,7 +7656,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.40"
-source = "git+https://github.com/Rushan4eg/rustls.git?branch=watfaq%2Futls#1fb4bca455510416e6360f82afb206f793e46e08"
+source = "git+https://github.com/Rushan4eg/rustls.git?branch=watfaq%2Futls#64bb6c1de7a360d93589686eafb1876095b0e90c"
 dependencies = [
  "aws-lc-rs",
  "brotli",

@@ -16,8 +16,12 @@ use std::{str::FromStr, sync::Arc};
 
 use rustls::{
     RawExtension, SignatureScheme,
-    client::{ClientHelloProfile, EchMode},
-    crypto::{CryptoProvider, SupportedKxGroup},
+    client::{ClientHelloProfile, EchGreaseConfig, EchMode},
+    crypto::{CryptoProvider, SupportedKxGroup, hpke::HpkeSuite},
+    internal::msgs::{
+        enums::{HpkeAead, HpkeKdf, HpkeKem},
+        handshake::HpkeSymmetricCipherSuite,
+    },
 };
 use tracing::warn;
 
@@ -167,48 +171,32 @@ impl ClientFingerprint {
     /// any other missing extension. It negotiates nothing: the payload is
     /// noise and the server ignores it.
     ///
-    /// `None` without the `aws-lc-rs` feature - that is the only provider
-    /// rustls ships HPKE for, and there is nothing to build the placeholder
-    /// with otherwise.
+    /// Built without an HPKE provider, so every build gets one - including the
+    /// `ring` builds that every MIPS and embedded target uses, where rustls
+    /// ships no HPKE at all. GREASE addresses nobody and carries nothing, so a
+    /// working KEM was never what it needed.
     pub fn ech_mode(&self) -> Option<EchMode> {
         if !matches!(self, Self::Chrome) {
             return None;
         }
 
-        #[cfg(feature = "aws-lc-rs")]
-        {
-            use rustls::{
-                client::EchGreaseConfig,
-                crypto::{
-                    aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128, hpke::Hpke,
-                },
-            };
+        // X25519 with HKDF-SHA256 and AES-128-GCM: the suite browsers GREASE
+        // with. The KEM matters even for a placeholder, because it decides the
+        // length of the encapsulated key that goes on the wire.
+        let suite = HpkeSuite {
+            kem: HpkeKem::DHKEM_X25519_HKDF_SHA256,
+            sym: HpkeSymmetricCipherSuite {
+                kdf_id: HpkeKdf::HKDF_SHA256,
+                aead_id: HpkeAead::AES_128_GCM,
+            },
+        };
 
-            // X25519 because that is what browsers GREASE with, and the KEM
-            // decides the length of the encapsulated key on the wire.
-            let suite = DH_KEM_X25519_HKDF_SHA256_AES_128 as &'static dyn Hpke;
-            match suite.generate_key_pair() {
-                Ok((public_key, _)) => {
-                    Some(EchMode::Grease(EchGreaseConfig::new(suite, public_key)))
-                }
-                Err(e) => {
-                    warn!("could not build a GREASE ECH placeholder: {e}");
-                    None
-                }
+        match EchGreaseConfig::without_provider(suite) {
+            Ok(config) => Some(EchMode::Grease(config)),
+            Err(e) => {
+                warn!("could not build a GREASE ECH placeholder: {e}");
+                None
             }
-        }
-
-        #[cfg(not(feature = "aws-lc-rs"))]
-        {
-            // Said out loud rather than left to be discovered in a packet
-            // capture. Routers are built with ring - aws-lc-rs has no MIPS
-            // support - so this is the common case, not the exotic one, and
-            // the hello ends up one extension short of the browser's.
-            warn!(
-                "GREASE ECH needs the aws-lc-rs provider, which this build does \
-                 not have; the hello will be one extension short of the profile"
-            );
-            None
         }
     }
 
@@ -635,23 +623,46 @@ mod wire {
     }
 
     #[test]
-    fn chrome_offers_the_two_key_shares_chrome_offers() {
+    fn chrome_offers_key_shares_for_the_groups_it_leads_with() {
         let hello = capture(Some(ClientFingerprint::Chrome));
 
         // key_share(51): u16 list length, then entries of group, u16 length,
-        // body. Chrome sends GREASE, X25519MLKEM768 and its X25519 component;
-        // rustls derives the pair from the group order on its own.
+        // body.
         let body = hello.body(0x0033).expect("no key_share");
         let mut at = 2;
-        let mut groups = Vec::new();
+        let mut shares = Vec::new();
         while at < body.len() {
-            groups.push(u16::from_be_bytes([body[at], body[at + 1]]));
+            shares.push(u16::from_be_bytes([body[at], body[at + 1]]));
             let size = u16::from_be_bytes([body[at + 2], body[at + 3]]) as usize;
             at += 4 + size;
         }
 
-        assert!(is_grease(groups[0]), "{groups:04x?}");
-        assert_eq!(groups.len(), 3, "{groups:04x?}");
+        assert!(is_grease(shares[0]), "{shares:04x?}");
+
+        let groups = hello.u16_list(0x000a, 2);
+        let real_groups: Vec<u16> =
+            groups.iter().copied().filter(|g| !is_grease(*g)).collect();
+        let real_shares: Vec<u16> =
+            shares.iter().copied().filter(|g| !is_grease(*g)).collect();
+
+        // Whatever the provider offers, the share we send is for the group we
+        // asked for first. Getting that wrong costs a round trip on every
+        // connection.
+        assert_eq!(
+            real_shares[0], real_groups[0],
+            "{shares:04x?} vs {groups:04x?}"
+        );
+
+        // With X25519MLKEM768 available, rustls sends its X25519 component as
+        // a second share for free - which is the pair Chrome sends. Without
+        // it, as on a `ring` build, there is one share and the hello differs
+        // from Chrome's here. Nothing to be done about that short of ML-KEM
+        // in `ring`.
+        if real_groups[0] == 0x11ec {
+            assert_eq!(real_shares, vec![0x11ec, 0x001d], "{shares:04x?}");
+        } else {
+            assert_eq!(real_shares.len(), 1, "{shares:04x?}");
+        }
     }
 
     #[test]
