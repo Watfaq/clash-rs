@@ -131,6 +131,7 @@ impl Handler {
             verify,
             opts.tls_cert.as_deref(),
             opts.tls_key.as_deref(),
+            None,
         )
         .map_err(|e| std::io::Error::new(e.kind(), format!("hysteria2 TLS: {e}")))?;
 

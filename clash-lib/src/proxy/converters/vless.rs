@@ -1,5 +1,6 @@
 use crate::{
     Error,
+    common::tls_fingerprint::parse_client_fingerprint,
     config::internal::proxy::OutboundVless,
     proxy::{
         HandlerCommonOptions,
@@ -31,12 +32,10 @@ impl TryFrom<&OutboundVless> for Handler {
             );
         }
 
-        if s.client_fingerprint.is_some() {
-            warn!(
-                "client-fingerprint (uTLS) is not yet implemented, ignored for {}",
-                s.common_opts.name
-            );
-        }
+        let fingerprint = s
+            .client_fingerprint
+            .as_deref()
+            .map(|value| parse_client_fingerprint(value, &s.common_opts.name));
 
         let tls: Option<TransportLayer> = if let Some(ref reality_opts) =
             s.reality_opts
@@ -57,13 +56,16 @@ impl TryFrom<&OutboundVless> for Handler {
                 .unwrap_or_else(|| s.common_opts.server.clone());
 
             Some(TransportLayer::Reality(RealityClient::new(
-                sni, pk_bytes, short_id,
+                sni,
+                pk_bytes,
+                short_id,
+                fingerprint,
             )))
         } else {
             // vless without reality
             match s.tls.unwrap_or_default() {
                 true => {
-                    let client = TlsClient::new(
+                    let client = TlsClient::new_with_fingerprint(
                         s.skip_cert_verify.unwrap_or_default(),
                         s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
                             s.ws_opts
@@ -91,6 +93,7 @@ impl TryFrom<&OutboundVless> for Handler {
                         None,
                         s.tls_cert.as_deref(),
                         s.tls_key.as_deref(),
+                        fingerprint,
                     )?;
                     Some(TransportLayer::Tls(client))
                 }

@@ -7,6 +7,7 @@ use crate::{
     common::{
         errors::map_io_error,
         tls::{DefaultTlsVerifier, build_tls_client_config},
+        tls_fingerprint::ClientFingerprint,
     },
     proxy::AnyStream,
 };
@@ -22,19 +23,22 @@ pub struct TLSOptions {
     /// File path or inline PEM client private key for mTLS.
     /// Must be set together with `tls_cert`.
     pub tls_key: Option<String>,
+    /// Shape the ClientHello like this client, from `client-fingerprint`.
+    pub client_fingerprint: Option<ClientFingerprint>,
 }
 
 impl TryFrom<TLSOptions> for Client {
     type Error = io::Error;
 
     fn try_from(opt: TLSOptions) -> Result<Self, Self::Error> {
-        Client::new(
+        Client::new_with_fingerprint(
             opt.skip_cert_verify,
             opt.sni,
             opt.alpn,
             None,
             opt.tls_cert.as_deref(),
             opt.tls_key.as_deref(),
+            opt.client_fingerprint,
         )
     }
 }
@@ -65,14 +69,46 @@ impl Client {
         tls_cert: Option<&str>,
         tls_key: Option<&str>,
     ) -> io::Result<Self> {
-        let verifier = Arc::new(DefaultTlsVerifier::new(None, skip_cert_verify));
-        let mut tls_config = build_tls_client_config(verifier, tls_cert, tls_key)?;
+        Self::new_with_fingerprint(
+            skip_cert_verify,
+            sni,
+            alpn,
+            expected_alpn,
+            tls_cert,
+            tls_key,
+            None,
+        )
+    }
 
-        tls_config.alpn_protocols = alpn
+    /// As [`Self::new`], with the ClientHello shaped like `client_fingerprint`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_fingerprint(
+        skip_cert_verify: bool,
+        sni: String,
+        alpn: Option<Vec<String>>,
+        expected_alpn: Option<String>,
+        tls_cert: Option<&str>,
+        tls_key: Option<&str>,
+        client_fingerprint: Option<ClientFingerprint>,
+    ) -> io::Result<Self> {
+        let verifier = Arc::new(DefaultTlsVerifier::new(None, skip_cert_verify));
+        let mut tls_config = build_tls_client_config(
+            verifier,
+            tls_cert,
+            tls_key,
+            client_fingerprint,
+        )?;
+
+        // An empty list leaves whatever the fingerprint asked for in place;
+        // sending no ALPN at all is unlike any browser.
+        let alpn: Vec<Vec<u8>> = alpn
             .unwrap_or_default()
             .into_iter()
             .map(|x| x.as_bytes().to_vec())
             .collect();
+        if !alpn.is_empty() {
+            tls_config.alpn_protocols = alpn;
+        }
 
         if std::env::var("SSLKEYLOGFILE").is_ok() {
             tls_config.key_log = Arc::new(rustls::KeyLogFile::new());

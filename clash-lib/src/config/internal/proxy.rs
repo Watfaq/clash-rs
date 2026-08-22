@@ -258,7 +258,10 @@ pub struct OutboundAnytls {
     pub skip_cert_verify: Option<bool>,
     /// Parsed for config compatibility; currently not applied by the runtime.
     pub fingerprint: Option<String>,
-    /// Parsed for config compatibility; currently not applied by the runtime.
+    /// Shape the ClientHello like this client: `chrome`, `edge`, `android`,
+    /// `360`, `qq` or `random`. A profile that is not implemented falls back
+    /// to `random` with a warning rather than silently substituting another
+    /// browser.
     pub client_fingerprint: Option<String>,
     pub udp: Option<bool>,
     /// Parsed for config compatibility; currently not applied by the runtime.
@@ -339,6 +342,10 @@ pub struct OutboundVless {
     pub grpc_opts: Option<GrpcOpt>,
     pub reality_opts: Option<RealityOpt>,
     pub flow: Option<String>,
+    /// Shape the ClientHello like this client: `chrome`, `edge`, `android`,
+    /// `360`, `qq` or `random`. A profile that is not implemented falls back
+    /// to `random` with a warning rather than silently substituting another
+    /// browser.
     pub client_fingerprint: Option<String>,
     /// File path or inline PEM client certificate for mTLS.
     /// Must be set together with `tls-key`.

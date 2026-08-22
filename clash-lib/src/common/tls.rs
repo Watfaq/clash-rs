@@ -1,11 +1,14 @@
 use rustls::{
-    RootCertStore,
+    ClientConfig, RootCertStore,
     client::{WebPkiServerVerifier, danger::ServerCertVerifier},
+    crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime},
 };
 use tracing::warn;
 
 use std::sync::{Arc, LazyLock};
+
+use super::tls_fingerprint::{ClientFingerprint, PinnedSchemeVerifier};
 
 pub static GLOBAL_ROOT_STORE: LazyLock<Arc<RootCertStore>> =
     LazyLock::new(global_root_store);
@@ -132,11 +135,15 @@ pub fn build_tls_client_config(
     verifier: Arc<dyn ServerCertVerifier>,
     tls_cert: Option<&str>,
     tls_key: Option<&str>,
-) -> std::io::Result<rustls::ClientConfig> {
-    match (tls_cert, tls_key) {
+    fingerprint: Option<ClientFingerprint>,
+) -> std::io::Result<ClientConfig> {
+    let verifier = pin_schemes(verifier, fingerprint);
+    let builder = client_config_builder(fingerprint)?;
+
+    let mut config = match (tls_cert, tls_key) {
         (Some(cert), Some(key)) => {
             let (certs, private_key) = load_cert_and_key(cert, key)?;
-            rustls::ClientConfig::builder()
+            builder
                 .dangerous()
                 .with_custom_certificate_verifier(verifier)
                 .with_client_auth_cert(certs, private_key)
@@ -145,16 +152,78 @@ pub fn build_tls_client_config(
                         std::io::ErrorKind::InvalidInput,
                         format!("invalid mTLS client cert/key: {e}"),
                     )
-                })
+                })?
         }
-        (None, None) => Ok(rustls::ClientConfig::builder()
+        (None, None) => builder
             .dangerous()
             .with_custom_certificate_verifier(verifier)
-            .with_no_client_auth()),
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "tls-cert and tls-key must both be set or both omitted",
-        )),
+            .with_no_client_auth(),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "tls-cert and tls-key must both be set or both omitted",
+            ));
+        }
+    };
+
+    apply_client_fingerprint(&mut config, fingerprint);
+    Ok(config)
+}
+
+/// Start a client config on the provider a fingerprint asks for.
+///
+/// Key exchange group order is part of the hello and cannot be changed once
+/// the config is built, so it has to be decided here rather than patched in
+/// afterwards.
+fn client_config_builder(
+    fingerprint: Option<ClientFingerprint>,
+) -> std::io::Result<rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>> {
+    let Some(fingerprint) = fingerprint else {
+        return Ok(ClientConfig::builder());
+    };
+
+    let base = CryptoProvider::get_default().cloned().ok_or_else(|| {
+        std::io::Error::other("no default crypto provider installed")
+    })?;
+
+    ClientConfig::builder_with_provider(fingerprint.crypto_provider(base))
+        .with_safe_default_protocol_versions()
+        .map_err(std::io::Error::other)
+}
+
+/// Narrow the signature algorithms to the ones the fingerprint advertises.
+fn pin_schemes(
+    verifier: Arc<dyn ServerCertVerifier>,
+    fingerprint: Option<ClientFingerprint>,
+) -> Arc<dyn ServerCertVerifier> {
+    match fingerprint.and_then(|fp| fp.signature_schemes()) {
+        Some(schemes) => Arc::new(PinnedSchemeVerifier::new(verifier, schemes)),
+        None => verifier,
+    }
+}
+
+/// Put the shaped hello on a config that is otherwise already built.
+///
+/// Separate from [`build_tls_client_config`] because Reality builds its config
+/// by a different route - it has to insert its own verifier - and still needs
+/// this part.
+pub fn apply_client_fingerprint(
+    config: &mut ClientConfig,
+    fingerprint: Option<ClientFingerprint>,
+) {
+    let Some(fingerprint) = fingerprint else {
+        return;
+    };
+
+    config.client_hello_profile = Arc::new(fingerprint.client_hello_profile());
+
+    // Only when the caller has no ALPN of its own: a transport that must
+    // negotiate h2 has a functional requirement, and looking like a browser
+    // does not outrank it.
+    if config.alpn_protocols.is_empty()
+        && let Some(alpn) = fingerprint.alpn()
+    {
+        config.alpn_protocols = alpn;
     }
 }
 

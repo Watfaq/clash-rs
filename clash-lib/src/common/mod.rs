@@ -10,5 +10,6 @@ pub mod mmdb;
 pub mod succinct_set;
 pub mod timed_future;
 pub mod tls;
+pub mod tls_fingerprint;
 pub mod trie;
 pub mod utils;

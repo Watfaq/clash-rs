@@ -213,6 +213,7 @@ impl Handler {
             verifier,
             opts.tls_cert.as_deref(),
             opts.tls_key.as_deref(),
+            None,
         )
         .map_err(|e| anyhow::anyhow!("tuic TLS: {e}"))?;
         // TODO(error-handling) if alpn not match the following error will be

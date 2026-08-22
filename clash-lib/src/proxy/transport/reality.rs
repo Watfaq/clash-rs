@@ -10,9 +10,15 @@ use std::{
     sync::{Arc, OnceLock, atomic::AtomicBool},
 };
 
-use crate::proxy::{
-    AnyStream,
-    transport::{Transport, VisionOptions, splice_tls::SplicableTlsStream},
+use crate::{
+    common::{
+        tls::{GLOBAL_ROOT_STORE, apply_client_fingerprint},
+        tls_fingerprint::{ClientFingerprint, PinnedSchemeVerifier},
+    },
+    proxy::{
+        AnyStream,
+        transport::{Transport, VisionOptions, splice_tls::SplicableTlsStream},
+    },
 };
 
 fn init_roots() -> Arc<RootCertStore> {
@@ -23,12 +29,22 @@ fn init_roots() -> Arc<RootCertStore> {
 pub struct Client(Arc<ClientInner>);
 
 impl Client {
-    pub fn new(sni: String, public_key: [u8; 32], short_id: Vec<u8>) -> Self {
+    /// `fingerprint` shapes the ClientHello, and this is the case the whole
+    /// feature exists for: Reality hides inside a TLS handshake to a real
+    /// site, and that only works while the handshake is indistinguishable
+    /// from the client it claims to come from.
+    pub fn new(
+        sni: String,
+        public_key: [u8; 32],
+        short_id: Vec<u8>,
+        fingerprint: Option<ClientFingerprint>,
+    ) -> Self {
         Self(Arc::new(ClientInner {
             sni,
             public_key,
             short_id,
             roots: OnceLock::new(),
+            fingerprint,
         }))
     }
 }
@@ -54,10 +70,10 @@ impl Client {
                 io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
             })?;
 
-        let tls_config = ClientConfig::builder()
-            .with_root_certificates(self.roots.get_or_init(init_roots).clone())
+        let mut tls_config = self.client_config_builder()?
             .with_reality(reality)
             .with_no_client_auth();
+        apply_client_fingerprint(&mut tls_config, self.fingerprint);
 
         let sni: ServerName<'_> =
             ServerName::try_from(self.sni.clone()).map_err(|e| {
@@ -68,6 +84,49 @@ impl Client {
             .connect(sni, stream)
             .await
             .map_err(io::Error::other)
+    }
+}
+
+impl ClientInner {
+    /// A config builder carrying the fingerprint's provider and verifier.
+    ///
+    /// Reality cannot use the shared helper: `with_reality` wraps whatever
+    /// verifier is in place at that moment, so ours has to be installed first
+    /// and the Reality one layered on top of it.
+    fn client_config_builder(
+        &self,
+    ) -> io::Result<rustls::ConfigBuilder<ClientConfig, rustls::client::WantsClientCert>>
+    {
+        let Some(fingerprint) = self.fingerprint else {
+            return Ok(ClientConfig::builder()
+                .with_root_certificates(self.roots.get_or_init(init_roots).clone()));
+        };
+
+        let base = rustls::crypto::CryptoProvider::get_default()
+            .cloned()
+            .ok_or_else(|| io::Error::other("no default crypto provider installed"))?;
+
+        let verifier = rustls::client::WebPkiServerVerifier::builder(
+            GLOBAL_ROOT_STORE.clone(),
+        )
+        .build()
+        .map_err(io::Error::other)?;
+
+        let verifier: Arc<dyn rustls::client::danger::ServerCertVerifier> =
+            match fingerprint.signature_schemes() {
+                Some(schemes) => {
+                    Arc::new(PinnedSchemeVerifier::new(verifier, schemes))
+                }
+                None => verifier,
+            };
+
+        Ok(ClientConfig::builder_with_provider(
+            fingerprint.crypto_provider(base),
+        )
+        .with_safe_default_protocol_versions()
+        .map_err(io::Error::other)?
+        .dangerous()
+        .with_custom_certificate_verifier(verifier))
     }
 }
 
@@ -146,6 +205,7 @@ pub struct ClientInner {
     short_id: Vec<u8>,
     // cached for performance
     roots: OnceLock<Arc<RootCertStore>>,
+    fingerprint: Option<ClientFingerprint>,
 }
 
 #[cfg(test)]
@@ -163,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let c = Client::new("example.com".to_string(), [1u8; 32], vec![0xab, 0xcd]);
+        let c = Client::new("example.com".to_string(), [1u8; 32], vec![0xab, 0xcd], None);
         assert_eq!(c.sni, "example.com");
         assert_eq!(c.public_key, [1u8; 32]);
         assert_eq!(c.short_id, vec![0xab, 0xcd]);
@@ -173,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn test_short_id_too_long() {
         setup();
-        let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 9]);
+        let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 9], None);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
@@ -182,7 +242,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_sni() {
         setup();
-        let c = Client::new("".to_string(), [0u8; 32], vec![0u8; 4]);
+        let c = Client::new("".to_string(), [0u8; 32], vec![0u8; 4], None);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
@@ -191,7 +251,7 @@ mod tests {
     #[tokio::test]
     async fn test_handshake_error_on_closed_peer() {
         setup();
-        let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 4]);
+        let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 4], None);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_ne!(err.kind(), io::ErrorKind::InvalidInput);
     }

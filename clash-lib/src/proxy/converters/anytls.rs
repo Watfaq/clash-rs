@@ -1,6 +1,7 @@
 use tracing::warn;
 
 use crate::{
+    common::tls_fingerprint::parse_client_fingerprint,
     config::internal::proxy::OutboundAnytls,
     proxy::{
         HandlerCommonOptions,
@@ -30,12 +31,19 @@ impl TryFrom<&OutboundAnytls> for Handler {
                 s.common_opts.server
             );
         }
-        if s.fingerprint.is_some() || s.client_fingerprint.is_some() {
+        // `fingerprint` pins the server certificate and is a different thing
+        // from `client-fingerprint`, which shapes our own hello. The first is
+        // still unimplemented here; the second is applied below.
+        if s.fingerprint.is_some() {
             warn!(
-                "anytls fingerprint fields are parsed but not applied yet for {}",
+                "anytls certificate fingerprint pinning is parsed but not applied yet for {}",
                 s.common_opts.name
             );
         }
+        let client_fingerprint = s
+            .client_fingerprint
+            .as_deref()
+            .map(|value| parse_client_fingerprint(value, &s.common_opts.name));
         if s.idle_session_check_interval.is_some()
             || s.idle_session_timeout.is_some()
             || s.min_idle_session.is_some()
@@ -56,7 +64,7 @@ impl TryFrom<&OutboundAnytls> for Handler {
             password: s.password.clone(),
             udp: s.udp.unwrap_or_default(),
             tls: {
-                let client = TlsClient::new(
+                let client = TlsClient::new_with_fingerprint(
                     skip_cert_verify,
                     s.sni
                         .clone()
@@ -67,6 +75,7 @@ impl TryFrom<&OutboundAnytls> for Handler {
                     None,
                     s.tls_cert.as_deref(),
                     s.tls_key.as_deref(),
+                    client_fingerprint,
                 )?;
                 Some(TransportLayer::Tls(client))
             },
