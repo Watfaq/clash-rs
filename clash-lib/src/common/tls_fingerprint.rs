@@ -119,8 +119,8 @@ impl FromStr for ClientFingerprint {
 pub fn parse_client_fingerprint(value: &str, proxy: &str) -> ClientFingerprint {
     ClientFingerprint::from_str(value).unwrap_or_else(|_| {
         warn!(
-            "client-fingerprint {value:?} is not implemented, {proxy} will use \
-             a randomised fingerprint instead"
+            "client-fingerprint {value:?} is not implemented, {proxy} will use a \
+             randomised fingerprint instead"
         );
         ClientFingerprint::Randomized
     })
@@ -210,11 +210,11 @@ impl ClientFingerprint {
         }
 
         for group in wanted {
-            if !kx_groups
-                .iter()
-                .any(|supported| supported.name() == *group)
-            {
-                warn!("key exchange group {group:?} is unavailable, dropped from the hello");
+            if !kx_groups.iter().any(|supported| supported.name() == *group) {
+                warn!(
+                    "key exchange group {group:?} is unavailable, dropped from the \
+                     hello"
+                );
             }
         }
 
@@ -247,7 +247,9 @@ mod tests {
 
     #[test]
     fn chromium_forks_all_get_chromes_hello() {
-        for name in ["chrome", "Chrome", " CHROME ", "edge", "android", "360", "qq"] {
+        for name in [
+            "chrome", "Chrome", " CHROME ", "edge", "android", "360", "qq",
+        ] {
             assert_eq!(
                 ClientFingerprint::from_str(name),
                 Ok(ClientFingerprint::Chrome),
@@ -319,7 +321,8 @@ mod tests {
         assert_eq!(
             alpn_list(&["h2", "http/1.1"]),
             vec![
-                0x00, 0x0c, 0x02, 0x68, 0x32, 0x08, 0x68, 0x74, 0x74, 0x70, 0x2f, 0x31, 0x2e, 0x31,
+                0x00, 0x0c, 0x02, 0x68, 0x32, 0x08, 0x68, 0x74, 0x74, 0x70, 0x2f,
+                0x31, 0x2e, 0x31,
             ]
         );
     }
@@ -344,11 +347,7 @@ mod tests {
         assert!(profile.cipher_suites.is_none());
         assert!(profile.append_extensions.is_empty());
         assert!(profile.prepend_extensions.is_empty());
-        assert!(
-            ClientFingerprint::Randomized
-                .signature_schemes()
-                .is_none()
-        );
+        assert!(ClientFingerprint::Randomized.signature_schemes().is_none());
     }
 }
 
@@ -443,10 +442,7 @@ mod wire {
 
     impl Hello {
         fn types(&self) -> Vec<u16> {
-            self.extensions
-                .iter()
-                .map(|(typ, _)| *typ)
-                .collect()
+            self.extensions.iter().map(|(typ, _)| *typ).collect()
         }
 
         fn body(&self, typ: u16) -> Option<&[u8]> {
@@ -500,7 +496,8 @@ mod wire {
         let handshake = &record[5..5 + record_len];
         assert_eq!(handshake[0], 0x01, "not a ClientHello");
 
-        let len = u32::from_be_bytes([0, handshake[1], handshake[2], handshake[3]]) as usize;
+        let len = u32::from_be_bytes([0, handshake[1], handshake[2], handshake[3]])
+            as usize;
         let body = &handshake[4..4 + len];
 
         let mut at = 2 + 32; // legacy_version, random
@@ -553,7 +550,10 @@ mod wire {
         let hello = capture(Some(ClientFingerprint::Chrome));
         let types = hello.types();
 
-        assert!(types.contains(&EXT_SIGNED_CERTIFICATE_TIMESTAMP), "{types:04x?}");
+        assert!(
+            types.contains(&EXT_SIGNED_CERTIFICATE_TIMESTAMP),
+            "{types:04x?}"
+        );
         assert!(types.contains(&EXT_APPLICATION_SETTINGS), "{types:04x?}");
         assert!(types.contains(&EXT_RENEGOTIATION_INFO), "{types:04x?}");
 
@@ -620,7 +620,12 @@ mod wire {
         // ALPN(16): u16 list length, then length-prefixed protocols.
         assert_eq!(
             hello.body(0x0010),
-            Some(&[0x00, 0x0c, 0x02, b'h', b'2', 0x08, b'h', b't', b't', b'p', b'/', b'1', b'.', b'1'][..])
+            Some(
+                &[
+                    0x00, 0x0c, 0x02, b'h', b'2', 0x08, b'h', b't', b't', b'p',
+                    b'/', b'1', b'.', b'1'
+                ][..]
+            )
         );
     }
 
@@ -628,13 +633,7 @@ mod wire {
     fn no_fingerprint_leaves_the_hello_exactly_as_it_was() {
         let hello = capture(None);
 
-        assert!(
-            !hello
-                .cipher_suites
-                .iter()
-                .copied()
-                .any(is_grease)
-        );
+        assert!(!hello.cipher_suites.iter().copied().any(is_grease));
         assert!(!hello.types().into_iter().any(is_grease));
         assert!(hello.body(EXT_SIGNED_CERTIFICATE_TIMESTAMP).is_none());
         assert!(hello.body(EXT_APPLICATION_SETTINGS).is_none());

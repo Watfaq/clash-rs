@@ -36,7 +36,8 @@ impl TryFrom<&OutboundAnytls> for Handler {
         // still unimplemented here; the second is applied below.
         if s.fingerprint.is_some() {
             warn!(
-                "anytls certificate fingerprint pinning is parsed but not applied yet for {}",
+                "anytls certificate fingerprint pinning is parsed but not applied \
+                 yet for {}",
                 s.common_opts.name
             );
         }
