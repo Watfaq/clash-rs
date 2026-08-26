@@ -56,20 +56,50 @@ impl InboundHandlerTrait for RedirInbound {
         let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
-            let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?.to_canonical();
+            // Fix(2026-08-04): tolerate per-connection errors. A single bad
+            // connection (peer reset, getsockopt failure) must not kill the
+            // whole redir listener (was the 7892 outage root cause).
+            let (socket, _) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("redir accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+            let src_addr = match socket.peer_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("redir peer_addr failed: {e}");
+                    continue;
+                }
+            };
 
-            if !self.allow_lan
-                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
-            {
+            let local_ip = match socket.local_addr() {
+                Ok(a) => a.ip().to_canonical(),
+                Err(e) => {
+                    warn!("redir local_addr failed: {e}");
+                    continue;
+                }
+            };
+            if !self.allow_lan && src_addr.ip() != local_ip {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
 
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("redir apply_tcp_options failed: {e}");
+                continue;
+            }
 
             // get redirect traffic original destination
-            let orig_dst = get_original_destination_addr(&socket)?.to_canonical();
+            let orig_dst = match get_original_destination_addr(&socket) {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("redir get_original_destination failed: {e}");
+                    continue;
+                }
+            };
 
             let sess = Session {
                 network: Network::Tcp,
@@ -148,6 +178,9 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
             })?;
 
         // Convert sockaddr_storage to SocketAddr
-        Ok(target_addr.as_socket().expect("SocketAddr"))
+        // Fix(2026-08-04): was expect() -> panic when sockaddr is not IP.
+        Ok(target_addr.as_socket().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "not a socket address")
+        })?)
     }
 }

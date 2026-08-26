@@ -21,6 +21,7 @@ use crate::proxy::tproxy::TproxyInbound;
 
 use crate::Dispatcher;
 use futures::future::BoxFuture;
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 #[cfg(feature = "shadowsocks")]
@@ -49,13 +50,25 @@ pub(crate) fn build_network_listeners(
             let name = name.clone();
             runners.push(Box::pin(async move {
                 info!("{} TCP listening at: {}:{}", name, addr, port,);
-                tcp_listener
-                    .listen_tcp()
-                    .await
-                    .inspect_err(|x| {
-                        error!("handler {} tcp listen failed: {x}", name);
-                    })
-                    .map_err(|e| e.into())
+                // Fix(2026-08-04): listener must survive single connection errors.
+                // Previously a single accept/peer_addr/getsockopt error (? propagation)
+                // killed the whole listener permanently with no restart, causing
+                // silent proxy outages (7892 REDIR-IN outage on this router).
+                loop {
+                    match tcp_listener.listen_tcp().await {
+                        Ok(()) => warn!(
+                            "{} TCP listener stopped unexpectedly, restarting",
+                            name
+                        ),
+                        Err(e) => error!(
+                            "{} TCP listen failed: {e}, restarting",
+                            name
+                        ),
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+                #[allow(unreachable_code)]
+                Ok(())
             }));
         }
 
@@ -64,13 +77,22 @@ pub(crate) fn build_network_listeners(
             let name = name.clone();
             runners.push(Box::pin(async move {
                 info!("{} UDP listening at: {}:{}", name, addr, port,);
-                udp_listener
-                    .listen_udp()
-                    .await
-                    .inspect_err(|x| {
-                        error!("handler {} udp listen failed: {x}", name);
-                    })
-                    .map_err(|e| e.into())
+                // Fix(2026-08-04): same restart-on-error loop as TCP.
+                loop {
+                    match udp_listener.listen_udp().await {
+                        Ok(()) => warn!(
+                            "{} UDP listener stopped unexpectedly, restarting",
+                            name
+                        ),
+                        Err(e) => error!(
+                            "{} UDP listen failed: {e}, restarting",
+                            name
+                        ),
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+                #[allow(unreachable_code)]
+                Ok(())
             }));
         }
 

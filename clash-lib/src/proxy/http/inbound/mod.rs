@@ -63,17 +63,38 @@ impl InboundHandlerTrait for HttpInbound {
         let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
-            let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?.to_canonical();
-
-            if !self.allow_lan
-                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
-            {
+            // Fix(2026-08-04): tolerate per-connection errors.
+            let (socket, _) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("http accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+            let src_addr = match socket.peer_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("http peer_addr failed: {e}");
+                    continue;
+                }
+            };
+            let local_ip = match socket.local_addr() {
+                Ok(a) => a.ip().to_canonical(),
+                Err(e) => {
+                    warn!("http local_addr failed: {e}");
+                    continue;
+                }
+            };
+            if !self.allow_lan && src_addr.ip() != local_ip {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
 
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("http apply_tcp_options failed: {e}");
+                continue;
+            }
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();

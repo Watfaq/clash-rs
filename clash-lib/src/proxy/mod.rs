@@ -322,4 +322,12 @@ pub trait DialWithConnector {
 pub trait PlainProxyAPIResponse: OutboundHandler {
     /// used in the API responses.
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>>;
+
+    /// Returns the server address (IP:port) of this proxy, if applicable.
+    /// Used by the delay test to fall back to a raw TCP connect test when
+    /// the proxy's protocol-level tunnel cannot be established (e.g. AnyTLS
+    /// on a port that is RST-filtered by the ISP).
+    fn server_addr(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
 }

@@ -496,6 +496,12 @@ impl OutboundHandler for Handler {
 
 #[async_trait]
 impl PlainProxyAPIResponse for Handler {
+    fn server_addr(&self) -> Option<std::net::SocketAddr> {
+        use std::net::IpAddr;
+        let ip: IpAddr = self.opts.server.as_str().parse().ok()?;
+        Some((ip, self.opts.port).into())
+    }
+
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);

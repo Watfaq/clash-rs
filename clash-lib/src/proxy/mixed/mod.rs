@@ -72,13 +72,21 @@ impl InboundHandlerTrait for MixedInbound {
                     continue;
                 }
             };
-            if !self.allow_lan
-                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
-            {
+            let local_ip = match socket.local_addr() {
+                Ok(a) => a.ip().to_canonical(),
+                Err(e) => {
+                    warn!("mixed local_addr failed: {e}");
+                    continue;
+                }
+            };
+            if !self.allow_lan && src_addr.ip() != local_ip {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("mixed apply_tcp_options failed: {e}");
+                continue;
+            }
 
             let mut p = [0; 1];
             let n = match socket.peek(&mut p).await {
@@ -104,7 +112,7 @@ impl InboundHandlerTrait for MixedInbound {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
                         network: Network::Tcp,
-                        source: socket.peer_addr()?.to_canonical(),
+                        source: src_addr,
                         so_mark: fw_mark,
                         ..Default::default()
                     };

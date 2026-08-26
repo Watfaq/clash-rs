@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use tokio::time::Instant;
 use tracing::debug;
@@ -19,6 +22,15 @@ pub struct HealthCheck {
     lazy: bool,
     proxy_manager: ProxyManager,
     inner: Arc<tokio::sync::RwLock<HealCheckInner>>,
+    /// Fix(2026-08-04): when HealthCheck is dropped, signal the background
+    /// task to stop (prevents task leak on configuration hot-reload).
+    stopped: Arc<AtomicBool>,
+}
+
+impl Drop for HealthCheck {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::Relaxed);
+    }
 }
 
 impl HealthCheck {
@@ -34,6 +46,7 @@ impl HealthCheck {
             interval,
             lazy,
             proxy_manager,
+            stopped: Arc::new(AtomicBool::new(false)),
             inner: Arc::new(tokio::sync::RwLock::new(HealCheckInner {
                 last_check: tokio::time::Instant::now(),
                 proxies,
@@ -54,12 +67,17 @@ impl HealthCheck {
         let inner = self.inner.clone();
         let proxy_manager = self.proxy_manager.clone();
         let url = self.url.clone();
+        let stopped = self.stopped.clone();
         let task_handle = tokio::spawn(async move {
             let mut ticker =
                 tokio::time::interval(tokio::time::Duration::from_secs(interval));
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
+                        if stopped.load(Ordering::Relaxed) {
+                            debug!("healthcheck {} stopped", url);
+                            break;
+                        }
                         debug!("healthcheck ticking: {}, lazy: {}", url, lazy);
                         let now = tokio::time::Instant::now();
                         let last_check = inner.read().await.last_check;

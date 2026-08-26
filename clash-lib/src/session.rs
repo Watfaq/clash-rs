@@ -107,8 +107,12 @@ impl SocksAddr {
             },
             Self::Domain(domain, port) => {
                 buf.put_u8(SocksAddrType::DOMAIN);
-                buf.put_u8(domain.len() as u8);
-                buf.put_slice(domain.as_bytes());
+                // Fix(2026-08-04): clamp to SOCKS domain max 255 bytes.
+                // A >255-byte domain (e.g. malformed HTTP CONNECT) would
+                // truncate via `as u8` and corrupt the protocol frame.
+                let dlen = domain.len().min(255);
+                buf.put_u8(dlen as u8);
+                buf.put_slice(&domain.as_bytes()[..dlen]);
                 buf.put_u16(*port);
             }
         }
@@ -129,9 +133,12 @@ impl SocksAddr {
     }
 
     pub fn must_into_socket_addr(self) -> SocketAddr {
-        let self_clone = self.clone();
-        self.try_into_socket_addr()
-            .unwrap_or_else(|| panic!("not a socket address: {self_clone:?}"))
+        // Fix(2026-08-04): was panic!() on Domain address. Return 0.0.0.0:0
+        // instead (caller will likely fail to connect, but won't crash).
+        self.try_into_socket_addr().unwrap_or_else(|| {
+            tracing::warn!("must_into_socket_addr: domain address, falling back to 0.0.0.0:0");
+            SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0)
+        })
     }
 
     pub fn try_into_socket_addr(self) -> Option<SocketAddr> {

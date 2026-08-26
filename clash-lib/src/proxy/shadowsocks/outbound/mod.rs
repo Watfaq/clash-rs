@@ -95,9 +95,12 @@ impl Handler {
     }
 
     fn server_config(&self) -> Result<ServerConfig, io::Error> {
+        // SS2022 password 直接使用原始值（订阅给出的 base64 格式 iPSK:uPSK），
+        // shadowsocks-rust 的 password_to_keys 会正确 base64 解码每段。
+        // 不再做 hex->base64 转换（那会把 hex 字符串错误地变成更短的二进制）。
         ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
-            self.opts.password.to_owned(),
+            self.opts.password.clone(),
             map_cipher(self.opts.cipher.as_str())?,
         )
         .map_err(|e| new_io_error(e.to_string()))

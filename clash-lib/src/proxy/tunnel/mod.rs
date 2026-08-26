@@ -76,9 +76,20 @@ impl InboundHandlerTrait for TunnelInbound {
         let listener = try_create_dualstack_tcplistener(self.listen)?;
 
         loop {
-            let (socket, src_addr) = listener.accept().await?;
+            // Fix(2026-08-04): tolerate per-connection errors.
+            let (socket, src_addr) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("tunnel accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
 
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("tunnel apply_tcp_options failed: {e}");
+                continue;
+            }
 
             let dispatcher = self.dispatcher.clone();
             let sess = Session {

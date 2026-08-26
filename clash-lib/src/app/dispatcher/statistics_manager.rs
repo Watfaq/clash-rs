@@ -10,7 +10,7 @@ use serde::Serialize;
 use tokio::sync::{Mutex, RwLock, oneshot::Sender};
 use tracing::warn;
 
-use crate::{app::dns::ThreadSafeDNSResolver, session::Session};
+use crate::{app::dns::ThreadSafeDNSResolver, app::remote_content_manager::set_global_traffic_rate, session::Session};
 
 use super::tracked::Tracked;
 
@@ -261,7 +261,11 @@ impl Manager {
                     (val, MemLimitMode::Soft)
                 };
                 match num_str.parse::<u64>() {
-                    Ok(mb) if mb > 0 => (mb * 1024 * 1024, mode),
+                    // Fix(2026-08-04): saturating to avoid u64 overflow on
+                    // absurd values (mb * 1024 * 1024 overflows at mb >= 2^44).
+                    Ok(mb) if mb > 0 => {
+                        (mb.saturating_mul(1024).saturating_mul(1024), mode)
+                    }
                     _ => (0, MemLimitMode::None),
                 }
             }
@@ -282,7 +286,12 @@ impl Manager {
                     // conns) would trigger BEFORE Soft mode (reject new conns
                     // at 1x limit).  Clamp to default to avoid logic inversion.
                     Ok(r) if r < 1.0 => DEFAULT_HARD_RATIO_X100,
-                    Ok(r) => (r * 100.0).round() as u64,
+                    // Fix(2026-08-04): guard NaN/Inf (parse::<f64>("NaN") is
+                    // Ok(NaN); (NaN*100) as u64 == 0 silently disabled Hard).
+                    Ok(r) if r.is_finite() && r >= 1.0 => {
+                        (r * 100.0).round() as u64
+                    }
+                    Ok(_) => DEFAULT_HARD_RATIO_X100,
                     Err(_) => DEFAULT_HARD_RATIO_X100,
                 }
             }
@@ -344,7 +353,9 @@ impl Manager {
         let limit = self.mem_limit_bytes.load(Ordering::Relaxed);
         if limit > 0 {
             let current = self.memory_usage();
-            if current > limit as usize {
+            // Fix(2026-08-04): `limit as usize` truncates to 0 on 32-bit
+            // targets when limit >= 4GiB, disabling the guard entirely.
+            if (current as u64) > limit {
                 // Memory over limit - reject this new connection.
                 // close_notify signals the connection to close immediately.
                 let _ = close_notify.send(());
@@ -595,6 +606,12 @@ impl Manager {
             );
             self.download_temp.store(0, Ordering::Relaxed);
 
+            // 更新全局流量速率供 url-test group 使用
+            set_global_traffic_rate(
+                self.upload_blip.load(Ordering::Relaxed),
+                self.download_blip.load(Ordering::Relaxed),
+            );
+
             // Memory pressure check every 5 seconds
             mem_check_counter += 1;
             if mem_check_counter >= 5 {
@@ -626,13 +643,15 @@ impl Manager {
         }
 
         let current = self.memory_usage();
-        let limit_usize = limit as usize;
+        // Fix(2026-08-04): keep u64 on 32-bit targets (`as usize` truncates
+        // limits >= 4GiB to 0).
+        let limit_u64 = limit;
 
         // --- Business-layer cache cleanup (both modes, when over 1x limit) ---
         // Free references so jemalloc can reclaim pages.  This is the primary
         // mechanism for RSS reduction: without freeing the objects, no amount
         // of allocator tuning will help.
-        if current > limit_usize {
+        if (current as u64) > limit_u64 {
             // 1. Clear closed_flows ring buffer (biggest business-layer cache)
             {
                 let mut ring = self.closed_flows.lock().await;
@@ -641,15 +660,20 @@ impl Manager {
                     ring.clear();
                     warn!(
                         "memory pressure: cleared {} closed_flows entries ({} bytes > {} limit)",
-                        freed, current, limit_usize
+                        freed, current, limit_u64
                     );
                 }
             }
 
             // 2. Clear DNS caches (reverse_lookup_cache)
+            // Fix(2026-08-04): clone resolver ref before .await to avoid
+            // holding the read lock across the async boundary, which can
+            // deadlock set_dns_resolver().
             {
-                let resolver = self.dns_resolver.read().await;
-                if let Some(r) = resolver.as_ref() {
+                let guard = self.dns_resolver.read().await;
+                let resolver_opt = guard.clone();
+                drop(guard);
+                if let Some(r) = resolver_opt.as_ref() {
                     r.clear_cache().await;
                 }
             }
@@ -682,8 +706,9 @@ impl Manager {
                 // are immediate.  Using the stale pre-cleanup value would risk
                 // closing connections that are no longer necessary.
                 let current = self.memory_usage();
-                let threshold =
-                    (limit_usize as u128 * ratio_x100 as u128 / 100) as usize;
+                // Fix(2026-08-04): clamp u128 -> usize (32-bit safety).
+                let threshold = ((limit_u64 as u128 * ratio_x100 as u128 / 100)
+                    .min(usize::MAX as u128)) as usize;
                 if current <= threshold {
                     return;
                 }
@@ -761,7 +786,7 @@ impl Manager {
                         .fetch_add(closed, Ordering::Relaxed);
                     warn!(
                         "memory pressure SEVERE: {} bytes > {}x{} limit, smart-evicted {}/{} connections (target {}, UDP+idle first, hard mode)",
-                        current, ratio_x100, limit_usize, closed, count, to_close
+                        current, ratio_x100, limit_u64, closed, count, to_close
                     );
                 }
             }
