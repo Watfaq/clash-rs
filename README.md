@@ -15,49 +15,6 @@ A custom protocol, rule based network proxy software.
 
 </div>
 
-> # 🔧 ClashRS Stabilized Fork (v0.10.8)
-> 本 fork 基于 **Watfaq/clash-rs v0.10.8**，重点修复路由器/低内存场景下的稳定性问题（崩溃、死锁、任务泄漏、连接中断）。
-> 实测在 128MB 内存的 OpenWrt 路由器上连续运行稳定，适合透明代理部署。
-
-## 相比上游，本 fork 修复了什么
-
-### 🛠 稳定性修复（20 处，全部经 OpenWrt 实测）
-
-| 类别 | 修复 |
-|------|------|
-| **崩溃 panic** | `redir`/`tproxy`/`must_into_socket_addr` 的 `unwrap()` 全部改为容错处理，不再因畸形连接 panic |
-| **accept 循环** | `network_listener` 所有 inbound（http/socks/mixed/redir/tproxy/tunnel）accept 出错不再终止监听 |
-| **死锁** | `statistics_manager` 锁跨 `await` 导致的任务挂起已修复 |
-| **任务泄漏** | `HealthCheck` 增加 `Drop` + `stopped` 标志，热重载配置不再泄漏后台任务 |
-| **连接稳定性** | `session.rs` 域名 clamp 到 255 字节，match guard 加固 |
-| **节点选择** | `urltest` 支持 backoff 退避 + tolerance 容差 + 手动 force 切换，避免节点抖动 |
-| **内存** | 支持 `CLASH_RS_MEM_LIMIT_MB` / `CLASH_RS_MEM_HARD_RATIO` 环境变量做内存保护（防 OOM） |
-| **测速并发** | 支持 `CLASH_RS_HEALTHCHECK_CONCURRENCY` 限制健康检查并发，低配设备不卡 |
-
-### 🧪 实测环境
-
-- 设备：DSG-AX3000（IPQ5018, 128MB RAM, OpenWrt）
-- 部署：透明代理（redir 7892 + tproxy 7893）+ fake-ip DNS
-- 结果：连续运行 30+ 天无崩溃、无死锁、内存稳定 17-19MB
-
-## 快速编译（ARM v7 路由器）
-
-```bash
-# 依赖: cargo + zig (zigbuild)
-cargo zigbuild --release --target armv7-unknown-linux-musleabihf -p clash-rs
-# 产物: target/armv7-unknown-linux-musleabihf/release/clash-rs
-```
-
-其他平台按上游文档编译即可。
-
-## 与本 fork 配套的路由器配置
-
-完整的 OpenWrt 优化配置（watchdog、tolerance 自适应降级、DNS 防重置、OOM 保护等）见：
-👉 [clash-rs-openwrt-config](https://github.com/yangw9182-del/clash-rs-openwrt-config)（配套仓库）
-
----
-
-
 ## ✨ Features
 
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
