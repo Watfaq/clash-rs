@@ -19,6 +19,23 @@ pub use splice::zero_copy_bidirectional;
 
 use crate::{app::dispatcher::BoxedInstrumentedStream, proxy::ProxyStream};
 
+/// Number of bytes processed by a single `CopyBuffer::poll_copy` invocation
+/// before we cooperatively yield back to the tokio runtime.
+///
+/// Without this, a CPU-bound proxy stream (e.g. Shadowsocks AES-GCM on a
+/// 78 BogoMIPS ARMv7 dual-core router) can keep a worker thread busy for
+/// tens of milliseconds per `poll_write` call. With 16 concurrent SS flows
+/// (32 directions) on only 2 worker threads, that starves short control
+/// tasks (DNS resolution, API polling, SSH keepalive) which share the same
+/// runtime, manifesting as "speedtest crashes the router / DNS times out".
+///
+/// Yielding every 256 KiB lets the runtime interleave ~60 DNS-sized tasks
+/// per second per flow at 67 Mbit/s while costing only one extra schedule
+/// per ~3 ms of cipher work. The threshold is deliberately a multiple of
+/// the typical 64 KiB tcp-buffer so a single buffer-fill/write cycle is
+/// not interrupted; we yield between cycles, not mid-write.
+const YIELD_EVERY_BYTES: u64 = 256 * 1024;
+
 #[derive(Debug)]
 pub enum CopyBidirectionalError {
     LeftClosed(std::io::Error),
@@ -66,6 +83,9 @@ pub struct CopyBuffer {
     cap: usize,
     amt: u64,
     buf: Box<[u8]>,
+    /// Bytes transferred since the last cooperative yield. See
+    /// [`YIELD_EVERY_BYTES`] for rationale.
+    bytes_since_yield: u64,
 }
 
 impl CopyBuffer {
@@ -78,6 +98,7 @@ impl CopyBuffer {
             cap: 0,
             amt: 0,
             buf: vec![0; 2 * 1024].into_boxed_slice(),
+            bytes_since_yield: 0,
         }
     }
 
@@ -93,6 +114,7 @@ impl CopyBuffer {
             cap: 0,
             amt: 0,
             buf: buf.into_boxed_slice(),
+            bytes_since_yield: 0,
         })
     }
 
@@ -165,6 +187,7 @@ impl CopyBuffer {
                 } else {
                     self.pos += i;
                     self.amt += i as u64;
+                    self.bytes_since_yield = self.bytes_since_yield.saturating_add(i as u64);
                     self.need_flush = true;
                     // Reset idle timeout on successful write
                     if let (Some(timeout), Some(duration)) =
@@ -190,6 +213,24 @@ impl CopyBuffer {
             if self.pos == self.cap && self.read_done {
                 ready!(writer.as_mut().poll_flush(cx))?;
                 return Poll::Ready(Ok(self.amt));
+            }
+
+            // Cooperative yield: after transferring `YIELD_EVERY_BYTES` since
+            // the last yield, flush any buffered writes and ask the runtime
+            // to re-schedule us on the next poll loop. This prevents a single
+            // CPU-bound cipher (e.g. Shadowsocks AES-GCM on a 78 BogoMIPS
+            // ARMv7 dual-core router) from monopolising a worker thread and
+            // starving short control tasks (DNS, API, SSH) that share the
+            // same tokio runtime. See [`YIELD_EVERY_BYTES`] for the rationale
+            // behind the threshold.
+            if self.bytes_since_yield >= YIELD_EVERY_BYTES {
+                self.bytes_since_yield = 0;
+                if self.need_flush {
+                    ready!(writer.as_mut().poll_flush(cx))?;
+                    self.need_flush = false;
+                }
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
             }
         }
     }
