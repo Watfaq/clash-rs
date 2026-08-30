@@ -543,9 +543,13 @@ async fn reverse_lookup(
                     trace!("looking up fake ip: {}", socket_addr.ip());
                     let host = resolver.reverse_lookup(ip).await;
                     match host {
-                        Some(host) => (host, socket_addr.port())
-                            .try_into()
-                            .expect("must be valid domain"),
+                        Some(host) => match (host, socket_addr.port()).try_into() {
+                            Ok(d) => d,
+                            Err(e) => {
+                                error!("invalid domain from reverse lookup: {e}");
+                                return None;
+                            }
+                        },
                         None => {
                             error!("failed to reverse lookup fake ip: {}", ip);
                             return None;
@@ -557,16 +561,26 @@ async fn reverse_lookup(
             } else {
                 trace!("looking up resolve cache ip: {}", socket_addr.ip());
                 match resolver.cached_for(socket_addr.ip()).await {
-                    Some(resolved) => (resolved, socket_addr.port())
-                        .try_into()
-                        .expect("must be valid domain"),
+                    Some(resolved) => match (resolved, socket_addr.port()).try_into() {
+                        Ok(d) => d,
+                        Err(e) => {
+                            error!("invalid domain from resolver cache: {e}");
+                            return None;
+                        }
+                    },
                     _ => (*socket_addr).into(),
                 }
             }
         }
-        crate::session::SocksAddr::Domain(host, port) => (host.to_owned(), *port)
-            .try_into()
-            .expect("must be valid domain"),
+        crate::session::SocksAddr::Domain(host, port) => {
+            match (host.to_owned(), *port).try_into() {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("invalid domain in SocksAddr: {e}");
+                    return None;
+                }
+            }
+        }
     };
     Some(dst)
 }
