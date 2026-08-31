@@ -158,8 +158,8 @@ impl Sink<UdpPacket> for UdpSession {
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.deref_mut();
-        // "Back pressure" mechanism, new data is allowed to be written only when the
-        // buffer is empty
+        // "Back pressure" mechanism, new data is allowed to be written only
+        // when the buffer is empty
         match this.send_buf {
             Some(_) => Poll::Pending,
             None => Poll::Ready(Ok(())),

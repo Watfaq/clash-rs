@@ -148,8 +148,8 @@ pub fn strategy_sticky_session(proxy_manager: ProxyManager) -> StrategyFn {
                     }
                     return Ok(proxy.clone());
                 }
-                // the cached proxy is dead, change the key by a new timestamp and
-                // try again
+                // the cached proxy is dead, change the key by a new timestamp
+                // and try again
                 index = jump_hash(key + timestamp(), buckets) as usize;
             }
             // TODO: if we should just remove the key from the cache?

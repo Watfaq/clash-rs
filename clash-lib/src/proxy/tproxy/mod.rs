@@ -309,8 +309,8 @@ async fn handle_inbound_datagram(
                     //     && let Ok(local_addr) = socket.local_addr()
                     //     && meta.addr.ip() != local_addr.ip()
                     // {
-                    //     warn!("Connection from {} is not allowed", meta.addr);
-                    //     continue;
+                    //     warn!("Connection from {} is not allowed",
+                    // meta.addr);     continue;
                     // }
                     let chunk_size = gro_chunk_size(meta.len, meta.stride);
                     if chunk_size == 0 {

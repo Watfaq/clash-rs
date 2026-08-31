@@ -158,8 +158,9 @@ pub async fn new_udp_socket(
                 trace!(src = ?src, "udp socket bound: {socket:?}");
             }
             (None, _) => {
-                // On Windows, UDP sockets must be bound to get a valid local_addr
-                // which is required for some operations (e.g., quinn/QUIC)
+                // On Windows, UDP sockets must be bound to get a valid
+                // local_addr which is required for some
+                // operations (e.g., quinn/QUIC)
                 #[cfg(target_os = "windows")]
                 {
                     let bind_addr = match family {

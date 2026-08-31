@@ -85,8 +85,9 @@ async fn test_speedtest_bulk_download() {
     });
 
     // Client simulation task: performs the TCP handshake, reads data segments
-    // from StackSplitStream, and sends cumulative ACKs back through the mock TUN.
-    // Spawned BEFORE awaiting tcp_listener so its SYN is in-flight while we wait.
+    // from StackSplitStream, and sends cumulative ACKs back through the mock
+    // TUN. Spawned BEFORE awaiting tcp_listener so its SYN is in-flight
+    // while we wait.
     let client = tokio::spawn(async move {
         // --- TCP handshake: SYN → SYN-ACK → ACK ---
         tun_in.send(build_tcp_syn_packet()).unwrap();
@@ -170,11 +171,11 @@ async fn test_speedtest_bulk_download() {
         received
     });
 
-    // Await the TcpStream HERE (in the main test body), NOT inside the relay task.
-    // This keeps tcp_listener alive until after join!() completes, preventing
-    // TcpListener::Drop from aborting the netstack task while data is still
-    // in-flight. The client task already sent the SYN concurrently above, so
-    // next() returns quickly.
+    // Await the TcpStream HERE (in the main test body), NOT inside the relay
+    // task. This keeps tcp_listener alive until after join!() completes,
+    // preventing TcpListener::Drop from aborting the netstack task while
+    // data is still in-flight. The client task already sent the SYN
+    // concurrently above, so next() returns quickly.
     let stream = tcp_listener.next().await.expect("no TcpStream");
 
     // Relay task: writes TRANSFER_BYTES into the TcpStream.
@@ -267,9 +268,9 @@ async fn test_new_connection_during_active_transfer() {
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
     let tun_in2 = tun_in.clone();
 
-    // Client 1 (port 1024): handshake + receive CONN1_BYTES, ACKing each segment.
-    // Fires `ready_tx` as soon as the first data segment arrives (smoltcp
-    // hot-path).
+    // Client 1 (port 1024): handshake + receive CONN1_BYTES, ACKing each
+    // segment. Fires `ready_tx` as soon as the first data segment arrives
+    // (smoltcp hot-path).
     let client1 = tokio::spawn(async move {
         tun_in.send(build_tcp_syn_packet()).unwrap();
 

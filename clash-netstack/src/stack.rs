@@ -111,8 +111,8 @@ impl NetStack {
         let (udp_inbound_app, udp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();
 
-        // this UdpSocket is essentially an Iface for UDP but much simpler as it only
-        // does packets forwarding
+        // this UdpSocket is essentially an Iface for UDP but much simpler as it
+        // only does packets forwarding
         let udp_socket = UdpSocket::new(udp_outbound_stack, udp_packet_sender);
         let (tcp_inbound_app, tcp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();

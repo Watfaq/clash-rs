@@ -82,7 +82,8 @@ impl Config {
                 continue;
             }
 
-            // If the server doesn't contain a scheme, assume it's a UDP address.
+            // If the server doesn't contain a scheme, assume it's a UDP
+            // address.
             if !server.contains("://") {
                 if server.contains(':') && !server.starts_with('[') {
                     server = format!("udp://[{}]", server);
@@ -107,7 +108,8 @@ impl Config {
 
             let host = match host {
                 url::Host::Domain(v) => {
-                    // Try to parse domain as IPv4 address because of WHATWG standard
+                    // Try to parse domain as IPv4 address because of WHATWG
+                    // standard
                     match v.parse::<std::net::Ipv4Addr>() {
                         Ok(ipv4) => url::Host::Ipv4(ipv4),
                         Err(_) => url::Host::Domain(v),
@@ -365,7 +367,8 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 .as_deref()
                                 .map(parse_listen_addr)
                                 .transpose()?;
-                            // DoHConfig and DoH3Config have identical fields; helper
+                            // DoHConfig and DoH3Config have identical fields;
+                            // helper
                             // avoids duplication.
                             let map_doh_fields =
                                 |c: crate::config::def::DohListenDef| {

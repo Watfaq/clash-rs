@@ -300,8 +300,8 @@ async fn patch_configs(
         && allow_lan != inbound_manager.get_allow_lan().await
     {
         inbound_manager.set_allow_lan(allow_lan).await;
-        // TODO: can be done with AtomicBool in each inbound manager, but requires
-        // more changes
+        // TODO: can be done with AtomicBool in each inbound manager, but
+        // requires more changes
         need_restart = true;
     }
 

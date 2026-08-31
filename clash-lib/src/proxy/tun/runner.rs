@@ -113,170 +113,172 @@ impl TunRunner {
             }
         };
 
-        let tun =
-            if let Some(fd) = tun_init_config.fd {
-                #[cfg(target_family = "unix")]
-                {
-                    info!("tun started with fd {}", fd);
-                    unsafe { tun_rs::AsyncDevice::from_fd(fd as _)? }
+        let tun = if let Some(fd) = tun_init_config.fd {
+            #[cfg(target_family = "unix")]
+            {
+                info!("tun started with fd {}", fd);
+                unsafe { tun_rs::AsyncDevice::from_fd(fd as _)? }
+            }
+
+            #[cfg(not(target_family = "unix"))]
+            {
+                return Err(Error::InvalidConfig(format!(
+                    "tun fd({fd}) is only supported on Unix-like systems"
+                )));
+            }
+        } else {
+            #[cfg(not(any(target_os = "ios", target_os = "android")))]
+            {
+                use crate::proxy::tun::routes::maybe_add_routes;
+                use network_interface::NetworkInterfaceConfig;
+                use tun_rs::DeviceBuilder;
+
+                let tun_name =
+                    tun_init_config.tun_name.expect("tun name must be provided");
+                let tun_exist = network_interface::NetworkInterface::show()
+                    .map(|ifs| ifs.into_iter().any(|x| x.name == tun_name))
+                    .unwrap_or_default();
+
+                if tun_exist {
+                    info!("tun device {} already exists, using it.", &tun_name);
+                } else {
+                    info!("tun device {} does not exist, creating.", &tun_name);
                 }
 
-                #[cfg(not(target_family = "unix"))]
-                {
-                    return Err(Error::InvalidConfig(format!(
-                        "tun fd({fd}) is only supported on Unix-like systems"
-                    )));
-                }
-            } else {
-                #[cfg(not(any(target_os = "ios", target_os = "android")))]
-                {
-                    use crate::proxy::tun::routes::maybe_add_routes;
-                    use network_interface::NetworkInterfaceConfig;
-                    use tun_rs::DeviceBuilder;
-
-                    let tun_name =
-                        tun_init_config.tun_name.expect("tun name must be provided");
-                    let tun_exist = network_interface::NetworkInterface::show()
-                        .map(|ifs| ifs.into_iter().any(|x| x.name == tun_name))
-                        .unwrap_or_default();
-
-                    if tun_exist {
-                        info!("tun device {} already exists, using it.", &tun_name);
+                let mut tun_builder = DeviceBuilder::new();
+                tun_builder = tun_builder.name(&tun_name).mtu(
+                    cfg.mtu.unwrap_or(if cfg!(windows) {
+                        65535u16
                     } else {
-                        info!("tun device {} does not exist, creating.", &tun_name);
+                        1500u16
+                    }),
+                );
+
+                if !tun_exist {
+                    debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
+                    tun_builder = tun_builder.ipv4(
+                        cfg.gateway.addr(),
+                        cfg.gateway.netmask(),
+                        None,
+                    );
+
+                    if let Some(gateway_v6) = cfg.gateway_v6 {
+                        debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
+                        tun_builder = tun_builder
+                            .ipv6(gateway_v6.addr(), gateway_v6.netmask());
                     }
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    // Use the explicitly configured GUID, or derive a
+                    // deterministic one from the device name so that the
+                    // same adapter is reused across restarts instead of
+                    // creating a new one every time.
+                    let guid = tun_init_config.guid.unwrap_or_else(|| {
+                        uuid::Uuid::new_v5(
+                            &uuid::Uuid::NAMESPACE_DNS,
+                            tun_name.as_bytes(),
+                        )
+                        .as_u128()
+                    });
+                    tun_builder = tun_builder.device_guid(guid);
+                }
 
-                    let mut tun_builder = DeviceBuilder::new();
-                    tun_builder =
-                        tun_builder.name(&tun_name).mtu(cfg.mtu.unwrap_or(
-                            if cfg!(windows) { 65535u16 } else { 1500u16 },
-                        ));
+                // FreeBSD materialises `/dev/<tun_name>` only while the
+                // network interface exists. tun-rs opens that node directly
+                // without creating the interface, so pre-create it here to
+                // avoid `open("/dev/tun0") -> ENOENT` on a fresh host.
+                #[cfg(target_os = "freebsd")]
+                let created_tun = if !tun_exist {
+                    routes::ensure_tun_device(&tun_name)?;
+                    true
+                } else {
+                    false
+                };
+                #[cfg(not(target_os = "freebsd"))]
+                let created_tun = false;
 
-                    if !tun_exist {
-                        debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
-                        tun_builder = tun_builder.ipv4(
-                            cfg.gateway.addr(),
-                            cfg.gateway.netmask(),
-                            None,
-                        );
-
-                        if let Some(gateway_v6) = cfg.gateway_v6 {
-                            debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
-                            tun_builder = tun_builder
-                                .ipv6(gateway_v6.addr(), gateway_v6.netmask());
+                let dev = match tun_builder.build_async() {
+                    Ok(dev) => dev,
+                    Err(e) => {
+                        // If we pre-created the tun device on FreeBSD but
+                        // build_async() fails, destroy the interface so we
+                        // don't leave a dangling tun device behind.
+                        if created_tun {
+                            #[cfg(target_os = "freebsd")]
+                            {
+                                let _ = std::process::Command::new("ifconfig")
+                                    .arg(&tun_name)
+                                    .arg("destroy")
+                                    .output();
+                            }
                         }
+                        return Err(e.into());
                     }
-                    #[cfg(target_os = "windows")]
-                    {
-                        // Use the explicitly configured GUID, or derive a
-                        // deterministic one from the device name so that the
-                        // same adapter is reused across restarts instead of
-                        // creating a new one every time.
-                        let guid = tun_init_config.guid.unwrap_or_else(|| {
-                            uuid::Uuid::new_v5(
-                                &uuid::Uuid::NAMESPACE_DNS,
-                                tun_name.as_bytes(),
-                            )
-                            .as_u128()
-                        });
-                        tun_builder = tun_builder.device_guid(guid);
-                    }
+                };
 
-                    // FreeBSD materialises `/dev/<tun_name>` only while the
-                    // network interface exists. tun-rs opens that node directly
-                    // without creating the interface, so pre-create it here to
-                    // avoid `open("/dev/tun0") -> ENOENT` on a fresh host.
-                    #[cfg(target_os = "freebsd")]
-                    let created_tun = if !tun_exist {
-                        routes::ensure_tun_device(&tun_name)?;
-                        true
-                    } else {
-                        false
-                    };
-                    #[cfg(not(target_os = "freebsd"))]
-                    let created_tun = false;
-
-                    let dev = match tun_builder.build_async() {
-                        Ok(dev) => dev,
-                        Err(e) => {
-                            // If we pre-created the tun device on FreeBSD but
-                            // build_async() fails, destroy the interface so we
-                            // don't leave a dangling tun device behind.
-                            if created_tun {
-                                #[cfg(target_os = "freebsd")]
-                                {
-                                    let _ = std::process::Command::new("ifconfig")
-                                        .arg(&tun_name)
-                                        .arg("destroy")
-                                        .output();
+                if !tun_exist {
+                    // After build_async(), the new TUN interface may not be
+                    // immediately visible via NetworkInterface::show(). Poll up
+                    // to TUN_VISIBILITY_MAX_ATTEMPTS times (≈2 s) before
+                    // setting up routes, but never sleep after the final check.
+                    let mut tun_visible = false;
+                    let mut last_show_err: Option<String> = None;
+                    let mut attempt = 0u32;
+                    loop {
+                        match network_interface::NetworkInterface::show() {
+                            Ok(ifs) => {
+                                if ifs.into_iter().any(|x| x.name == tun_name) {
+                                    tun_visible = true;
+                                    break;
                                 }
                             }
-                            return Err(e.into());
-                        }
-                    };
-
-                    if !tun_exist {
-                        // After build_async(), the new TUN interface may not be
-                        // immediately visible via NetworkInterface::show(). Poll up
-                        // to TUN_VISIBILITY_MAX_ATTEMPTS times (≈2 s) before
-                        // setting up routes, but never sleep after the final check.
-                        let mut tun_visible = false;
-                        let mut last_show_err: Option<String> = None;
-                        let mut attempt = 0u32;
-                        loop {
-                            match network_interface::NetworkInterface::show() {
-                                Ok(ifs) => {
-                                    if ifs.into_iter().any(|x| x.name == tun_name) {
-                                        tun_visible = true;
-                                        break;
-                                    }
-                                }
-                                Err(e) => {
-                                    last_show_err = Some(e.to_string());
-                                }
+                            Err(e) => {
+                                last_show_err = Some(e.to_string());
                             }
-                            attempt += 1;
-                            if attempt >= TUN_VISIBILITY_MAX_ATTEMPTS {
-                                break;
-                            }
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                TUN_VISIBILITY_POLL_INTERVAL_MS,
-                            ))
-                            .await;
                         }
-
-                        if !tun_visible {
-                            let total_ms = TUN_VISIBILITY_MAX_ATTEMPTS as u64
-                                * TUN_VISIBILITY_POLL_INTERVAL_MS;
-                            let err_msg = match last_show_err {
-                                Some(e) => format!(
-                                    "tun device {} not visible after waiting {}ms \
-                                     (last error: {})",
-                                    tun_name, total_ms, e
-                                ),
-                                None => format!(
-                                    "tun device {} not visible after waiting {}ms",
-                                    tun_name, total_ms
-                                ),
-                            };
-                            return Err(Error::Operation(err_msg));
+                        attempt += 1;
+                        if attempt >= TUN_VISIBILITY_MAX_ATTEMPTS {
+                            break;
                         }
-
-                        info!("setting up routes for tun {}", &tun_name);
-                        maybe_add_routes(cfg, &tun_name)?;
-                    } else {
-                        info!("skipping route setup for existing tun {}", &tun_name);
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            TUN_VISIBILITY_POLL_INTERVAL_MS,
+                        ))
+                        .await;
                     }
 
-                    dev
+                    if !tun_visible {
+                        let total_ms = TUN_VISIBILITY_MAX_ATTEMPTS as u64
+                            * TUN_VISIBILITY_POLL_INTERVAL_MS;
+                        let err_msg = match last_show_err {
+                            Some(e) => format!(
+                                "tun device {} not visible after waiting {}ms \
+                                 (last error: {})",
+                                tun_name, total_ms, e
+                            ),
+                            None => format!(
+                                "tun device {} not visible after waiting {}ms",
+                                tun_name, total_ms
+                            ),
+                        };
+                        return Err(Error::Operation(err_msg));
+                    }
+
+                    info!("setting up routes for tun {}", &tun_name);
+                    maybe_add_routes(cfg, &tun_name)?;
+                } else {
+                    info!("skipping route setup for existing tun {}", &tun_name);
                 }
-                #[cfg(any(target_os = "ios", target_os = "android"))]
-                {
-                    return Err(Error::InvalidConfig(
-                        "only fd is supported on mobile platforms".to_string(),
-                    ));
-                }
-            };
+
+                dev
+            }
+            #[cfg(any(target_os = "ios", target_os = "android"))]
+            {
+                return Err(Error::InvalidConfig(
+                    "only fd is supported on mobile platforms".to_string(),
+                ));
+            }
+        };
 
         let (stack, tcp_listener, udp_socket) = watfaq_netstack::NetStack::new();
         Ok((tun, stack, tcp_listener, udp_socket))
@@ -333,10 +335,14 @@ impl Runner for TunRunner {
                     match pkt {
                         Ok(pkt) => {
                             if let Err(e) = tun_sink.send(pkt.into_bytes()).await {
-                                // TimedOut means the Wintun/TUN send ring buffer
-                                // was full for too long (driver backpressure). Drop
-                                // the packet and keep the runner alive — packet loss
-                                // is normal at the IP layer; TCP will retransmit and
+                                // TimedOut means the Wintun/TUN send ring
+                                // buffer
+                                // was full for too long (driver backpressure).
+                                // Drop
+                                // the packet and keep the runner alive — packet
+                                // loss
+                                // is normal at the IP layer; TCP will
+                                // retransmit and
                                 // UDP is inherently best-effort.
                                 if e.kind() == std::io::ErrorKind::TimedOut
                                     || e.kind() == std::io::ErrorKind::WouldBlock
