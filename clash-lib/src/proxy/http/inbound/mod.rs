@@ -78,16 +78,18 @@ impl InboundHandlerTrait for HttpInbound {
                     continue;
                 }
             };
-            let local_ip = match socket.local_addr() {
-                Ok(a) => a.ip().to_canonical(),
-                Err(e) => {
-                    warn!("http local_addr failed: {e}");
+            if !self.allow_lan {
+                let local_ip = match socket.local_addr() {
+                    Ok(a) => a.ip().to_canonical(),
+                    Err(e) => {
+                        warn!("http local_addr failed: {e}");
+                        continue;
+                    }
+                };
+                if src_addr.ip() != local_ip {
+                    warn!("Connection from {} is not allowed", src_addr);
                     continue;
                 }
-            };
-            if !self.allow_lan && src_addr.ip() != local_ip {
-                warn!("Connection from {} is not allowed", src_addr);
-                continue;
             }
 
             if let Err(e) = apply_tcp_options(&socket) {

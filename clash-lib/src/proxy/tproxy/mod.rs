@@ -101,7 +101,13 @@ impl InboundHandlerTrait for TproxyInbound {
             }
 
             // local_addr is getsockname
-            let orig_dst = socket.local_addr()?.to_canonical();
+            let orig_dst = match socket.local_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("tproxy local_addr failed: {e}");
+                    continue;
+                }
+            };
 
             let sess = Session {
                 network: Network::Tcp,

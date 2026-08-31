@@ -80,16 +80,18 @@ impl InboundHandlerTrait for SocksInbound {
                     continue;
                 }
             };
-            let local_ip = match socket.local_addr() {
-                Ok(a) => a.ip().to_canonical(),
-                Err(e) => {
-                    warn!("socks local_addr failed: {e}");
+            if !self.allow_lan {
+                let local_ip = match socket.local_addr() {
+                    Ok(a) => a.ip().to_canonical(),
+                    Err(e) => {
+                        warn!("socks local_addr failed: {e}");
+                        continue;
+                    }
+                };
+                if src_addr.ip() != local_ip {
+                    warn!("Connection from {} is not allowed", src_addr);
                     continue;
                 }
-            };
-            if !self.allow_lan && src_addr.ip() != local_ip {
-                warn!("Connection from {} is not allowed", src_addr);
-                continue;
             }
             if let Err(e) = apply_tcp_options(&socket) {
                 warn!("socks apply_tcp_options failed: {e}");
@@ -99,7 +101,7 @@ impl InboundHandlerTrait for SocksInbound {
             let mut sess = Session {
                 network: Network::Tcp,
                 typ: Type::Socks5,
-                source: socket.peer_addr()?.to_canonical(),
+                source: src_addr,
                 so_mark: self.fw_mark,
 
                 ..Default::default()
