@@ -561,13 +561,15 @@ async fn reverse_lookup(
             } else {
                 trace!("looking up resolve cache ip: {}", socket_addr.ip());
                 match resolver.cached_for(socket_addr.ip()).await {
-                    Some(resolved) => match (resolved, socket_addr.port()).try_into() {
-                        Ok(d) => d,
-                        Err(e) => {
-                            error!("invalid domain from resolver cache: {e}");
-                            return None;
+                    Some(resolved) => {
+                        match (resolved, socket_addr.port()).try_into() {
+                            Ok(d) => d,
+                            Err(e) => {
+                                error!("invalid domain from resolver cache: {e}");
+                                return None;
+                            }
                         }
-                    },
+                    }
                     _ => (*socket_addr).into(),
                 }
             }
