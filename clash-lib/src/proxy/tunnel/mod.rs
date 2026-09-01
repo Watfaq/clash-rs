@@ -58,11 +58,11 @@ impl TunnelInbound {
 #[async_trait]
 impl InboundHandlerTrait for TunnelInbound {
     fn handle_tcp(&self) -> bool {
-        true
+        self.network.iter().any(|n| n.eq_ignore_ascii_case("tcp"))
     }
 
     fn handle_udp(&self) -> bool {
-        true
+        self.network.iter().any(|n| n.eq_ignore_ascii_case("udp"))
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
@@ -76,9 +76,19 @@ impl InboundHandlerTrait for TunnelInbound {
         let listener = try_create_dualstack_tcplistener(self.listen)?;
 
         loop {
-            let (socket, src_addr) = listener.accept().await?;
+            let (socket, src_addr) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("tunnel accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
 
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("tunnel apply_tcp_options failed: {e}");
+                continue;
+            }
 
             let dispatcher = self.dispatcher.clone();
             let sess = Session {
@@ -148,8 +158,8 @@ impl Sink<UdpPacket> for UdpSession {
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.deref_mut();
-        // "Back pressure" mechanism, new data is allowed to be written only when the
-        // buffer is empty
+        // "Back pressure" mechanism, new data is allowed to be written only
+        // when the buffer is empty
         match this.send_buf {
             Some(_) => Poll::Pending,
             None => Poll::Ready(Ok(())),

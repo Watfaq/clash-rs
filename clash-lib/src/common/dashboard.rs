@@ -192,9 +192,10 @@ fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
         };
 
         // Strip the common prefix if present.
-        // Use the raw zip entry name (always '/' separated, platform-independent)
-        // rather than the PathBuf representation (which uses OS separators on
-        // Windows) so that prefix matching works correctly cross-platform.
+        // Use the raw zip entry name (always '/' separated,
+        // platform-independent) rather than the PathBuf representation
+        // (which uses OS separators on Windows) so that prefix matching
+        // works correctly cross-platform.
         let rel: PathBuf = match strip_prefix {
             Some(ref prefix) => {
                 let raw = file.name();
@@ -300,8 +301,9 @@ fn extract_tgz(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
             .map_err(|e| Error::InvalidConfig(format!("tgz entry path: {e}")))?
             .to_path_buf();
 
-        // Validate the *original* path before any stripping to prevent traversal
-        // attacks (e.g. an archive with `../evil` as first component).
+        // Validate the *original* path before any stripping to prevent
+        // traversal attacks (e.g. an archive with `../evil` as first
+        // component).
         if path.components().any(|c| {
             matches!(
                 c,
@@ -318,8 +320,9 @@ fn extract_tgz(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
         let rel: PathBuf = match &strip_prefix {
             Some(prefix) => {
                 // Use Path::strip_prefix to remove the common top-level dir by
-                // path component (e.g. "dist/index.html" → "index.html") without
-                // going through a string representation.
+                // path component (e.g. "dist/index.html" → "index.html")
+                // without going through a string
+                // representation.
                 let prefix_path = Path::new(prefix.trim_end_matches('/'));
                 path.strip_prefix(prefix_path)
                     .unwrap_or(&path)
@@ -437,7 +440,8 @@ mod tests {
 
     #[test]
     fn zip_no_false_prefix_match() {
-        // "dist" and "dist2" share a textual prefix but not a path-segment prefix.
+        // "dist" and "dist2" share a textual prefix but not a path-segment
+        // prefix.
         let bytes = make_zip(&[("dist/a.html", b"a"), ("dist2/b.html", b"b")]);
         let tmp = tempfile::tempdir().unwrap();
         extract_zip(&bytes, tmp.path()).unwrap();

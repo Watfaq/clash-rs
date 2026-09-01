@@ -430,7 +430,8 @@ impl MultiDockerTestRunner {
                      error: {:?}",
                     e
                 );
-                // Cleanup all previously added containers before returning error
+                // Cleanup all previously added containers before returning
+                // error
                 for runner in std::mem::take(&mut self.runners) {
                     let _ = runner.cleanup().await;
                 }
