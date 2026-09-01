@@ -373,18 +373,21 @@ impl TcpListener {
             if should_poll_now {
                 trace!("Woke up to poll sockets");
 
-                // Drain any pending notifier events before calling iface.poll().
+                // Drain any pending notifier events before calling
+                // iface.poll().
                 //
-                // The critical case is IfaceEvent::TcpStream: poll_packets creates
-                // a smoltcp socket and queues it here *before* injecting the raw SYN
-                // packet into the device buffer.  If iface.poll() runs before the
-                // socket is added to the SocketSet, smoltcp sees the SYN with no
-                // matching listener and sends RST — immediately failing the
-                // connection.
+                // The critical case is IfaceEvent::TcpStream: poll_packets
+                // creates a smoltcp socket and queues it here
+                // *before* injecting the raw SYN packet into
+                // the device buffer.  If iface.poll() runs before the
+                // socket is added to the SocketSet, smoltcp sees the SYN with
+                // no matching listener and sends RST —
+                // immediately failing the connection.
                 //
-                // During active downloads poll_delay often returns 0/None, keeping
-                // should_poll_now=true and never entering the else branch below.
-                // Draining here ensures sockets are always registered in time.
+                // During active downloads poll_delay often returns 0/None,
+                // keeping should_poll_now=true and never
+                // entering the else branch below. Draining here
+                // ensures sockets are always registered in time.
                 loop {
                     match notifier_rx.try_recv() {
                         Ok(IfaceEvent::TcpStream(stream)) => {
@@ -549,8 +552,9 @@ impl TcpListener {
                 // StackSplitStream draining the tx packet channel) get a chance
                 // to run between iface.poll() calls.  Without this yield, a
                 // sustained smoltcp poll_delay == ZERO response (which occurs
-                // whenever packets are waiting to be transmitted) creates a tight
-                // synchronous loop that starves StackSplitStream, preventing the
+                // whenever packets are waiting to be transmitted) creates a
+                // tight synchronous loop that starves
+                // StackSplitStream, preventing the
                 // consumer from receiving data and sending ACKs back.  That
                 // starvation fills smoltcp's send window and triggers RTO.
                 tokio::task::yield_now().await;

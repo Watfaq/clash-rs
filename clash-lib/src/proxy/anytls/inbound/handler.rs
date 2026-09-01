@@ -334,7 +334,8 @@ async fn handle_udp_session(
         }
     });
 
-    // Task B: TLS → CMD_PSH frames → relay_write (reads by InboundDatagramAnytls)
+    // Task B: TLS → CMD_PSH frames → relay_write (reads by
+    // InboundDatagramAnytls)
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -708,7 +709,8 @@ mod tests {
     async fn test_anytls_fallback_to_mock_generate_204() {
         install_crypto_provider();
 
-        // ── Mock backend: returns HTTP 204 (like Google generate_204) ─────────
+        // ── Mock backend: returns HTTP 204 (like Google generate_204)
+        // ─────────
         let backend_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let backend_addr = backend_listener.local_addr().unwrap();
 
@@ -721,7 +723,8 @@ mod tests {
                 .unwrap();
         });
 
-        // ── AnyTLS inbound with fallback → mock backend ───────────────────────
+        // ── AnyTLS inbound with fallback → mock backend
+        // ───────────────────────
         let rcgen::CertifiedKey {
             cert,
             signing_key: key_pair,

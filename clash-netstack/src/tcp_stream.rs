@@ -25,7 +25,8 @@ impl Drop for TcpStream {
         );
 
         // socket_dropped tells poll_sockets to drain send_buffer and issue FIN.
-        // read_closed / write_closed unblock any concurrent poll_read / poll_write.
+        // read_closed / write_closed unblock any concurrent poll_read /
+        // poll_write.
         self.handle.socket_dropped.store(true, Ordering::Release);
         self.handle.read_closed.store(true, Ordering::Release);
         self.handle.write_closed.store(true, Ordering::Release);
@@ -139,9 +140,10 @@ impl tokio::io::AsyncWrite for TcpStream {
 
         if send_buf.is_full() {
             // Register waker FIRST, then re-check to close the TOCTOU window.
-            // If poll_sockets drains the buffer between is_full() and register(),
-            // wake() is a no-op (no waker stored). The re-check below detects
-            // the buffer is now non-full and falls through to enqueue data.
+            // If poll_sockets drains the buffer between is_full() and
+            // register(), wake() is a no-op (no waker stored). The
+            // re-check below detects the buffer is now non-full and
+            // falls through to enqueue data.
             self.handle.send_waker.register(cx.waker());
             if send_buf.is_full() {
                 trace!(

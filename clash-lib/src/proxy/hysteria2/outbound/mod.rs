@@ -192,8 +192,8 @@ impl Handler {
             }
         };
 
-        // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
-        // and port hopping
+        // Here maybe we should use a AsyncUdpSocket which implement salamander
+        // obfs and port hopping
         let create_socket = || async {
             new_udp_socket(
                 None,
@@ -298,8 +298,8 @@ impl Handler {
             return Err(anyhow!("auth failed: response status code {}", r.status()));
         }
 
-        // MUST have Hysteria-CC-RX and Hysteria-UDP headers according to hysteria2
-        // document
+        // MUST have Hysteria-CC-RX and Hysteria-UDP headers according to
+        // hysteria2 document
         let cc_rx = r
             .headers()
             .get("Hysteria-CC-RX")

@@ -175,8 +175,8 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                                         )
                                         .unwrap();
                                     this.read_authorized = true;
-                                    // 4. rewrite the body length to be put into the
-                                    //    read buf
+                                    // 4. rewrite the body length to be put into
+                                    //    the read buf
                                     unsafe {
                                         body.set_len(body.len() - HMAC_SIZE);
                                     }
@@ -344,6 +344,15 @@ impl<S: AsyncRead + Unpin> AsyncRead for VerifiedStream<S> {
                                 "appdata verify failed",
                             )));
                         }
+                    } else {
+                        // Non-APPLICATION_DATA records (e.g. handshake,
+                        // alert, change-cipher-spec) are unexpected after
+                        // verification.  Skip this record and read the next
+                        // header.  Without this state transition the loop
+                        // would re-enter WaitingData with the same size and
+                        // consume bytes belonging to the next TLS record,
+                        // silently corrupting the stream.
+                        this.read_state = ReadState::WaitingHeader;
                     }
                 }
                 ReadState::FlushingData => {
