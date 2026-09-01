@@ -177,8 +177,8 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
             })?;
 
         // Convert sockaddr_storage to SocketAddr
-        Ok(target_addr.as_socket().ok_or_else(|| {
+        target_addr.as_socket().ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "not a socket address")
-        })?)
+        })
     }
 }
