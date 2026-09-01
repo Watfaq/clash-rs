@@ -58,11 +58,11 @@ impl TunnelInbound {
 #[async_trait]
 impl InboundHandlerTrait for TunnelInbound {
     fn handle_tcp(&self) -> bool {
-        true
+        self.network.iter().any(|n| n.eq_ignore_ascii_case("tcp"))
     }
 
     fn handle_udp(&self) -> bool {
-        true
+        self.network.iter().any(|n| n.eq_ignore_ascii_case("udp"))
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {

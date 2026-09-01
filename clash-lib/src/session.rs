@@ -107,7 +107,7 @@ impl SocksAddr {
             },
             Self::Domain(domain, port) => {
                 buf.put_u8(SocksAddrType::DOMAIN);
-                let dlen = domain.len().min(255);
+                let dlen = domain.floor_char_boundary(255);
                 buf.put_u8(dlen as u8);
                 buf.put_slice(&domain.as_bytes()[..dlen]);
                 buf.put_u16(*port);

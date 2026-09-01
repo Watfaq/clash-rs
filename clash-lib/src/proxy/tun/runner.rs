@@ -248,6 +248,13 @@ impl TunRunner {
                     }
 
                     if !tun_visible {
+                        #[cfg(target_os = "freebsd")]
+                        if created_tun {
+                            let _ = std::process::Command::new("ifconfig")
+                                .arg(&tun_name)
+                                .arg("destroy")
+                                .output();
+                        }
                         let total_ms = TUN_VISIBILITY_MAX_ATTEMPTS as u64
                             * TUN_VISIBILITY_POLL_INTERVAL_MS;
                         let err_msg = match last_show_err {
@@ -265,7 +272,16 @@ impl TunRunner {
                     }
 
                     info!("setting up routes for tun {}", &tun_name);
-                    maybe_add_routes(cfg, &tun_name)?;
+                    if let Err(e) = maybe_add_routes(cfg, &tun_name) {
+                        #[cfg(target_os = "freebsd")]
+                        if created_tun {
+                            let _ = std::process::Command::new("ifconfig")
+                                .arg(&tun_name)
+                                .arg("destroy")
+                                .output();
+                        }
+                        return Err(e.into());
+                    }
                 } else {
                     info!("skipping route setup for existing tun {}", &tun_name);
                 }
