@@ -1,14 +1,13 @@
 use super::dns::ThreadSafeDNSResolver;
 use crate::{
-    app::net::DEFAULT_OUTBOUND_INTERFACE,
+    app::{dispatcher::InstrumentedStreamWrapper, net::DEFAULT_OUTBOUND_INTERFACE},
     common::{
         errors::{IntoIoResultExt as _, new_io_error},
         timed_future::TimedFuture,
         tls::GLOBAL_ROOT_STORE,
         utils::serialize_duration,
     },
-    proxy::{AnyOutboundHandler, OutboundType},
-    proxy::utils::new_tcp_stream,
+    proxy::{AnyOutboundHandler, OutboundType, utils::new_tcp_stream},
     session::Session,
 };
 use anyhow::Context;
@@ -29,18 +28,19 @@ use std::{
 };
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, instrument, trace, warn};
-use crate::app::dispatcher::InstrumentedStreamWrapper;
 
 pub mod healthcheck;
 pub mod providers;
 
-static GLOBAL_TRAFFIC_RATE_BPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static GLOBAL_TRAFFIC_RATE_BPS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 pub fn get_global_traffic_rate() -> u64 {
     GLOBAL_TRAFFIC_RATE_BPS.load(std::sync::atomic::Ordering::Relaxed)
 }
 pub fn set_global_traffic_rate(upload: u64, download: u64) {
-    GLOBAL_TRAFFIC_RATE_BPS.store(upload + download, std::sync::atomic::Ordering::Relaxed);
+    GLOBAL_TRAFFIC_RATE_BPS
+        .store(upload + download, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -180,8 +180,8 @@ impl ProxyManager {
     ///   nodes don't waste CPU/bandwidth on a 78 BogoMIPS router.
     /// - `true` (manual user-triggered latency test): backoff is bypassed and
     ///   every node is tested, because the user explicitly asked for a fresh
-    ///   result (e.g. after restarting a server, or to verify the backoff
-    ///   list is still accurate).
+    ///   result (e.g. after restarting a server, or to verify the backoff list
+    ///   is still accurate).
     #[instrument(skip(self))]
     pub async fn check(
         &self,
@@ -197,8 +197,10 @@ impl ProxyManager {
 
         // Determine which proxies to test vs skip (exponential backoff)
         let mut to_test = Vec::with_capacity(outbounds.len());
-        let mut skip_results: HashMap<String, std::io::Result<(Duration, Duration)>> =
-            HashMap::new();
+        let mut skip_results: HashMap<
+            String,
+            std::io::Result<(Duration, Duration)>,
+        > = HashMap::new();
 
         {
             let state = self.proxy_state.read().await;
@@ -208,10 +210,14 @@ impl ProxyManager {
                     if let Some(s) = state.get(name) {
                         let cf = s.consecutive_failures;
                         if cf >= 3 {
-                            // Fixed-interval backoff: test every `backoff_rounds` rounds
-                            // (default 12 = ~60min at 5min/round, configurable via
-                            // CLASH_RS_BACKOFF_ROUNDS env var). A consistently-failing
-                            // proxy is re-tested once every N rounds; on success it
+                            // Fixed-interval backoff: test every
+                            // `backoff_rounds` rounds
+                            // (default 12 = ~60min at 5min/round, configurable
+                            // via
+                            // CLASH_RS_BACKOFF_ROUNDS env var). A
+                            // consistently-failing
+                            // proxy is re-tested once every N rounds; on
+                            // success it
                             // is reactivated (consecutive_failures reset to 0).
                             let backoff = self.backoff_rounds;
                             if round - s.last_test_round < backoff {
@@ -219,8 +225,11 @@ impl ProxyManager {
                                 skip_results.insert(
                                     name.to_owned(),
                                     Err(new_io_error(format!(
-                                        "healthcheck skipped (backoff: {} consecutive failures, next test in {} round(s))",
-                                        cf, backoff - (round - s.last_test_round)
+                                        "healthcheck skipped (backoff: {} \
+                                         consecutive failures, next test in {} \
+                                         round(s))",
+                                        cf,
+                                        backoff - (round - s.last_test_round)
                                     ))),
                                 );
                                 continue;
@@ -242,8 +251,9 @@ impl ProxyManager {
         }
 
         let mut futs = vec![];
-        // Limit concurrency to avoid burst resource consumption on low-RAM routers.
-        // Configurable via CLASH_RS_HEALTHCHECK_CONCURRENCY env var (default 8).
+        // Limit concurrency to avoid burst resource consumption on low-RAM
+        // routers. Configurable via CLASH_RS_HEALTHCHECK_CONCURRENCY
+        // env var (default 8).
         let sem = Arc::new(Semaphore::new(self.concurrency));
         for outbound in to_test {
             let outbound = outbound.clone();
@@ -267,8 +277,10 @@ impl ProxyManager {
         let r: Vec<_> = futs.collect().await;
 
         // Build a map of tested results by proxy name
-        let mut tested_results: HashMap<String, std::io::Result<(Duration, Duration)>> =
-            HashMap::new();
+        let mut tested_results: HashMap<
+            String,
+            std::io::Result<(Duration, Duration)>,
+        > = HashMap::new();
         for res in r {
             match res {
                 Ok((name, result)) => {
@@ -338,7 +350,8 @@ impl ProxyManager {
         if alive {
             entry.consecutive_failures = 0;
         } else {
-            entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+            entry.consecutive_failures =
+                entry.consecutive_failures.saturating_add(1);
         }
         if let Some(ins) = history {
             entry.delay_history.push_back(ins);
@@ -866,7 +879,7 @@ impl ProxyManager {
         }
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, outbound))]
     /// returns (actual_http_round_trip_time,
     /// overall_round_trip_time_including_tls_handshake)
     pub async fn url_test(
@@ -884,49 +897,6 @@ impl ProxyManager {
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
             let name = name_clone;
-
-            // For AnyTLS proxies, use a raw TCP connect latency test instead of
-            // the full HTTP round-trip test.  ISP RST filtering on port 58001
-            // blocks the direct TCP handshake, but a TCP connect through the
-            // configured relay (connect-via) succeeds.  The TCP connect time is
-            // a reasonable proxy for the actual latency.
-            if matches!(outbound.proto(), OutboundType::Anytls) {
-                if let Some(plain) = outbound.try_as_plain_handler() {
-                    if let Some(addr) = plain.server_addr() {
-                        use std::time::Instant;
-                        let start = Instant::now();
-                        let connect = tokio::time::timeout(
-                            timeout,
-                            new_tcp_stream(
-                                addr,
-                                DEFAULT_OUTBOUND_INTERFACE.read().await.as_ref(),
-                                #[cfg(target_os = "linux")]
-                                self.fw_mark,
-                            ),
-                        )
-                        .await;
-                        let elapsed = start.elapsed();
-                        match connect {
-                            Ok(Ok(_stream)) => {
-                                return Ok((elapsed, elapsed));
-                            }
-                            Ok(Err(e)) => {
-                                // TCP connect failed even directly (RST/refused).
-                                // Fall through to the normal url_test path which
-                                // will also fail, but the error message will be
-                                // more informative about the actual issue.
-                                debug!(
-                                    "AnyTLS {} TCP connect failed ({e}), falling back to HTTP test",
-                                    name
-                                );
-                            }
-                            Err(_) => {
-                                debug!("AnyTLS {} TCP connect timed out", name);
-                            }
-                        }
-                    }
-                }
-            }
 
             let uri = url
                 .parse::<http::Uri>()
@@ -958,62 +928,78 @@ impl ProxyManager {
                 ..Default::default()
             };
 
-            // Try the standard connect_stream first (through the node's tunnel).
-            // If the node's server port is RST-blocked by the ISP (e.g., SS port 52001),
-            // this will fail.  Fall back to a direct TCP connection through the
+            // Try the standard connect_stream first (through the node's
+            // tunnel). If the node's server port is RST-blocked by
+            // the ISP (e.g., SS port 52001), this will fail.  Fall
+            // back to a direct TCP connection through the
             // transparent proxy (no fw_mark) — the iptables REDIRECT will route
             // the traffic through the dispatcher, which selects PROXY group.
             let (stream, connect_delay) = match tokio::time::timeout(
                 timeout,
-                TimedFuture::new(outbound.connect_stream(&sess, dns_resolver.clone())),
+                TimedFuture::new(
+                    outbound.connect_stream(&sess, dns_resolver.clone()),
+                ),
             )
             .await
             {
                 Ok((result, duration)) => match result {
                     Ok(s) => (Ok(s), duration),
                     Err(e) => {
-                    // connect_stream failed (likely RST/refused).
-                    // For google/gstatic tests, do NOT use the transparent proxy
-                    // fallback.  This lets url-test correctly detect which nodes
-                    // can actually reach google (returning 200) vs which are dead
-                    // (failing), so the AUTO group only auto-selects working nodes.
-                    if url.contains("google.com") || url.contains("gstatic.com") {
-                        return Err(e);
-                    }
-                    // Try through transparent proxy as a fallback (for other tests).
-                    debug!(
-                        "{} connect_stream failed ({e}), trying transparent proxy fallback",
-                        name
-                    );
-                    // Resolve hostname to IP (async, non-blocking)
-                    let addr = tokio::net::lookup_host((host.as_str(), port))
+                        // connect_stream failed (likely RST/refused).
+                        // For google/gstatic tests, do NOT use the transparent
+                        // proxy fallback.  This lets
+                        // url-test correctly detect which nodes
+                        // can actually reach google (returning 200) vs which
+                        // are dead (failing), so the
+                        // AUTO group only auto-selects working nodes.
+                        if url.contains("google.com") || url.contains("gstatic.com")
+                        {
+                            return Err(e);
+                        }
+                        // Try through transparent proxy as a fallback (for
+                        // other tests).
+                        debug!(
+                            "{} connect_stream failed ({e}), trying transparent \
+                             proxy fallback",
+                            name
+                        );
+                        // Resolve hostname to IP (async, non-blocking)
+                        let addr = tokio::net::lookup_host((host.as_str(), port))
+                            .await
+                            .map_err(|e| {
+                                new_io_error(format!(
+                                    "DNS lookup failed for {host}:{port}: {e}"
+                                ))
+                            })?
+                            .next()
+                            .ok_or(new_io_error(format!(
+                                "no IP found for {host}:{port}"
+                            )))?;
+                        let (fallback_result, _) = tokio::time::timeout(
+                            timeout,
+                            TimedFuture::new(Box::pin(new_tcp_stream(
+                                addr,
+                                DEFAULT_OUTBOUND_INTERFACE.read().await.as_ref(),
+                                #[cfg(target_os = "linux")]
+                                None, // no fw_mark -> transparent proxy catches it
+                            ))),
+                        )
                         .await
-                        .map_err(|e| new_io_error(format!(
-                            "DNS lookup failed for {host}:{port}: {e}"
-                        )))?
-                        .next()
-                        .ok_or(new_io_error(format!(
-                            "no IP found for {host}:{port}"
-                        )))?;
-                    let (fallback_result, _) = tokio::time::timeout(
-                        timeout,
-                        TimedFuture::new(Box::pin(new_tcp_stream(
-                            addr,
-                            DEFAULT_OUTBOUND_INTERFACE.read().await.as_ref(),
-                            #[cfg(target_os = "linux")]
-                            None,  // no fw_mark -> transparent proxy catches it
-                        ))),
-                    )
-                    .await
-                    .context("URL test timeout (fallback)")
-                    .into_io()?;
-                    let fallback = fallback_result?;
-                    (Ok(Box::new(InstrumentedStreamWrapper::new(fallback)) as Box<dyn crate::app::dispatcher::InstrumentedStream>), Duration::default())
+                        .context("URL test timeout (fallback)")
+                        .into_io()?;
+                        let fallback = fallback_result?;
+                        (
+                            Ok(Box::new(InstrumentedStreamWrapper::new(fallback))
+                                as Box<
+                                    dyn crate::app::dispatcher::InstrumentedStream,
+                                >),
+                            Duration::default(),
+                        )
+                    }
+                },
+                Err(_) => {
+                    return Err(new_io_error("URL test timeout"));
                 }
-            },
-            Err(_) => {
-                return Err(new_io_error("URL test timeout"));
-            }
             };
 
             // For AnyTLS proxies, the connect_stream may complete the TCP
@@ -1032,7 +1018,8 @@ impl ProxyManager {
                             // only the AnyTLS handshake failed — return TCP
                             // time as a reasonable latency proxy.
                             warn!(
-                                "AnyTLS {} handshake failed ({e}, {tcp_ms}ms TCP), using TCP latency",
+                                "AnyTLS {} handshake failed ({e}, {tcp_ms}ms TCP), \
+                                 using TCP latency",
                                 name
                             );
                             return Ok((connect_delay, connect_delay));
@@ -1390,6 +1377,9 @@ mod tests {
         mock_handler
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());
+        mock_handler
+            .expect_proto()
+            .return_const(crate::proxy::OutboundType::Direct);
         mock_handler.expect_connect_stream().returning(|_, _| {
             Ok(Box::new(InstrumentedStreamWrapper::new(
                 tokio_test::io::Builder::new()

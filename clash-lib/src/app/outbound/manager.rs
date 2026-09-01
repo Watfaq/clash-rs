@@ -248,7 +248,8 @@ impl OutboundManager {
         );
     }
 
-    /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed.
+    /// a wrapper of proxy_manager.url_test so that proxy_manager is not
+    /// exposed.
     ///
     /// `force` is forwarded to [`ProxyManager::check`]: `true` for manual
     /// user-triggered latency tests (bypass backoff, test every node),
@@ -733,8 +734,9 @@ impl OutboundManager {
                     );
 
                     // url-test 也注册 selector_control, 支持手动锁定节点
-                    // (PUT /proxies/AUTO {"name":"JP01"} 会锁定到JP01, 不自动切换)
-                    // url_test_arc 同时实现 OutboundHandler 和 SelectorControl
+                    // (PUT /proxies/AUTO {"name":"JP01"} 会锁定到JP01,
+                    // 不自动切换) url_test_arc 同时实现
+                    // OutboundHandler 和 SelectorControl
                     let url_test_arc: Arc<urltest::Handler> = Arc::new(url_test);
                     handlers.insert(
                         proto.name.clone(),
@@ -889,8 +891,7 @@ impl OutboundManager {
                             providers,
                             proxy_manager.clone(),
                             cache_store.clone(),
-                        )
-                        .await),
+                        )),
                     );
                 }
             }

@@ -12,11 +12,13 @@ use async_trait::async_trait;
 use tracing::{debug, trace, warn};
 
 use crate::{
+    Error,
     app::{
         dispatcher::{BoxedInstrumentedDatagram, BoxedInstrumentedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            ProxyManager, get_global_traffic_rate, providers::proxy_provider::ArcProxyProvider,
+            ProxyManager, get_global_traffic_rate,
+            providers::proxy_provider::ArcProxyProvider,
         },
     },
     proxy::{
@@ -26,7 +28,6 @@ use crate::{
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
-    Error,
 };
 
 // ============================================================================
@@ -98,8 +99,8 @@ impl AdaptiveState {
         if self.rounds_since_switch >= ADAPTIVE_ROUNDS_THRESHOLD
             && self.delay_diffs.len() >= ADAPTIVE_ROUNDS_THRESHOLD as usize
         {
-            let avg_diff: f64 =
-                self.delay_diffs.iter().sum::<u64>() as f64 / self.delay_diffs.len() as f64;
+            let avg_diff: f64 = self.delay_diffs.iter().sum::<u64>() as f64
+                / self.delay_diffs.len() as f64;
             if avg_diff > ADAPTIVE_DIFF_THRESHOLD_MS as f64
                 && self.current_tolerance > ADAPTIVE_LOW_TOLERANCE
             {
@@ -108,8 +109,11 @@ impl AdaptiveState {
                     avg_diff_ms = avg_diff,
                     rounds = self.rounds_since_switch,
                     new_tolerance = ADAPTIVE_LOW_TOLERANCE,
-                    "adaptive: tolerance lowered (no switch for {} rounds, avg diff {:.1}ms > {}ms)",
-                    self.rounds_since_switch, avg_diff, ADAPTIVE_DIFF_THRESHOLD_MS
+                    "adaptive: tolerance lowered (no switch for {} rounds, avg \
+                     diff {:.1}ms > {}ms)",
+                    self.rounds_since_switch,
+                    avg_diff,
+                    ADAPTIVE_DIFF_THRESHOLD_MS
                 );
             }
         }
@@ -178,7 +182,8 @@ impl Handler {
     /// 选择最快节点, 包含自适应 tolerance + 流量跳过 + 强制切换逻辑
     ///
     /// # 切换决策优先级
-    /// 1. **强制切换** (force_switch=true): 手动测速后, 忽略所有条件直接选最低延迟
+    /// 1. **强制切换** (force_switch=true): 手动测速后,
+    ///    忽略所有条件直接选最低延迟
     /// 2. **流量跳过**: 代理流量 > 250KB/s 时, 跳过此轮切换 (保持当前节点)
     /// 3. **自适应 tolerance**:
     ///    - 基础 tolerance = 30ms (配置值)
@@ -342,10 +347,10 @@ impl Handler {
         // --- 记录自适应状态 (仅在新一轮 healthcheck 且非流量跳过时) ---
         if is_new_round && !traffic_skip {
             // 计算当前延迟与最低延迟的差值(ms)
-            let diff_ms = if current_delay != Duration::MAX && fastest_delay != Duration::MAX {
-                current_delay
-                    .saturating_sub(fastest_delay)
-                    .as_millis() as u64
+            let diff_ms = if current_delay != Duration::MAX
+                && fastest_delay != Duration::MAX
+            {
+                current_delay.saturating_sub(fastest_delay).as_millis() as u64
             } else {
                 0
             };
@@ -555,6 +560,16 @@ impl SelectorControl for Handler {
         } else {
             Err(Error::Operation(format!("proxy {name} not found")))
         }
+    }
+
+    #[cfg(test)]
+    async fn current(&self) -> String {
+        let proxies = self.get_proxies(false).await;
+        let idx = self.fastest_proxy_index.load(Ordering::Relaxed) as usize;
+        proxies
+            .get(idx)
+            .map(|p| p.name().to_string())
+            .unwrap_or_default()
     }
 }
 
