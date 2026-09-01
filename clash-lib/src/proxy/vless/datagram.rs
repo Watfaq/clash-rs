@@ -222,10 +222,7 @@ impl Stream for OutboundDatagramVless {
                         this.remaining_bytes = packet_len;
                         this.packet_buf.clear();
                         this.packet_buf.reserve(packet_len);
-                        trace!(
-                            "expecting VLESS UDP packet of {} bytes",
-                            packet_len
-                        );
+                        trace!("expecting VLESS UDP packet of {} bytes", packet_len);
                     }
                     Err(e) => {
                         debug!("failed to read length header: {}", e);
@@ -264,10 +261,7 @@ impl Stream for OutboundDatagramVless {
                     let data =
                         this.packet_buf.split_to(this.remaining_bytes).to_vec();
                     this.remaining_bytes = 0;
-                    trace!(
-                        "received complete VLESS UDP packet, len={}",
-                        data.len()
-                    );
+                    trace!("received complete VLESS UDP packet, len={}", data.len());
                     return Poll::Ready(Some(UdpPacket {
                         data,
                         src_addr: this.remote_addr.clone(),

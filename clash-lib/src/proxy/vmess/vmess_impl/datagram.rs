@@ -104,9 +104,9 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             }
             let written_val = written.as_mut().unwrap();
             while *written_val < pkt.data.len() {
-                let n = ready!(inner
-                    .as_mut()
-                    .poll_write(cx, &pkt.data[*written_val..]))?;
+                let n = ready!(
+                    inner.as_mut().poll_write(cx, &pkt.data[*written_val..])
+                )?;
                 if n == 0 {
                     *pkt_container = None;
                     *written = None;
