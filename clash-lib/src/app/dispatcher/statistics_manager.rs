@@ -10,7 +10,7 @@ use serde::Serialize;
 use tokio::sync::{Mutex, RwLock, oneshot::Sender};
 use tracing::warn;
 
-use crate::{app::dns::ThreadSafeDNSResolver, app::remote_content_manager::set_global_traffic_rate, session::Session};
+use crate::{app::dns::ThreadSafeDNSResolver, session::Session};
 
 use super::tracked::Tracked;
 
@@ -248,12 +248,12 @@ impl Manager {
     pub fn new() -> Arc<Self> {
         // Read memory limit from environment variable.
         // Format: CLASH_RS_MEM_LIMIT_MB=40  (soft limit, close oldest conns)
-        //         CLASH_RS_MEM_LIMIT_MB=40:hard  (close all conns when exceeded)
+        //         CLASH_RS_MEM_LIMIT_MB=40:hard  (close all conns when
+        // exceeded)
         let (limit_bytes, mode) = match std::env::var("CLASH_RS_MEM_LIMIT_MB") {
             Ok(val) => {
                 let val = val.trim();
-                let (num_str, mode) = if let Some(rest) = val.strip_suffix(":hard")
-                {
+                let (num_str, mode) = if let Some(rest) = val.strip_suffix(":hard") {
                     (rest, MemLimitMode::Hard)
                 } else if let Some(rest) = val.strip_suffix(":soft") {
                     (rest, MemLimitMode::Soft)
@@ -288,9 +288,7 @@ impl Manager {
                     Ok(r) if r < 1.0 => DEFAULT_HARD_RATIO_X100,
                     // Fix(2026-08-04): guard NaN/Inf (parse::<f64>("NaN") is
                     // Ok(NaN); (NaN*100) as u64 == 0 silently disabled Hard).
-                    Ok(r) if r.is_finite() && r >= 1.0 => {
-                        (r * 100.0).round() as u64
-                    }
+                    Ok(r) if r.is_finite() && r >= 1.0 => (r * 100.0).round() as u64,
                     Ok(_) => DEFAULT_HARD_RATIO_X100,
                     Err(_) => DEFAULT_HARD_RATIO_X100,
                 }
@@ -359,10 +357,10 @@ impl Manager {
                 // Memory over limit - reject this new connection.
                 // close_notify signals the connection to close immediately.
                 let _ = close_notify.send(());
-                self.mem_pressure_rejects
-                    .fetch_add(1, Ordering::Relaxed);
+                self.mem_pressure_rejects.fetch_add(1, Ordering::Relaxed);
                 warn!(
-                    "memory pressure: {} bytes > {} limit, rejected new connection (existing conns kept alive)",
+                    "memory pressure: {} bytes > {} limit, rejected new connection \
+                     (existing conns kept alive)",
                     current, limit
                 );
                 return;
@@ -386,10 +384,13 @@ impl Manager {
             // Phase 1: hold connections lock only to remove the entry.
             // We must NOT acquire user_period_stats or closed_flows while
             // holding connections, because drain_user_stats acquires
-            // user_period_stats -> connections (reverse order = AB-BA deadlock).
+            // user_period_stats -> connections (reverse order = AB-BA
+            // deadlock).
             let info = {
                 let mut connections = connections.lock().await;
-                connections.remove(&id).map(|(tracked, _)| tracked.tracker_info())
+                connections
+                    .remove(&id)
+                    .map(|(tracked, _)| tracked.tracker_info())
             };
             // --- connections lock released ---
 
@@ -458,7 +459,7 @@ impl Manager {
         // their user counters to 0. upload_total/download_total are untouched
         // so /connections keeps seeing the correct cumulative values.
         let connections = self.connections.lock().await;
-        for (tracked, _) in connections.values() {
+        for (_, (tracked, _)) in connections.iter() {
             let info = tracked.tracker_info();
             if let Some(ref user) = info.session_holder.inbound_user {
                 let upload = info.user_upload.swap(0, Ordering::AcqRel);
@@ -478,14 +479,8 @@ impl Manager {
         let connections = self.connections.clone();
 
         tokio::spawn(async move {
-            // Phase 1: remove under lock, collect close_notify.
-            let close_notify = {
-                let mut connections = connections.lock().await;
-                connections.remove(&id).map(|(_, cn)| cn)
-            };
-            // --- lock released ---
-            // Phase 2: signal outside the lock.
-            if let Some(close_notify) = close_notify {
+            let mut connections = connections.lock().await;
+            if let Some((_, close_notify)) = connections.remove(&id) {
                 let _ = close_notify.send(());
             }
         });
@@ -494,14 +489,8 @@ impl Manager {
     pub async fn close_all(&self) {
         let connections = self.connections.clone();
 
-        // Phase 1: drain all entries under lock, collect close_notifiers.
-        let pending: Vec<Sender<()>> = {
-            let mut connections = connections.lock().await;
-            connections.drain().map(|(_, (_, cn))| cn).collect()
-        };
-        // --- lock released ---
-        // Phase 2: signal all outside the lock.
-        for close_notify in pending {
+        let mut connections = connections.lock().await;
+        for (_, (_, close_notify)) in connections.drain() {
             let _ = close_notify.send(());
         }
     }
@@ -531,7 +520,7 @@ impl Manager {
     pub async fn snapshot(&self) -> Snapshot {
         let mut connections = vec![];
         let conns = self.connections.lock().await;
-        for v in conns.values() {
+        for (_, v) in conns.iter() {
             let t = v.0.tracker_info();
             let chain = t.proxy_chain_holder.0.read().await;
             connections.push(TrackerInfo {
@@ -606,12 +595,6 @@ impl Manager {
             );
             self.download_temp.store(0, Ordering::Relaxed);
 
-            // 更新全局流量速率供 url-test group 使用
-            set_global_traffic_rate(
-                self.upload_blip.load(Ordering::Relaxed),
-                self.download_blip.load(Ordering::Relaxed),
-            );
-
             // Memory pressure check every 5 seconds
             mem_check_counter += 1;
             if mem_check_counter >= 5 {
@@ -624,18 +607,22 @@ impl Manager {
     /// Check memory usage and take action if over the limit.
     ///
     /// Strategy (network stays up, just slower):
-    /// - New connections are rejected in `track()` when over limit (soft & hard)
+    /// - New connections are rejected in `track()` when over limit (soft &
+    ///   hard)
     /// - Soft mode: only reject new connections, keep all existing alive
-    /// - Hard mode: also close existing connections when severely over limit (2x)
-    ///   to prevent OOM crash. This is last-resort, only triggers at 2x limit.
+    /// - Hard mode: also close existing connections when severely over limit
+    ///   (2x) to prevent OOM crash. This is last-resort, only triggers at 2x
+    ///   limit.
     ///
     /// When memory drops below limit, all restrictions auto-clear.
     ///
     /// **Business-layer cache cleanup** (both modes, when over 1x limit):
-    /// - Clear `closed_flows` ring buffer (frees TrackerInfo with Session strings)
+    /// - Clear `closed_flows` ring buffer (frees TrackerInfo with Session
+    ///   strings)
     /// - Clear DNS reverse_lookup_cache via injected resolver
-    /// This releases references so jemalloc can reclaim pages (with short decay_ms
-    /// configured in main.rs, pages return to OS within ~1 second).
+    /// This releases references so jemalloc can reclaim pages (with short
+    /// decay_ms configured in main.rs, pages return to OS within ~1
+    /// second).
     async fn check_memory_pressure(&self) {
         let limit = self.mem_limit_bytes.load(Ordering::Relaxed);
         if limit == 0 {
@@ -659,7 +646,8 @@ impl Manager {
                 if freed > 0 {
                     ring.clear();
                     warn!(
-                        "memory pressure: cleared {} closed_flows entries ({} bytes > {} limit)",
+                        "memory pressure: cleared {} closed_flows entries ({} \
+                         bytes > {} limit)",
                         freed, current, limit_u64
                     );
                 }
@@ -677,14 +665,10 @@ impl Manager {
                     r.clear_cache().await;
                 }
             }
-
-            // Note: jemalloc epoch advance is not needed here.  With short
-            // decay_ms (1s, set in main.rs via tune_jemalloc), freed pages are
-            // automatically returned to OS by jemalloc's background decay.
-            // epoch::advance() only refreshes stats, doesn't trigger purge.
         }
 
-        // --- Existing-connection closure (Hard mode only, at configurable ratio) ---
+        // --- Existing-connection closure (Hard mode only, at configurable
+        // ratio) ---
         let mode = *self.mem_limit_mode.lock().await;
         let ratio_x100 = self.mem_hard_ratio_x100.load(Ordering::Relaxed);
         match mode {
@@ -693,12 +677,14 @@ impl Manager {
                 // New connections are already rejected in track().
             }
             MemLimitMode::Hard if ratio_x100 == 0 => {
-                // User explicitly disabled Hard mode (CLASH_RS_MEM_HARD_RATIO=0).
-                // They prefer OOM kill over forced connection drop.
+                // User explicitly disabled Hard mode
+                // (CLASH_RS_MEM_HARD_RATIO=0). They prefer OOM
+                // kill over forced connection drop.
             }
             MemLimitMode::Hard => {
-                // Hard mode: close some existing connections when memory exceeds
-                // the configured ratio (default 2x) of the limit.
+                // Hard mode: close some existing connections when memory
+                // exceeds the configured ratio (default 2x) of
+                // the limit.
                 //
                 // Re-read memory AFTER cache cleanup above: clearing
                 // closed_flows / DNS caches frees references, and while
@@ -708,7 +694,8 @@ impl Manager {
                 let current = self.memory_usage();
                 // Fix(2026-08-04): clamp u128 -> usize (32-bit safety).
                 let threshold = ((limit_u64 as u128 * ratio_x100 as u128 / 100)
-                    .min(usize::MAX as u128)) as usize;
+                    .min(usize::MAX as u128))
+                    as usize;
                 if current <= threshold {
                     return;
                 }
@@ -729,7 +716,8 @@ impl Manager {
                     // Smart eviction: prioritize closing connections that are
                     // (a) UDP (cheaper to reconnect — P2P/QUIC retransmit)
                     // (b) idle (lowest total bytes transferred)
-                    // This avoids killing active TCP streams (SSH, video, downloads).
+                    // This avoids killing active TCP streams (SSH, video,
+                    // downloads).
                     let mut candidates: Vec<(uuid::Uuid, u64, bool)> = connections
                         .iter()
                         .map(|(id, (tracked, _))| {
@@ -741,8 +729,9 @@ impl Manager {
                             (*id, bytes, is_udp)
                         })
                         .collect();
-                    // Sort: UDP first (evict before TCP), then by ascending bytes
-                    // (idle before active).  Stable sort keeps insertion order
+                    // Sort: UDP first (evict before TCP), then by ascending
+                    // bytes (idle before active).  Stable
+                    // sort keeps insertion order
                     // for ties (older connections evicted first).
                     candidates.sort_by(|a, b| {
                         // UDP (true) sorts before TCP (false)
@@ -762,7 +751,7 @@ impl Manager {
                     // close notifiers.  The lock is released at the end of
                     // this block.
                     let mut pending: Vec<Sender<()>> = Vec::with_capacity(to_close);
-                    for (id, _, _) in candidates.into_iter().take(to_close) {
+                    for (id, ..) in candidates.into_iter().take(to_close) {
                         if let Some((_, close_notify)) = connections.remove(&id) {
                             pending.push(close_notify);
                         }
@@ -785,7 +774,9 @@ impl Manager {
                     self.mem_pressure_closes
                         .fetch_add(closed, Ordering::Relaxed);
                     warn!(
-                        "memory pressure SEVERE: {} bytes > {}x{} limit, smart-evicted {}/{} connections (target {}, UDP+idle first, hard mode)",
+                        "memory pressure SEVERE: {} bytes > {}x{} limit, \
+                         smart-evicted {}/{} connections (target {}, UDP+idle \
+                         first, hard mode)",
                         current, ratio_x100, limit_u64, closed, count, to_close
                     );
                 }
