@@ -220,7 +220,8 @@ async fn build_flow_records(
     }
 
     // Closed connections (ring buffer) — uses ClosedFlowInfo which has
-    // pre-extracted concrete fields (no session_holder/proxy_chain_holder needed).
+    // pre-extracted concrete fields (no session_holder/proxy_chain_holder
+    // needed).
     if include_closed {
         let closed = mgr.closed_flows_snapshot().await;
         for info in &closed {

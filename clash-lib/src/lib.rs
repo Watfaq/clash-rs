@@ -658,12 +658,6 @@ async fn create_components(
 
     let statistics_manager = StatisticsManager::new();
 
-    // Inject the DNS resolver so statistics_manager can clear DNS caches
-    // under memory pressure (see check_memory_pressure).
-    statistics_manager
-        .set_dns_resolver(dns_resolver.clone())
-        .await;
-
     debug!("initializing dispatcher");
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager.clone(),
@@ -674,12 +668,7 @@ async fn create_components(
         config.experimental.as_ref().and_then(|e| e.tcp_buffer_size),
     ));
 
-    // Set AnyTLS buffer sizes from experimental config
     if let Some(ref exp) = config.experimental {
-        let duplex = exp.anytls_duplex_buffer_size.unwrap_or(16 * 1024);
-        let relay = exp.anytls_relay_buffer_size.unwrap_or(4 * 1024);
-        crate::proxy::anytls::set_buffer_config(duplex, relay);
-
         if let Some(cap) = exp.closed_flows_cap {
             crate::app::dispatcher::set_closed_flows_cap(cap);
         }
