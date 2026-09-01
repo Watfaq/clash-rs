@@ -175,8 +175,9 @@ impl RuleProviderImpl {
                             ))
                         })?;
 
-                        // Fn: we need to clone the values anyway to avoid moving
-                        // `inline_rules` from the "Environment"
+                        // Fn: we need to clone the values anyway to avoid
+                        // moving `inline_rules` from
+                        // the "Environment"
                         let mut payload =
                             inline_rules_clone.clone().unwrap_or_default();
                         payload.extend(scheme.payload);
@@ -232,8 +233,9 @@ impl RuleProviderImpl {
                                 ),
                             )));
                         }
-                        // Parse MRS format using the updated function signature.
-                        // It directly returns the required RuleContent.
+                        // Parse MRS format using the updated function
+                        // signature. It directly
+                        // returns the required RuleContent.
                         super::mrs::rules_mrs_parse(input, current_behavior)
                     }
                 }

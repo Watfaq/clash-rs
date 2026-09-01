@@ -184,7 +184,8 @@ fn build_handler(
             users,
         } => {
             // Use the provided watch receiver, or create a static one for
-            // non-provider (static config) inbounds whose user list never changes.
+            // non-provider (static config) inbounds whose user list never
+            // changes.
             let rx = users_rx
                 .unwrap_or_else(|| tokio::sync::watch::channel(users.clone()).1);
             Some(Arc::new(ShadowsocksInbound::new(InboundOptions {

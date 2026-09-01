@@ -135,9 +135,10 @@ mod macos {
         #[cfg(target_os = "macos")]
         {
             // This function is used to add test routes for the TUN device.
-            // The actual implementation will depend on your system and requirements.
-            // For example, you might use `route` command on Unix-like systems.
-            // Here we assume the route is already added in the example description.
+            // The actual implementation will depend on your system and
+            // requirements. For example, you might use `route`
+            // command on Unix-like systems. Here we assume the
+            // route is already added in the example description.
             let output = std::process::Command::new("route")
                 .arg("add")
                 .arg("-host")

@@ -196,7 +196,8 @@ impl AsyncRead for HTTPObfs {
                     Poll::Ready(Ok(())) => {
                         let filled = tmp_buf.filled();
                         if filled.is_empty() {
-                            // Peer closed the connection before sending headers.
+                            // Peer closed the connection before sending
+                            // headers.
                             return Poll::Ready(Err(io::Error::from(
                                 io::ErrorKind::UnexpectedEof,
                             )));

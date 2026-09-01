@@ -187,7 +187,8 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
-    // Valid params, server side dropped → TLS handshake error (not InvalidInput)
+    // Valid params, server side dropped → TLS handshake error (not
+    // InvalidInput)
     #[tokio::test]
     async fn test_handshake_error_on_closed_peer() {
         setup();

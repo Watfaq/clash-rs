@@ -294,7 +294,8 @@ fn range_to_cidrs_v4(start: Ipv4Addr, end: Ipv4Addr) -> Result<Vec<IpNet>> {
     let end_u32 = u32::from(end);
 
     while current <= end_u32 {
-        // Find the largest CIDR block starting at current that fits within the range
+        // Find the largest CIDR block starting at current that fits within the
+        // range
 
         // 1. Find alignment: how many trailing zeros does current have?
         let trailing_zeros = if current == 0 {
@@ -336,7 +337,8 @@ fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
     let end_u128 = u128::from(end);
 
     while current <= end_u128 {
-        // Find the largest CIDR block starting at current that fits within the range
+        // Find the largest CIDR block starting at current that fits within the
+        // range
 
         // 1. Find alignment: how many trailing zeros does current have?
         let trailing_zeros = if current == 0 {
@@ -521,7 +523,8 @@ mod tests {
     fn test_range_to_cidrs_single_remaining_ip_v4() {
         // Test the edge case mentioned in Copilot comment: remaining_ips = 1
         // When we have exactly 1 IP left, leading_zeros() = 31
-        // max_block_size_bits should be 31 - 31 = 0, giving block_size = 2^0 = 1 IP
+        // max_block_size_bits should be 31 - 31 = 0, giving block_size = 2^0 =
+        // 1 IP
         let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
         let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)); // Same IP
         let result = range_to_cidrs(start, end).unwrap();
@@ -541,8 +544,8 @@ mod tests {
     fn test_range_to_cidrs_single_remaining_ip_v6() {
         // Test the edge case for IPv6: remaining_ips = 1
         // When we have exactly 1 IP left, leading_zeros() = 127
-        // max_block_size_bits should be 127 - 127 = 0, giving block_size = 2^0 = 1
-        // IP
+        // max_block_size_bits should be 127 - 127 = 0, giving block_size = 2^0
+        // = 1 IP
         let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 100));
         let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 100)); // Same IP
         let result = range_to_cidrs(start, end).unwrap();
@@ -561,7 +564,8 @@ mod tests {
     #[test]
     fn test_range_to_cidrs_two_remaining_ips_v4() {
         // Test remaining_ips = 2: leading_zeros() = 30
-        // max_block_size_bits should be 31 - 30 = 1, giving block_size = 2^1 = 2 IPs
+        // max_block_size_bits should be 31 - 30 = 1, giving block_size = 2^1 =
+        // 2 IPs
         let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
         let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 101)); // 2 IPs
         let result = range_to_cidrs(start, end).unwrap();

@@ -103,7 +103,8 @@ impl futures::Stream for InboundShadowsocksDatagram {
                     // Upsert the per-client control entry so responses to this
                     // client are encrypted with the correct uPSK and echo the
                     // correct client_session_id.  packet_id is kept per-client
-                    // for monotonic replay protection at each individual client.
+                    // for monotonic replay protection at each individual
+                    // client.
                     if let Some(ref c) = ctrl {
                         let entry =
                             client_controls.entry(src).or_insert_with(|| {
@@ -134,8 +135,9 @@ impl futures::Stream for InboundShadowsocksDatagram {
                 }
                 Err(e) => {
                     // Log the error but keep the stream alive. Without looping
-                    // here, returning Poll::Pending would leave the task without
-                    // a registered waker (the waker was consumed when data
+                    // here, returning Poll::Pending would leave the task
+                    // without a registered waker (the waker
+                    // was consumed when data
                     // arrived), permanently suspending the UDP dispatch loop.
                     error!("failed to receive udp packet: {}", e);
                     // Fall through to the next loop iteration: if the socket
