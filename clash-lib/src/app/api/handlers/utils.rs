@@ -57,7 +57,8 @@ pub async fn group_url_test(
     group.force_fastest();
 
     // if found active proxy, return the latency of the active proxy, otherwise
-    // return the latency of the first proxy (which is the latency of the group).
+    // return the latency of the first proxy (which is the latency of the
+    // group).
     let result = if let Some(idx) = active_idx {
         results
             .get(idx + 1)

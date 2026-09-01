@@ -175,8 +175,8 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                                         )
                                         .unwrap();
                                     this.read_authorized = true;
-                                    // 4. rewrite the body length to be put into the
-                                    //    read buf
+                                    // 4. rewrite the body length to be put into
+                                    //    the read buf
                                     unsafe {
                                         body.set_len(body.len() - HMAC_SIZE);
                                     }

@@ -24,10 +24,11 @@ impl GeoIPFilter {
 
 impl FallbackIPFilter for GeoIPFilter {
     fn apply(&self, ip: &net::IpAddr) -> bool {
-        // When the OnceLock is not yet populated (e.g. during startup before the
-        // MMDB is loaded) `lock.get()` returns `None`, making this return `true`
-        // — the permissive default that lets all IPs through to the fallback
-        // resolver.  Once the MMDB is set the filter behaves normally.
+        // When the OnceLock is not yet populated (e.g. during startup before
+        // the MMDB is loaded) `lock.get()` returns `None`, making this
+        // return `true` — the permissive default that lets all IPs
+        // through to the fallback resolver.  Once the MMDB is set the
+        // filter behaves normally.
         !self
             .1
             .as_ref()

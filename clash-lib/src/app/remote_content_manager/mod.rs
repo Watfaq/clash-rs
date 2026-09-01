@@ -1181,7 +1181,8 @@ impl ProxyManager {
         // Extract traffic statistics from the session if available
         let traffic_stats = sess.traffic_stats.as_ref();
 
-        // Attempt intelligent pattern detection if traffic statistics are available
+        // Attempt intelligent pattern detection if traffic statistics are
+        // available
         if let Some(stats) = traffic_stats {
             let pattern = self.analyze_traffic_pattern(stats, sess).await;
 

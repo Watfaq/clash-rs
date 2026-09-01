@@ -177,7 +177,8 @@ async fn test_config_reload_via_payload() {
     let wd =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
 
-    // Allocate 8 ports: 7 for the initial instance + 1 for the reloaded controller
+    // Allocate 8 ports: 7 for the initial instance + 1 for the reloaded
+    // controller
     let port_base = alloc_ports(8);
     let config_str = make_client_config_str(port_base);
 
