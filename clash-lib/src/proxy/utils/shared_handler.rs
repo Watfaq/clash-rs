@@ -86,9 +86,9 @@ impl OutboundHandler for SharedOutboundHandler {
 
     fn proto(&self) -> OutboundType {
         // proto() is a synchronous trait method so we cannot resolve the inner
-        // handler here. The trait documentation states this value is informational
-        // only ("do not rely on the underlying value"), so Direct is a safe
-        // placeholder.
+        // handler here. The trait documentation states this value is
+        // informational only ("do not rely on the underlying value"),
+        // so Direct is a safe placeholder.
         OutboundType::Direct
     }
 

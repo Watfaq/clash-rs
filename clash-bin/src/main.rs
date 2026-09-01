@@ -174,7 +174,8 @@ fn main() -> anyhow::Result<()> {
     tune_jemalloc();
 
     // Those arguments are for compatibility with `mihomo`
-    // Technically, I do not think `mihomo` is a modern/standard POSIX Cli program
+    // Technically, I do not think `mihomo` is a modern/standard POSIX Cli
+    // program
     let args: Vec<String> = std::env::args()
         .map(|arg| match arg.as_str() {
             "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),

@@ -677,7 +677,8 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     }
 
     // Drop the bypass-FIB default route(s) installed by both modes, plus the
-    // on-link host route(s) we added for the gateways (see install_bypass_default).
+    // on-link host route(s) we added for the gateways (see
+    // install_bypass_default).
     uninstall_bypass_default(bypass_fib, state.gw4.as_deref(), state.gw6.as_deref());
 
     // Reset clash's own process FIB back to 0 (no-op at shutdown, but tidy).

@@ -274,7 +274,8 @@ impl Dispatcher {
 
                 // Canonicalize IPv4-mapped IPv6 addresses (e.g. SS2022 on a
                 // dual-stack socket produces ::ffff:x.x.x.x); without this
-                // new_udp_socket picks AF_INET6 with bind_addr 0.0.0.0 → EINVAL.
+                // new_udp_socket picks AF_INET6 with bind_addr 0.0.0.0 →
+                // EINVAL.
                 if let crate::session::SocksAddr::Ip(addr) = &mut packet.dst_addr {
                     *addr = addr.to_canonical();
                     sess.resolved_ip = Some(addr.ip());
@@ -294,7 +295,8 @@ impl Dispatcher {
                 // direct/mod.rs sees sess.source.is_ipv4() == false and picks
                 // bind_addr=:: while family_hint picks AF_INET for the
                 // destination — binding an AF_INET socket to [::]:0 fails with
-                // EAFNOSUPPORT (os error 97), silently dropping all UDP replies.
+                // EAFNOSUPPORT (os error 97), silently dropping all UDP
+                // replies.
                 sess.source = packet
                     .src_addr
                     .clone()
@@ -395,8 +397,10 @@ impl Dispatcher {
                         // to the logical destination (from reverse_lookup) and
                         // saves the original for src_addr restoration.
                         let rw_handle = tokio::spawn(async move {
-                            // Bound the reverse-mapping table to prevent unbounded
-                            // memory growth on long-lived sessions with many dests.
+                            // Bound the reverse-mapping table to prevent
+                            // unbounded
+                            // memory growth on long-lived sessions with many
+                            // dests.
                             const ORIG_MAP_MAX: usize = 256;
                             let mut orig_map: HashMap<SocksAddr, SocksAddr> =
                                 HashMap::new();
@@ -543,9 +547,13 @@ async fn reverse_lookup(
                     trace!("looking up fake ip: {}", socket_addr.ip());
                     let host = resolver.reverse_lookup(ip).await;
                     match host {
-                        Some(host) => (host, socket_addr.port())
-                            .try_into()
-                            .expect("must be valid domain"),
+                        Some(host) => match (host, socket_addr.port()).try_into() {
+                            Ok(d) => d,
+                            Err(e) => {
+                                error!("invalid domain from reverse lookup: {e}");
+                                return None;
+                            }
+                        },
                         None => {
                             error!("failed to reverse lookup fake ip: {}", ip);
                             return None;
@@ -557,16 +565,28 @@ async fn reverse_lookup(
             } else {
                 trace!("looking up resolve cache ip: {}", socket_addr.ip());
                 match resolver.cached_for(socket_addr.ip()).await {
-                    Some(resolved) => (resolved, socket_addr.port())
-                        .try_into()
-                        .expect("must be valid domain"),
+                    Some(resolved) => {
+                        match (resolved, socket_addr.port()).try_into() {
+                            Ok(d) => d,
+                            Err(e) => {
+                                error!("invalid domain from resolver cache: {e}");
+                                return None;
+                            }
+                        }
+                    }
                     _ => (*socket_addr).into(),
                 }
             }
         }
-        crate::session::SocksAddr::Domain(host, port) => (host.to_owned(), *port)
-            .try_into()
-            .expect("must be valid domain"),
+        crate::session::SocksAddr::Domain(host, port) => {
+            match (host.to_owned(), *port).try_into() {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("invalid domain in SocksAddr: {e}");
+                    return None;
+                }
+            }
+        }
     };
     Some(dst)
 }

@@ -381,8 +381,8 @@ mod tests {
 
         // IMPORTANT: Container expects sshd_config at /config/sshd/sshd_config
         // Our source has it at ssh_host_keys/sshd_config, but the container
-        // startup script will ignore/delete it from there and generate a default
-        // config if /config/sshd/sshd_config doesn't exist.
+        // startup script will ignore/delete it from there and generate a
+        // default config if /config/sshd/sshd_config doesn't exist.
         // So we need to copy it to the correct location.
         let source_sshd_config = ssh_config_tmp_path
             .join("ssh_host_keys")
@@ -408,8 +408,8 @@ mod tests {
             .await?;
 
         // Generate host key pairs (ecdsa, ed25519, and rsa for test_ssh2)
-        // Note: RSA key generation doesn't need hash parameter (hash is only for
-        // signing)
+        // Note: RSA key generation doesn't need hash parameter (hash is only
+        // for signing)
         let name_and_key_pairs = [
             (
                 "ecdsa",

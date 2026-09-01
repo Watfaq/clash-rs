@@ -208,7 +208,8 @@ impl Stream for OutboundDatagramAnytls {
                     return Poll::Ready(None);
                 }
                 // SAFETY: poll_read initialized exactly `n` bytes starting at
-                // spare_capacity_mut()[0]; advance_mut exposes them as initialized.
+                // spare_capacity_mut()[0]; advance_mut exposes them as
+                // initialized.
                 unsafe { this.packet_buf.advance_mut(n) };
 
                 if this.packet_buf.len() == packet_len {

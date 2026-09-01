@@ -208,17 +208,20 @@ impl InboundManager {
                         .remove(&provider_name)
                         .unwrap_or_default();
 
-                    // Partition new_opts: reuse or user-update existing listeners,
-                    // collect truly new opts that need a fresh listener.
+                    // Partition new_opts: reuse or user-update existing
+                    // listeners, collect truly new opts
+                    // that need a fresh listener.
                     let mut new_handles: HashMap<InboundOpts, ProviderHandleEntry> =
                         HashMap::new();
                     let mut opts_to_start: Vec<InboundOpts> = Vec::new();
 
                     for opts in new_opts {
                         if let Some(entry) = old_handles.remove(&opts) {
-                            // Structural key matched (same port/cipher/password).
-                            // Push updated user list via watch channel if present —
-                            // this avoids restarting the listener entirely.
+                            // Structural key matched (same
+                            // port/cipher/password).
+                            // Push updated user list via watch channel if
+                            // present — this avoids
+                            // restarting the listener entirely.
                             #[cfg(feature = "shadowsocks")]
                             if let (InboundOpts::Shadowsocks { users, .. }, Some(tx)) =
                                 (&opts, &entry.users_tx)
@@ -285,8 +288,9 @@ impl InboundManager {
                              '{listener_name}'"
                         );
 
-                        // For Shadowsocks, AnyTLS, and Hysteria2, create a watch
-                        // channel so future user-list updates can be pushed
+                        // For Shadowsocks, AnyTLS, and Hysteria2, create a
+                        // watch channel so future
+                        // user-list updates can be pushed
                         // without a restart.
                         #[cfg(feature = "shadowsocks")]
                         let (users_rx, users_tx) = match &opts {
@@ -377,8 +381,9 @@ impl InboundManager {
             let cancellation_token = cancellation_token.clone();
             let name = opts.common_opts().name.clone();
 
-            // For AnyTLS, Hysteria2 (and Shadowsocks), create a watch channel so
-            // user-list updates can be pushed without a full restart.
+            // For AnyTLS, Hysteria2 (and Shadowsocks), create a watch channel
+            // so user-list updates can be pushed without a full
+            // restart.
             #[cfg(feature = "shadowsocks")]
             let (users_rx, users_tx) = match opts {
                 InboundOpts::Shadowsocks { users, .. }
@@ -602,7 +607,8 @@ impl InboundManager {
         *guard = new_map;
     }
 
-    // returns true if any listener ports were changed (i.e. a restart is needed)
+    // returns true if any listener ports were changed (i.e. a restart is
+    // needed)
     pub async fn change_ports(&self, ports: Ports) -> bool {
         let mut guard = self.inbound_handlers.write().await;
 
