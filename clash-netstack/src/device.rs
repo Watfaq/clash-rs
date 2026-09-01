@@ -50,8 +50,9 @@ impl Device for NetstackDevice {
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         // Reserve a tx slot FIRST before touching rx_queue.
         // If we checked rx_queue first, a successful try_recv() would consume
-        // the inbound packet even when try_reserve() subsequently fails, silently
-        // dropping ACKs and preventing smoltcp from advancing its send window.
+        // the inbound packet even when try_reserve() subsequently fails,
+        // silently dropping ACKs and preventing smoltcp from advancing
+        // its send window.
         let permit = self.tx_sender.try_reserve().ok()?;
         let packet = self.rx_queue.try_recv().ok()?;
 

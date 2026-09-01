@@ -374,8 +374,8 @@ pub async fn ping_pong_test(
             }
         }
 
-        // Return the first connection error if available, otherwise return generic
-        // error
+        // Return the first connection error if available, otherwise return
+        // generic error
         if let Some(err) = first_error {
             Err(err)
         } else {

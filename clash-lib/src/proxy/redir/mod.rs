@@ -56,20 +56,49 @@ impl InboundHandlerTrait for RedirInbound {
         let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
-            let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?.to_canonical();
+            let (socket, _) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("redir accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+            let src_addr = match socket.peer_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("redir peer_addr failed: {e}");
+                    continue;
+                }
+            };
 
-            if !self.allow_lan
-                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
-            {
-                warn!("Connection from {} is not allowed", src_addr);
+            if !self.allow_lan {
+                let local_ip = match socket.local_addr() {
+                    Ok(a) => a.ip().to_canonical(),
+                    Err(e) => {
+                        warn!("redir local_addr failed: {e}");
+                        continue;
+                    }
+                };
+                if src_addr.ip() != local_ip {
+                    warn!("Connection from {} is not allowed", src_addr);
+                    continue;
+                }
+            }
+
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("redir apply_tcp_options failed: {e}");
                 continue;
             }
 
-            apply_tcp_options(&socket)?;
-
             // get redirect traffic original destination
-            let orig_dst = get_original_destination_addr(&socket)?.to_canonical();
+            let orig_dst = match get_original_destination_addr(&socket) {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("redir get_original_destination failed: {e}");
+                    continue;
+                }
+            };
 
             let sess = Session {
                 network: Network::Tcp,
@@ -102,8 +131,8 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     unsafe {
         let (_, target_addr) =
             socket2::SockAddr::try_init(|target_addr, target_addr_len| {
-                // No sufficient method to know whether the destination IPv4 or IPv6.
-                // Follow the method in shadowsocks-libev.
+                // No sufficient method to know whether the destination IPv4 or
+                // IPv6. Follow the method in shadowsocks-libev.
 
                 let ret = libc::getsockopt(
                     fd,
@@ -148,6 +177,8 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
             })?;
 
         // Convert sockaddr_storage to SocketAddr
-        Ok(target_addr.as_socket().expect("SocketAddr"))
+        target_addr.as_socket().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "not a socket address")
+        })
     }
 }

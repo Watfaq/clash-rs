@@ -199,12 +199,12 @@ fn setup_logging_inner(
 
     let subscriber = tracing_subscriber::registry();
 
-    // Collect and expose data about the Tokio runtime (tasks, threads, resources,
-    // etc.) — gated on tokio_unstable because console_subscriber panics at
-    // runtime if Tokio was compiled without --cfg tokio_unstable. When tests
-    // are run with RUSTFLAGS="--cfg docker_test", that env-var overrides
-    // .cargo/config.toml, so tokio_unstable is absent and the gate correctly
-    // excludes this code.
+    // Collect and expose data about the Tokio runtime (tasks, threads,
+    // resources, etc.) — gated on tokio_unstable because console_subscriber
+    // panics at runtime if Tokio was compiled without --cfg tokio_unstable.
+    // When tests are run with RUSTFLAGS="--cfg docker_test", that env-var
+    // overrides .cargo/config.toml, so tokio_unstable is absent and the
+    // gate correctly excludes this code.
     #[cfg(all(feature = "telemetry", tokio_unstable))]
     let subscriber = subscriber.with(console_subscriber::spawn());
     #[cfg(all(feature = "telemetry", tokio_unstable))]

@@ -171,8 +171,8 @@ impl DomainSet {
         self.ranks.push(0);
         for i in 0..self.label_bit_map.len() {
             let n = self.label_bit_map[i].count_ones();
-            // Ensure ranks has enough capacity or handle potential panic if last()
-            // is called on empty vec
+            // Ensure ranks has enough capacity or handle potential panic if
+            // last() is called on empty vec
             let last_rank = self.ranks.last().copied().unwrap_or(0);
             self.ranks.push(last_rank + n as i32);
         }
@@ -191,7 +191,8 @@ impl DomainSet {
             let is_set = (self.label_bit_map[word_index] >> bit_index) & 1;
             if is_set == 1 {
                 if n & 63 == 0 {
-                    // Check if it's the start of a select block (every 64th '1' bit)
+                    // Check if it's the start of a select block (every 64th '1'
+                    // bit)
                     self.selects.push(i as i32);
                 }
                 n += 1;
