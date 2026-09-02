@@ -182,9 +182,22 @@ impl CopyBuffer {
 
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
+                let remaining_yield = (YIELD_EVERY_BYTES
+                    .saturating_sub(self.bytes_since_yield)
+                    as usize)
+                    .min(self.cap - self.pos);
+                let to_write = if remaining_yield > 0 {
+                    remaining_yield
+                } else {
+                    self.cap - self.pos
+                };
+
                 let me = &mut *self;
-                let i =
-                    ready!(writer.as_mut().poll_write(cx, &me.buf[me.pos..me.cap]))?;
+                let i = ready!(
+                    writer
+                        .as_mut()
+                        .poll_write(cx, &me.buf[me.pos..me.pos + to_write])
+                )?;
                 if i == 0 {
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
@@ -204,6 +217,10 @@ impl CopyBuffer {
                             .as_mut()
                             .reset(tokio::time::Instant::now() + duration);
                     }
+                }
+
+                if self.bytes_since_yield >= YIELD_EVERY_BYTES {
+                    break;
                 }
             }
 
@@ -572,5 +589,79 @@ impl<T: ReadExactBase> ReadExt for T {
                 return Poll::Ready(Ok(()));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_copy_buf_bidirectional_small_buffer() {
+        let (mut client_io, mut server_io) = duplex(64 * 1024);
+        let (mut proxy_client, mut proxy_server) = duplex(64 * 1024);
+
+        let copy_task = tokio::spawn(async move {
+            copy_buf_bidirectional_with_timeout(
+                &mut server_io,
+                &mut proxy_client,
+                2 * 1024,
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+            )
+            .await
+        });
+
+        let client_msg = b"hello world";
+        client_io.write_all(client_msg).await.unwrap();
+        client_io.shutdown().await.unwrap();
+
+        let mut buf = vec![0u8; client_msg.len()];
+        proxy_server.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf, client_msg);
+        proxy_server.shutdown().await.unwrap();
+
+        let (a_to_b, b_to_a) = copy_task.await.unwrap().unwrap();
+        assert_eq!(a_to_b, client_msg.len() as u64);
+        assert_eq!(b_to_a, 0);
+    }
+
+    #[tokio::test]
+    async fn test_copy_buf_bidirectional_oversized_buffer() {
+        // Test buffer larger than YIELD_EVERY_BYTES (256 KiB), e.g. 512 KiB
+        let (mut client_io, mut server_io) = duplex(1024 * 1024);
+        let (mut proxy_client, mut proxy_server) = duplex(1024 * 1024);
+
+        let copy_task = tokio::spawn(async move {
+            copy_buf_bidirectional_with_timeout(
+                &mut server_io,
+                &mut proxy_client,
+                512 * 1024,
+                Duration::from_secs(5),
+                Duration::from_secs(5),
+            )
+            .await
+        });
+
+        let data = vec![42u8; 600 * 1024]; // 600 KiB > 256 KiB
+        let data_clone = data.clone();
+
+        let client_task = tokio::spawn(async move {
+            client_io.write_all(&data_clone).await.unwrap();
+            client_io.shutdown().await.unwrap();
+        });
+
+        let mut received = Vec::new();
+        proxy_server.read_to_end(&mut received).await.unwrap();
+        proxy_server.shutdown().await.unwrap();
+
+        client_task.await.unwrap();
+        let (a_to_b, b_to_a) = copy_task.await.unwrap().unwrap();
+        assert_eq!(a_to_b, data.len() as u64);
+        assert_eq!(b_to_a, 0);
+        assert_eq!(received, data);
     }
 }
