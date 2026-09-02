@@ -704,10 +704,11 @@ impl Device for VirtualIpDevice {
                 // Some environments (NAT, checksum offload, virtualization) may
                 // corrupt the checksum We recalculate it here since
                 // WireGuard AEAD already guarantees data integrity
-                // Note: An alternative approach is to skip RX checksum verification
-                // by setting `caps.checksum.udp =
+                // Note: An alternative approach is to skip RX checksum
+                // verification by setting `caps.checksum.udp =
                 // smoltcp::phy::Checksum::Tx` in capabilities(), but
-                // recalculating feels cleaner than disabling verification entirely
+                // recalculating feels cleaner than disabling verification
+                // entirely
                 use smoltcp::wire::*;
                 if let Ok(IpVersion::Ipv4) = IpVersion::of_packet(&buffer)
                     && let Ok(ipv4) = Ipv4Packet::new_checked(&buffer[..])

@@ -353,7 +353,8 @@ mod tests {
         );
     }
 
-    // ── Write path (Sink) ─────────────────────────────────────────────────────
+    // ── Write path (Sink)
+    // ─────────────────────────────────────────────────────
 
     /// Sending `UdpPacket { data: b"hello" }` writes `\x00\x05hello` to the
     /// inner stream.

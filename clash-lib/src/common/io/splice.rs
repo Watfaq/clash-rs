@@ -85,29 +85,32 @@ impl Pipe {
     fn new() -> Result<Self> {
         let mut pipe = std::mem::MaybeUninit::<[libc::c_int; 2]>::uninit();
         unsafe {
-            // pipe() creates a pipe, a unidirectional data channel that can be used
-            // for interprocess communication. The array pipefd is used
-            // to return two file descriptors referring to the ends of the pipe.
-            // pipefd[0] refers to the read end of the pipe.
-            // pipefd[1] refers to the write end of the pipe.
-            // Data written to the write end of the pipe is buffered by the kernel
-            // until it is read from the read end of the pipe.  For
-            // further details, see pipe(7).
+            // pipe() creates a pipe, a unidirectional data channel that can be
+            // used for interprocess communication. The array pipefd
+            // is used to return two file descriptors referring to
+            // the ends of the pipe. pipefd[0] refers to the read
+            // end of the pipe. pipefd[1] refers to the write end of
+            // the pipe. Data written to the write end of the pipe
+            // is buffered by the kernel until it is read from the
+            // read end of the pipe.  For further details, see
+            // pipe(7).
             //
             // O_DIRECT (since Linux 3.4)
-            //    Create a pipe that performs I/O in "packet" mode.  Each write(2) to
-            // the pipe is dealt with as a separate packet, and
-            //    read(2)s from the pipe will read one packet at a time.  Note the
-            // following points:    •  Writes  of  greater than PIPE_BUF
-            // bytes (see pipe(7)) will be split into multiple packets.  The constant
+            //    Create a pipe that performs I/O in "packet" mode.  Each
+            // write(2) to the pipe is dealt with as a separate
+            // packet, and    read(2)s from the pipe will read one
+            // packet at a time.  Note the following points:    •
+            // Writes  of  greater than PIPE_BUF bytes (see pipe(7))
+            // will be split into multiple packets.  The constant
             // PIPE_BUF       is defined in <limits.h>.
-            //    •  If a read(2) specifies a buffer size that is smaller than the
-            // next packet, then the requested number of bytes are
-            //       read,  and the excess bytes in the packet are discarded.
-            // Specifying a buffer size of PIPE_BUF will be sufficient
-            //       to read the largest possible packets (see the previous point).
-            //    •  Zero-length packets are not supported.  (A read(2) that
-            // specifies a buffer size of zero is a no-op,  and  returns
+            //    •  If a read(2) specifies a buffer size that is smaller than
+            // the next packet, then the requested number of bytes
+            // are       read,  and the excess bytes in the packet
+            // are discarded. Specifying a buffer size of PIPE_BUF
+            // will be sufficient       to read the largest possible
+            // packets (see the previous point).    •  Zero-length
+            // packets are not supported.  (A read(2) that specifies
+            // a buffer size of zero is a no-op,  and  returns
             //         0.)
             if libc::pipe2(
                 pipe.as_mut_ptr() as *mut libc::c_int,
