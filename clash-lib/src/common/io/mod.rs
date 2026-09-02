@@ -88,6 +88,12 @@ pub struct CopyBuffer {
     bytes_since_yield: u64,
 }
 
+impl Default for CopyBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CopyBuffer {
     #[allow(unused)]
     pub fn new() -> Self {
@@ -187,7 +193,8 @@ impl CopyBuffer {
                 } else {
                     self.pos += i;
                     self.amt += i as u64;
-                    self.bytes_since_yield = self.bytes_since_yield.saturating_add(i as u64);
+                    self.bytes_since_yield =
+                        self.bytes_since_yield.saturating_add(i as u64);
                     self.need_flush = true;
                     // Reset idle timeout on successful write
                     if let (Some(timeout), Some(duration)) =
