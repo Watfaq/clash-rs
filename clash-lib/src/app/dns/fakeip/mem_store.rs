@@ -38,15 +38,15 @@ impl Store for InMemStore {
     async fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {
         // Maintain bidirectional invariant: remove stale mappings that
         // referenced the old host or IP before inserting the new pair.
-        if let Some(old_host) = self.itoh.remove(&ip) {
-            if old_host != host {
-                self.htoi.remove(&old_host);
-            }
+        if let Some(old_host) = self.itoh.remove(&ip)
+            && old_host != host
+        {
+            self.htoi.remove(&old_host);
         }
-        if let Some(old_ip) = self.htoi.remove(host) {
-            if old_ip != ip {
-                self.itoh.remove(&old_ip);
-            }
+        if let Some(old_ip) = self.htoi.remove(host)
+            && old_ip != ip
+        {
+            self.itoh.remove(&old_ip);
         }
         self.itoh.insert(ip, host.into());
         self.htoi.insert(host.into(), ip);
@@ -57,7 +57,7 @@ impl Store for InMemStore {
         let host_copy = host.clone();
         // Cross-check: if htoi doesn't map this host back to the same IP,
         // the entry is stale.
-        if self.htoi.get(&host_copy).map(|x| *x) != Some(ip) {
+        if self.htoi.get(&host_copy).copied() != Some(ip) {
             self.itoh.remove(&ip);
             return None;
         }
@@ -69,15 +69,15 @@ impl Store for InMemStore {
     async fn put_by_ip(&mut self, ip: std::net::IpAddr, host: &str) {
         // Maintain bidirectional invariant: remove stale mappings that
         // referenced the old host or IP before inserting the new pair.
-        if let Some(old_host) = self.itoh.remove(&ip) {
-            if old_host != host {
-                self.htoi.remove(&old_host);
-            }
+        if let Some(old_host) = self.itoh.remove(&ip)
+            && old_host != host
+        {
+            self.htoi.remove(&old_host);
         }
-        if let Some(old_ip) = self.htoi.remove(host) {
-            if old_ip != ip {
-                self.itoh.remove(&old_ip);
-            }
+        if let Some(old_ip) = self.htoi.remove(host)
+            && old_ip != ip
+        {
+            self.itoh.remove(&old_ip);
         }
         self.itoh.insert(ip, host.into());
         self.htoi.insert(host.into(), ip);
@@ -92,7 +92,7 @@ impl Store for InMemStore {
     async fn exist(&mut self, ip: std::net::IpAddr) -> bool {
         // An IP exists only if both forward and reverse mappings agree.
         match self.itoh.get(&ip) {
-            Some(host) => self.htoi.get(host).map(|x| *x) == Some(ip),
+            Some(host) => self.htoi.get(host).copied() == Some(ip),
             None => false,
         }
     }
