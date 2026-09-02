@@ -211,7 +211,8 @@ async fn integration_test_anytls_udp() {
     let server_config = wd_server.join("server_anytls.yaml");
     let client_config = wd_client.join("rules_anytls.yaml");
 
-    // ── UDP echo server ───────────────────────────────────────────────────────
+    // ── UDP echo server
+    // ───────────────────────────────────────────────────────
     let echo_sock = UdpSocket::bind("127.0.0.1:0").await.unwrap();
     let echo_addr: SocketAddr = echo_sock.local_addr().unwrap();
     tokio::spawn(async move {
@@ -221,9 +222,10 @@ async fn integration_test_anytls_udp() {
         echo_sock.send_to(&buf[..n], peer).await.unwrap();
     });
 
-    // ── Start clash server and client ─────────────────────────────────────────
-    // Use ClashInstance so server/client are properly shut down when the test
-    // ends, releasing ports 8902/9092 and 8998/9095 for subsequent tests.
+    // ── Start clash server and client
+    // ───────────────────────────────────────── Use ClashInstance so
+    // server/client are properly shut down when the test ends, releasing
+    // ports 8902/9092 and 8998/9095 for subsequent tests.
     let _server = ClashInstance::start(
         Options {
             config: Config::File(server_config.to_string_lossy().to_string()),
@@ -248,7 +250,8 @@ async fn integration_test_anytls_udp() {
     )
     .expect("Failed to start AnyTLS client");
 
-    // ── SOCKS5 UDP ASSOCIATE handshake ────────────────────────────────────────
+    // ── SOCKS5 UDP ASSOCIATE handshake
+    // ────────────────────────────────────────
     let mut tcp = tokio::net::TcpStream::connect("127.0.0.1:8998")
         .await
         .unwrap();
@@ -281,8 +284,9 @@ async fn integration_test_anytls_udp() {
         _ => panic!("unexpected ATYP {atyp} in UDP ASSOCIATE reply"),
     };
 
-    // ── Send a UDP datagram through the relay ─────────────────────────────────
-    // SOCKS5 UDP header: RSV(2) | FRAG(1) | ATYP(1) | DST_ADDR | DST_PORT | DATA
+    // ── Send a UDP datagram through the relay
+    // ───────────────────────────────── SOCKS5 UDP header: RSV(2) | FRAG(1)
+    // | ATYP(1) | DST_ADDR | DST_PORT | DATA
     let payload = b"hello-udp-anytls";
     let echo_ip = match echo_addr.ip() {
         std::net::IpAddr::V4(v4) => v4.octets(),
@@ -299,7 +303,8 @@ async fn integration_test_anytls_udp() {
     let client_sock = UdpSocket::bind("127.0.0.1:0").await.unwrap();
     client_sock.send_to(&dgram, relay_addr).await.unwrap();
 
-    // ── Receive the echoed datagram ───────────────────────────────────────────
+    // ── Receive the echoed datagram
+    // ───────────────────────────────────────────
     let mut recv_buf = vec![0u8; 4096];
     let (n, _) = tokio::time::timeout(
         std::time::Duration::from_secs(5),

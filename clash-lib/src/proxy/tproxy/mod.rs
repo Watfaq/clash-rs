@@ -70,8 +70,21 @@ impl InboundHandlerTrait for TproxyInbound {
         let listener = TcpListener::from_std(socket.into())?;
 
         loop {
-            let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?.to_canonical();
+            let (socket, _) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("tproxy accept failed: {e}");
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+            let src_addr = match socket.peer_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("tproxy peer_addr failed: {e}");
+                    continue;
+                }
+            };
             // for dualstack socket src_addr may be ipv4 or ipv6;
             // tcpstream.local_addr() is the proxy destination
             // listener.local_addr() is [::]:port for dualstack
@@ -82,10 +95,19 @@ impl InboundHandlerTrait for TproxyInbound {
             // src_addr,listener.local_addr()?);     continue;
             // }
 
-            apply_tcp_options(&socket)?;
+            if let Err(e) = apply_tcp_options(&socket) {
+                warn!("tproxy apply_tcp_options failed: {e}");
+                continue;
+            }
 
             // local_addr is getsockname
-            let orig_dst = socket.local_addr()?.to_canonical();
+            let orig_dst = match socket.local_addr() {
+                Ok(a) => a.to_canonical(),
+                Err(e) => {
+                    warn!("tproxy local_addr failed: {e}");
+                    continue;
+                }
+            };
 
             let sess = Session {
                 network: Network::Tcp,
@@ -287,8 +309,8 @@ async fn handle_inbound_datagram(
                     //     && let Ok(local_addr) = socket.local_addr()
                     //     && meta.addr.ip() != local_addr.ip()
                     // {
-                    //     warn!("Connection from {} is not allowed", meta.addr);
-                    //     continue;
+                    //     warn!("Connection from {} is not allowed",
+                    // meta.addr);     continue;
                     // }
                     let chunk_size = gro_chunk_size(meta.len, meta.stride);
                     if chunk_size == 0 {
@@ -365,8 +387,20 @@ async fn handle_packet_from_dispatcher(
                 // use raw socket to send packet with custom src address
                 // This requires CAP_NET_RAW capability
                 // remote -> local
-                let src_addr = pkt.src_addr.try_into_socket_addr().unwrap();
-                let dst_addr = pkt.dst_addr.try_into_socket_addr().unwrap();
+                let src_addr = match pkt.src_addr.try_into_socket_addr() {
+                    Some(a) => a,
+                    None => {
+                        tracing::warn!("tproxy: src_addr is domain, skipping");
+                        continue;
+                    }
+                };
+                let dst_addr = match pkt.dst_addr.try_into_socket_addr() {
+                    Some(a) => a,
+                    None => {
+                        tracing::warn!("tproxy: dst_addr is domain, skipping");
+                        continue;
+                    }
+                };
                 match (src_addr, &socket_v4, &socket_v6) {
                     (SocketAddr::V4(_), Ok(socket), _) => {
                         let _ = sendto_with_src(socket, &pkt.data, dst_addr, src_addr).await

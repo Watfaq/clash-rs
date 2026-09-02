@@ -105,7 +105,8 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
 
         let dst = match &p.dst_addr {
             SocksAddr::Ip(addr) => {
-                // Explicit IP path: clear any stale DNS state from a prior packet.
+                // Explicit IP path: clear any stale DNS state from a prior
+                // packet.
                 *pending_dns = None;
                 *resolved_dst = None;
                 *addr
@@ -143,8 +144,9 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         })
                     });
                     let join_result = ready!(Pin::new(handle).poll(cx));
-                    // Always clear the handle once it has completed (regardless of
-                    // success or failure). If we skip this on the error path the
+                    // Always clear the handle once it has completed (regardless
+                    // of success or failure). If we skip
+                    // this on the error path the
                     // handle stays in `pending_dns` and the next call to
                     // `poll_flush` will try to poll an already-completed
                     // `JoinHandle`, which panics with "JoinHandle polled after

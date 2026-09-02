@@ -264,7 +264,8 @@ where
                 // Accept any non-access event: macOS/Windows backends report
                 // ordinary writes as `Modify(Any)`/`Modify(Metadata)`, so a
                 // narrow filter would miss them. Over-triggering is harmless —
-                // a same-hash reload is a no-op and no longer touches the mtime.
+                // a same-hash reload is a no-op and no longer touches the
+                // mtime.
                 if matches!(event.kind, EventKind::Access(_)) {
                     return;
                 }

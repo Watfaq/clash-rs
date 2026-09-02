@@ -396,14 +396,14 @@ pub async fn copy_bidirectional(
     // zero copy is only available on linux
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     {
-        // for zero copy, we need to track the download and upload amount with the
-        // assistance of the tracker it's somehow ugly, but i could not
-        // figure out a better way
+        // for zero copy, we need to track the download and upload amount with
+        // the assistance of the tracker it's somehow ugly, but i could
+        // not figure out a better way
         let trackers = b.trackers();
         // for socks5 & http listener, a is a raw TcpStream
         let a_raw = a.underlying_socket();
-        // for direct outbound handler **without further chains**, b is a chained
-        // stream wrapper over tcpstream
+        // for direct outbound handler **without further chains**, b is a
+        // chained stream wrapper over tcpstream
         let b_raw = b.underlying_socket();
         match (a_raw, b_raw, trackers) {
             // zero copy is only available when both streams are raw TcpStream and
