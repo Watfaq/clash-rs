@@ -78,27 +78,22 @@ impl FakeDns {
     }
 
     pub async fn reverse_lookup(&mut self, ip: net::IpAddr) -> Option<String> {
-        if !ip.is_ipv4() {
-            None
-        } else {
+        if ip.is_ipv4() {
             self.store.get_by_ip(ip).await
+        } else {
+            None
         }
     }
 
     pub fn should_skip(&self, domain: &str) -> bool {
-        match &self.skipped_hostnames {
-            None => false,
-            Some(host) => host.search(domain).is_some(),
-        }
+        self.skipped_hostnames
+            .as_ref()
+            .is_some_and(|host| host.search(domain).is_some())
     }
 
     #[allow(dead_code)]
     pub async fn exist(&mut self, ip: net::IpAddr) -> bool {
-        if !ip.is_ipv4() {
-            false
-        } else {
-            self.store.exist(ip).await
-        }
+        ip.is_ipv4() && self.store.exist(ip).await
     }
 
     pub async fn is_fake_ip(&mut self, ip: net::IpAddr) -> bool {
@@ -132,28 +127,33 @@ impl FakeDns {
         src.store.copy_to(&mut self.store).await;
     }
 
+    fn current_ip(&self) -> net::IpAddr {
+        net::IpAddr::V4(net::Ipv4Addr::from(self.min + self.offset))
+    }
+
     async fn get(&mut self, host: &str) -> net::IpAddr {
+        let pool_size = self.max - self.min + 1;
         let current = self.offset;
 
         loop {
-            self.offset = (self.offset + 1) % (self.max - self.min + 1);
+            self.offset = (self.offset + 1) % pool_size;
+            let ip = self.current_ip();
 
             if self.offset == current {
-                self.offset = (self.offset + 1) % (self.max - self.min + 1);
-                let ip = net::Ipv4Addr::from(self.min + self.offset);
-                self.store.del_by_ip(std::net::IpAddr::V4(ip)).await;
+                self.offset = (self.offset + 1) % pool_size;
+                let ip = self.current_ip();
+                self.store.del_by_ip(ip).await;
                 break;
             }
 
-            let ip = net::Ipv4Addr::from(self.min + self.offset);
-            if !self.store.exist(std::net::IpAddr::V4(ip)).await {
+            if !self.store.exist(ip).await {
                 break;
             }
         }
 
-        let ip = net::Ipv4Addr::from(self.min + self.offset);
-        self.store.put_by_ip(std::net::IpAddr::V4(ip), host).await;
-        std::net::IpAddr::V4(ip)
+        let ip = self.current_ip();
+        self.store.put_by_ip(ip, host).await;
+        ip
     }
 
     fn ip_to_uint(ip: &net::Ipv4Addr) -> u32 {
