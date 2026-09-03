@@ -843,22 +843,26 @@ impl OutboundManager {
 
                     handlers.insert(
                         proto.name.clone(),
-                        Arc::new(smart::Handler::new_with_cache(
-                            smart::HandlerOptions {
-                                name: proto.name.clone(),
-                                common_opts: crate::proxy::HandlerCommonOptions {
-                                    icon: proto.icon.clone(),
-                                    url: proto.url.clone(),
-                                    connector: None,
+                        Arc::new(
+                            smart::Handler::new_with_cache(
+                                smart::HandlerOptions {
+                                    name: proto.name.clone(),
+                                    common_opts:
+                                        crate::proxy::HandlerCommonOptions {
+                                            icon: proto.icon.clone(),
+                                            url: proto.url.clone(),
+                                            connector: None,
+                                        },
+                                    udp: proto.udp.unwrap_or(true),
+                                    max_retries: proto.max_retries,
+                                    bandwidth_weight: proto.bandwidth_weight,
                                 },
-                                udp: proto.udp.unwrap_or(true),
-                                max_retries: proto.max_retries,
-                                bandwidth_weight: proto.bandwidth_weight,
-                            },
-                            providers,
-                            proxy_manager.clone(),
-                            cache_store.clone(),
-                        )),
+                                providers,
+                                proxy_manager.clone(),
+                                cache_store.clone(),
+                            )
+                            .await,
+                        ),
                     );
                 }
             }
