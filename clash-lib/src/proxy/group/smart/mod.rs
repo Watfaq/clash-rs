@@ -120,10 +120,7 @@ impl Handler {
             cache_store.get_smart_stats(&group_name).await;
 
         if stored_data.is_some() {
-            info!(
-                "{} successfully loaded smart stats from cache",
-                group_name
-            );
+            info!("{} successfully loaded smart stats from cache", group_name);
         } else {
             info!(
                 "{} no smart stats found in cache, initializing new state",
