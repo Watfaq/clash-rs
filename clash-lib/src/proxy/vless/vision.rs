@@ -218,8 +218,8 @@ impl AsyncRead for VisionStream {
                 continue;
             }
 
-            // 4. Need more raw bytes — read from inner into a local buffer (avoids
-            //    borrowing `this.raw` and `this.inner` simultaneously).
+            // 4. Need more raw bytes — read from inner into a local buffer
+            //    (avoids borrowing `this.raw` and `this.inner` simultaneously).
             let mut tmp = [0u8; 8192];
             let mut tmp_buf = ReadBuf::new(&mut tmp);
             match Pin::new(&mut this.inner).poll_read(cx, &mut tmp_buf) {

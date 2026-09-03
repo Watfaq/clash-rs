@@ -160,9 +160,10 @@ impl EnhancedResolver {
                 None
             };
 
-        // Build proxy server domains trie for proxy-server-nameserver resolution.
-        // This happens before the OutboundManager is fully initialized, so we can
-        // only extract domains from plain outbounds.
+        // Build proxy server domains trie for proxy-server-nameserver
+        // resolution. This happens before the OutboundManager is fully
+        // initialized, so we can only extract domains from plain
+        // outbounds.
         let plain_outbounds = outbounds.read().await;
         let proxy_server_domains = plain_outbounds
             .values()
@@ -465,8 +466,8 @@ impl EnhancedResolver {
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
-        // Check if this is a proxy server domain, use proxy-server-nameserver if
-        // configured
+        // Check if this is a proxy server domain, use proxy-server-nameserver
+        // if configured
         if let (Some(proxy_resolver), Some(proxy_domains)) =
             (&self.proxy_resolver, &self.proxy_server_domains)
             && let Some(domain) = EnhancedResolver::domain_name_of_message(message)
@@ -1101,8 +1102,9 @@ mod tests {
         )
         .await;
 
-        // proxy_resolver is set from config; proxy_server_domains is None because
-        // no outbound handlers are registered (domains come from server_name()).
+        // proxy_resolver is set from config; proxy_server_domains is None
+        // because no outbound handlers are registered (domains come
+        // from server_name()).
         assert!(resolver.proxy_resolver.is_some());
         assert!(resolver.proxy_server_domains.is_none());
     }
@@ -1240,7 +1242,8 @@ mod tests {
         );
 
         let (config, _) = make_proxy_nameserver_config();
-        // Two domain-based proxies and one IP-based — IP should not appear in trie.
+        // Two domain-based proxies and one IP-based — IP should not appear in
+        // trie.
         let outbounds = make_outbound_registry(&[
             ("proxy-a", "proxy.example.com"),
             ("proxy-b", "vpn.example.net"),
@@ -1288,7 +1291,8 @@ mod tests {
                 .is_some()
         );
 
-        // The domain should resolve successfully through the proxy nameserver path.
+        // The domain should resolve successfully through the proxy nameserver
+        // path.
         let ip = resolver
             .resolve("one.one.one.one", false)
             .await

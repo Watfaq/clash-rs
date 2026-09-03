@@ -174,8 +174,8 @@ impl AsyncUdpSocket for UdpHop {
 
     //     let (_pre_conn, io) = self.get_conn();
 
-    //     // here just need change send addr, it is not necessary to change send
-    //     // contents, so we can use unsafe
+    //     // here just need change send addr, it is not necessary to change
+    // send     // contents, so we can use unsafe
     //     unsafe {
     //         let prt = transmits.as_ptr() as *mut Transmit;
     //         let slice_mut: &mut [Transmit] =

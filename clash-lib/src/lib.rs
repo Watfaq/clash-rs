@@ -313,8 +313,8 @@ pub async fn start(
         components.dns_enabled,
     ));
 
-    // api_listener is not part of components because it requires components to be
-    // initialized before it can be initialized. start it manually.
+    // api_listener is not part of components because it requires components to
+    // be initialized before it can be initialized. start it manually.
     api_listener.run_async();
 
     {
@@ -353,11 +353,12 @@ pub async fn start(
             components.stop_all();
             new_components.start_all();
 
-            // TODO: every reload is causing the API server to restart, we should
-            // make the API server reloadable instead of restarting it.
-            // maybe adding APIs to replace components
-            // and only recreate the listeners when necessary (e.g. when the listen
-            // address or port is changed)
+            // TODO: every reload is causing the API server to restart, we
+            // should make the API server reloadable instead of
+            // restarting it. maybe adding APIs to replace
+            // components and only recreate the listeners when
+            // necessary (e.g. when the listen address or port is
+            // changed)
             let new_api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
                 controller_cfg,
                 log_tx.clone(),
@@ -497,8 +498,9 @@ async fn create_components(
     }
 
     debug!("initializing dns resolver");
-    // Clone the dns.listen for the DNS Server later before we consume the config
-    // TODO: we should separate the DNS resolver and DNS server config here
+    // Clone the dns.listen for the DNS Server later before we consume the
+    // config TODO: we should separate the DNS resolver and DNS server
+    // config here
     let dns_listen = config.dns.listen.clone();
     let dns_enable = config.dns.enable;
 
@@ -663,8 +665,14 @@ async fn create_components(
         dns_resolver.clone(),
         config.general.mode,
         statistics_manager.clone(),
-        config.experimental.and_then(|e| e.tcp_buffer_size),
+        config.experimental.as_ref().and_then(|e| e.tcp_buffer_size),
     ));
+
+    if let Some(ref exp) = config.experimental
+        && let Some(cap) = exp.closed_flows_cap
+    {
+        crate::app::dispatcher::set_closed_flows_cap(cap);
+    }
 
     debug!("initializing authenticator");
     let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));

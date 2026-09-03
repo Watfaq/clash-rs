@@ -74,8 +74,8 @@ impl Decoder for Hy2TcpReqCodec {
         // full varint (quinn's only decode error is `UnexpectedEnd`). Since the
         // request may arrive split across QUIC reads — especially given the up
         // to 512 bytes of trailing padding — treat that as "need more bytes"
-        // (`Ok(None)`) rather than a fatal protocol error that drops the stream.
-        // Request ID
+        // (`Ok(None)`) rather than a fatal protocol error that drops the
+        // stream. Request ID
         let Ok(req_id) = VarInt::decode(&mut tmp) else {
             return Ok(None);
         };

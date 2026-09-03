@@ -432,7 +432,8 @@ mod tests {
 
     #[test]
     fn test_nested_and_with_or() {
-        // AND with nested OR: domain=example.com AND (network=UDP OR network=TCP)
+        // AND with nested OR: domain=example.com AND (network=UDP OR
+        // network=TCP)
         let rule = CompositeRule::new(
             "AND",
             "((DOMAIN,example.com),(OR,((NETWORK,UDP),(NETWORK,TCP))))",
@@ -458,8 +459,8 @@ mod tests {
 
     #[test]
     fn test_nested_or_with_and() {
-        // OR with nested AND: (domain=a.com AND network=UDP) OR (domain=b.com AND
-        // network=TCP)
+        // OR with nested AND: (domain=a.com AND network=UDP) OR (domain=b.com
+        // AND network=TCP)
         let rule = CompositeRule::new(
             "OR",
             "((AND,((DOMAIN,a.com),(NETWORK,UDP))),(AND,((DOMAIN,b.com),(NETWORK,\
