@@ -17,20 +17,17 @@ use super::tracked::Tracked;
 /// Memory limit mode for the manager.
 /// When memory exceeds the limit, connections are closed to reduce memory
 /// usage instead of crashing the process.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MemLimitMode {
     /// No memory limit.
+    #[default]
     None,
-    /// Soft limit: close oldest connections when exceeded.
+    /// Soft limit: rejects new connections when exceeded while keeping existing
+    /// ones alive.
     Soft,
-    /// Hard limit: close all connections when exceeded.
+    /// Hard limit: rejects new connections and evicts up to 20% of existing
+    /// connections when the hard ratio is exceeded.
     Hard,
-}
-
-impl Default for MemLimitMode {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Per-user traffic since the last drain.  Both upload and download are in
@@ -218,11 +215,15 @@ pub struct Manager {
     /// Stored as the multiplier * 100 (200 = 2.0x) to fit in AtomicU64.
     /// 0 = Hard mode disabled (user prefers OOM kill over connection drop).
     mem_hard_ratio_x100: AtomicU64,
+    /// Cached memory usage in bytes, periodically refreshed by `kick_off`.
+    mem_usage_cached: AtomicU64,
+    /// Indicates whether the background stats loop is active.
+    running: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Default capacity of the `closed_flows` ring buffer.
 /// Can be overridden via `experimental.closed-flows-cap` in config.
-const DEFAULT_CLOSED_FLOWS_CAP: usize = 50;
+pub const DEFAULT_CLOSED_FLOWS_CAP: usize = 50;
 
 /// Global closed_flows capacity. Uses AtomicUsize so it can be
 /// updated on config reload (unlike OnceLock which is set-once).
@@ -312,6 +313,8 @@ impl Manager {
             mem_pressure_rejects: AtomicU64::new(0),
             dns_resolver: RwLock::new(None),
             mem_hard_ratio_x100: AtomicU64::new(hard_ratio_x100),
+            mem_usage_cached: AtomicU64::new(0),
+            running: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let c = v.clone();
         tokio::spawn(async move {
@@ -350,10 +353,8 @@ impl Manager {
         // When memory drops below limit, new connections are accepted again.
         let limit = self.mem_limit_bytes.load(Ordering::Relaxed);
         if limit > 0 {
-            let current = self.memory_usage();
-            // Fix(2026-08-04): `limit as usize` truncates to 0 on 32-bit
-            // targets when limit >= 4GiB, disabling the guard entirely.
-            if (current as u64) > limit {
+            let current = self.mem_usage_cached.load(Ordering::Relaxed);
+            if current > limit {
                 // Memory over limit - reject this new connection.
                 // close_notify signals the connection to close immediately.
                 let _ = close_notify.send(());
@@ -579,12 +580,19 @@ impl Manager {
         entry.download += download;
     }
 
+    /// Stop the background ticker and release injected references.
+    pub async fn stop(&self) {
+        self.running.store(false, Ordering::Relaxed);
+        let mut guard = self.dns_resolver.write().await;
+        *guard = None;
+    }
+
     async fn kick_off(&self) {
         // Memory check runs every 5 seconds (not every 1s) to reduce CPU load.
         // Traffic blip still updates every 1s.
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
         let mut mem_check_counter: u32 = 0;
-        loop {
+        while self.running.load(Ordering::Relaxed) {
             ticker.tick().await;
             self.upload_blip
                 .store(self.upload_temp.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -630,6 +638,8 @@ impl Manager {
         }
 
         let current = self.memory_usage();
+        self.mem_usage_cached
+            .store(current as u64, Ordering::Relaxed);
         // Fix(2026-08-04): keep u64 on 32-bit targets (`as usize` truncates
         // limits >= 4GiB to 0).
         let limit_u64 = limit;
@@ -750,22 +760,46 @@ impl Manager {
                     // Remove the chosen IDs from the map and collect their
                     // close notifiers.  The lock is released at the end of
                     // this block.
-                    let mut pending: Vec<Sender<()>> = Vec::with_capacity(to_close);
+                    let mut pending: Vec<(Tracked, Sender<()>)> =
+                        Vec::with_capacity(to_close);
                     for (id, ..) in candidates.into_iter().take(to_close) {
-                        if let Some((_, close_notify)) = connections.remove(&id) {
-                            pending.push(close_notify);
+                        if let Some((tracked, close_notify)) =
+                            connections.remove(&id)
+                        {
+                            pending.push((tracked, close_notify));
                         }
                     }
                     (count, to_close, pending)
                 };
                 // --- Lock released ---
 
-                // --- Phase 2: signal closure outside the lock ---
-                // close_notify.send(()) is a oneshot send — usually instant,
-                // but if the receiver task is busy or the runtime is
-                // congested, we don't want to block the routing table.
+                // --- Phase 2: signal closure outside the lock & process
+                // accounting ---
                 let mut closed = 0u64;
-                for close_notify in pending_close.drain(..) {
+                for (tracked, close_notify) in pending_close.drain(..) {
+                    let t = tracked.tracker_info();
+                    let flow = ClosedFlowInfo::from_tracker_info(&t).await;
+
+                    if let Some(user) = t.session_holder.inbound_user.clone() {
+                        let up = t.user_upload.load(Ordering::Acquire);
+                        let down = t.user_download.load(Ordering::Acquire);
+                        if up > 0 || down > 0 {
+                            let mut user_stats = self.user_period_stats.lock().await;
+                            let entry = user_stats.entry(user).or_default();
+                            entry.upload += up;
+                            entry.download += down;
+                        }
+                    }
+
+                    {
+                        let mut ring = self.closed_flows.lock().await;
+                        let cap = closed_flows_cap();
+                        ring.push_back(flow);
+                        while ring.len() > cap {
+                            ring.pop_front();
+                        }
+                    }
+
                     let _ = close_notify.send(());
                     closed += 1;
                 }
@@ -782,6 +816,12 @@ impl Manager {
                 }
             }
         }
+    }
+}
+
+impl Drop for Manager {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
     }
 }
 

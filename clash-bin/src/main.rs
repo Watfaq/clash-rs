@@ -27,12 +27,28 @@ static GLOBAL: Jemalloc = Jemalloc;
 /// Override at runtime with `MALLOC_CONF=dirty_decay_ms:5000,...`.
 #[cfg(all(feature = "jemallocator", not(feature = "dhat-heap")))]
 fn tune_jemalloc() {
+    // If MALLOC_CONF is explicitly provided by the user, honor it and avoid
+    // overriding.
+    if std::env::var("MALLOC_CONF").is_ok() {
+        return;
+    }
+
     // Only tune when the user has explicitly enabled memory limiting.
     // Otherwise keep jemalloc defaults (10s decay) for max throughput.
     let enabled = match std::env::var("CLASH_RS_MEM_LIMIT_MB") {
-        Ok(v) => {
-            let v = v.trim();
-            !v.is_empty() && v != "0" && v != "0:soft" && v != "0:hard"
+        Ok(val) => {
+            let val = val.trim();
+            let num_str = if let Some(rest) = val.strip_suffix(":hard") {
+                rest
+            } else if let Some(rest) = val.strip_suffix(":soft") {
+                rest
+            } else {
+                val
+            };
+            match num_str.parse::<u64>() {
+                Ok(mb) => mb > 0,
+                Err(_) => false,
+            }
         }
         Err(_) => false,
     };
