@@ -448,10 +448,9 @@ impl EnhancedResolver {
                 let ips = EnhancedResolver::ip_list_of_message(msg);
                 ips.is_empty() || ips.iter().any(|ip| !ip.is_unspecified())
             }
+            && let Ok(guard) = lru_lock.read()
         {
-            if let Ok(guard) = lru_lock.read() {
-                guard.0.insert(q.clone(), Ok(msg.clone()), Instant::now());
-            }
+            guard.0.insert(q.clone(), Ok(msg.clone()), Instant::now());
         }
 
         rv
@@ -743,14 +742,14 @@ impl ClashResolver for EnhancedResolver {
             guard.clear();
             trace!("reverse_lookup_cache cleared due to memory pressure");
         }
-        if let Some(lru_lock) = &self.lru_cache {
-            if let Ok(mut guard) = lru_lock.write() {
-                guard.0 = hickory_resolver::ResponseCache::new(
-                    guard.1,
-                    hickory_resolver::TtlConfig::default(),
-                );
-                trace!("lru_cache cleared due to memory pressure");
-            }
+        if let Some(lru_lock) = &self.lru_cache
+            && let Ok(mut guard) = lru_lock.write()
+        {
+            guard.0 = hickory_resolver::ResponseCache::new(
+                guard.1,
+                hickory_resolver::TtlConfig::default(),
+            );
+            trace!("lru_cache cleared due to memory pressure");
         }
     }
 

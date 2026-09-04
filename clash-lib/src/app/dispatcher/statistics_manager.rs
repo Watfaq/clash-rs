@@ -282,7 +282,7 @@ impl Manager {
                 let val = val.trim();
                 match val.parse::<f64>() {
                     Ok(r) if r < 0.0 => DEFAULT_HARD_RATIO_X100,
-                    Ok(r) if r == 0.0 => 0, // user explicitly disables Hard
+                    Ok(0.0) => 0, // user explicitly disables Hard
                     // ratio < 1.0 is nonsensical: Hard mode (close existing
                     // conns) would trigger BEFORE Soft mode (reject new conns
                     // at 1x limit).  Clamp to default to avoid logic inversion.
@@ -628,6 +628,7 @@ impl Manager {
     /// - Clear `closed_flows` ring buffer (frees TrackerInfo with Session
     ///   strings)
     /// - Clear DNS reverse_lookup_cache via injected resolver
+    ///
     /// This releases references so jemalloc can reclaim pages (with short
     /// decay_ms configured in main.rs, pages return to OS within ~1
     /// second).
