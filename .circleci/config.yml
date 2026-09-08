@@ -62,9 +62,41 @@ commands:
       - run:
           name: "Install Rust and NASM"
           command: |
-            choco install -y nasm
+            $ErrorActionPreference = "Stop"
+
+            # 1. Install NASM via Chocolatey if not present
+            if (!(Get-Command nasm -ErrorAction SilentlyContinue) -and !(Test-Path "C:\Program Files\NASM\nasm.exe")) {
+              echo "Installing NASM via Chocolatey..."
+              choco install -y nasm
+            }
+            $nasmDir = "C:\Program Files\NASM"
+
+            # 2. Check / Install Rust via rustup
+            $cargoBin = "$env:USERPROFILE\.cargo\bin"
+            if (!(Get-Command rustup -ErrorAction SilentlyContinue) -and !(Test-Path "$cargoBin\rustup.exe")) {
+              echo "Downloading rustup-init.exe..."
+              Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
+              echo "Running rustup-init..."
+              .\rustup-init.exe -y --default-toolchain stable
+              Remove-Item -Force rustup-init.exe
+            }
+
+            # 3. Add to Environment Path permanently for subsequent steps
+            $combinedNewPaths = "$cargoBin;$nasmDir"
+            $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+            if ($machinePath -notlike "*$cargoBin*") {
+              [Environment]::SetEnvironmentVariable("Path", "$combinedNewPaths;$machinePath", "Machine")
+            }
+            $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+            if ($userPath -notlike "*$cargoBin*") {
+              [Environment]::SetEnvironmentVariable("Path", "$combinedNewPaths;$userPath", "User")
+            }
+
+            # 4. Set PATH for current session
+            $env:Path = "$combinedNewPaths;$env:Path"
+
+            # 5. Configure rustup
             rustup default stable
-            rustup update stable
             rustup component add clippy
             rustc --version
             cargo --version
@@ -144,15 +176,21 @@ jobs:
       - setup-rust-windows
       - run:
           name: "Clippy lint checks (Windows)"
-          command: cargo clippy --workspace --exclude clash-ffi -F "plus"
+          command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (Windows)"
           command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
             $env:CLASH_RS_CI = "true"
+            $env:CLASH_DOCKER_TEST = "false"
             cargo test --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Build clash-rs release binary (Windows)"
-          command: cargo build --release --bin clash-rs -F "plus"
+          command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
           path: target/release/clash-rs.exe
           destination: clash-rs-windows-amd64.exe
@@ -170,6 +208,7 @@ jobs:
           name: "Run workspace tests (macOS)"
           command: |
             export CLASH_RS_CI=true
+            export CLASH_DOCKER_TEST="false"
             cargo test --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Build clash-rs release binary (macOS)"
@@ -391,12 +430,14 @@ jobs:
       - run:
           name: "Install cargo-llvm-cov (Windows)"
           command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
             Invoke-WebRequest -Uri "https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-pc-windows-msvc.zip" -OutFile "cargo-llvm-cov.zip"
             Expand-Archive -Path "cargo-llvm-cov.zip" -DestinationPath "$env:USERPROFILE\.cargo\bin" -Force
             cargo llvm-cov --version
       - run:
           name: "Run coverage collection (Windows)"
           command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
             $env:CLASH_RS_CI = "true"
             $env:CLASH_DOCKER_TEST = "false"
             $env:RUST_LOG = "ts_control=debug,ts_runtime=debug,tailscale=debug"
@@ -445,7 +486,9 @@ jobs:
       - setup-rust-windows
       - run:
           name: "Build << parameters.target_name >>"
-          command: python scripts/ci/build.py --target-name << parameters.target_name >>
+          command: |
+            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            python scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
           paths:
