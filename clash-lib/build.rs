@@ -99,19 +99,27 @@ fn build_dashboard() -> anyhow::Result<()> {
     let npm_cache = std::env::temp_dir().join("npm-cache");
 
     // Run `npm ci` to install dependencies (no-op if already up to date).
-    let status = match std::process::Command::new(npm)
+    // If `npm ci` fails (e.g. cross-platform optional dependency discrepancies in lockfile), fall back to `npm install`.
+    let ci_status = std::process::Command::new(npm)
         .args(["ci", "--prefer-offline", "--cache"])
         .arg(&npm_cache)
         .current_dir(&dashboard_dir)
-        .status()
-    {
-        Ok(s) => s,
-        Err(e) => {
-            anyhow::bail!("npm not found; is Node.js installed? ({e})");
+        .status();
+
+    let status = match ci_status {
+        Ok(s) if s.success() => s,
+        _ => {
+            println!("cargo:warning=`npm ci` failed, falling back to `npm install`");
+            std::process::Command::new(npm)
+                .args(["install", "--prefer-offline", "--cache"])
+                .arg(&npm_cache)
+                .current_dir(&dashboard_dir)
+                .status()
+                .map_err(|e| anyhow::anyhow!("npm install failed (is Node.js installed?): {e}"))?
         }
     };
 
-    anyhow::ensure!(status.success(), "`npm ci` failed with status {status}");
+    anyhow::ensure!(status.success(), "npm dependency installation failed with status {status}");
 
     // Run `npm run build`.
     let status = std::process::Command::new(npm)

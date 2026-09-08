@@ -17,6 +17,7 @@ executors:
       RUST_TOOLCHAIN: "stable"
       RUST_LOG: "clash_lib=TRACE"
       RUSTC_BOOTSTRAP: "1"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       DEBIAN_FRONTEND: "noninteractive"
       NEEDRESTART_MODE: "a"
 
@@ -26,6 +27,7 @@ executors:
     resource_class: windows.medium
     environment:
       RUSTC_BOOTSTRAP: "1"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
   macos-machine:
     macos:
@@ -33,6 +35,7 @@ executors:
     resource_class: macos.m1.medium.gen1
     environment:
       RUSTC_BOOTSTRAP: "1"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 commands:
   setup-rust:
@@ -54,10 +57,17 @@ commands:
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bash_profile 2>/dev/null || true
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
+            echo 'export CARGO_NET_GIT_FETCH_WITH_CLI=true' >> $BASH_ENV
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
+            git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+            export CARGO_NET_GIT_FETCH_WITH_CLI=true
             if ! command -v cmake >/dev/null 2>&1; then
               if command -v brew >/dev/null 2>&1; then
                 brew install cmake protobuf || true
               fi
+            fi
+            if command -v brew >/dev/null 2>&1; then
+              brew install node || brew upgrade node || true
             fi
             rustup component add clippy rustfmt
             rustc --version
@@ -72,6 +82,10 @@ commands:
             powershell.exe -ExecutionPolicy Bypass -File scripts/ci/setup-windows.ps1
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             echo 'export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"' >> $BASH_ENV
+            echo 'export CARGO_NET_GIT_FETCH_WITH_CLI=true' >> $BASH_ENV
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
+            git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+            export CARGO_NET_GIT_FETCH_WITH_CLI=true
 
   setup-cross:
     description: "Install cross cross-compilation tool"
@@ -150,11 +164,15 @@ jobs:
           name: "Clippy lint checks (Windows)"
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
+            git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
             cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (Windows)"
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="false"
             cargo test --workspace --exclude clash-ffi -F "plus"
@@ -162,6 +180,7 @@ jobs:
           name: "Build clash-rs release binary (Windows)"
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
           path: target/release/clash-rs.exe
@@ -178,12 +197,14 @@ jobs:
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="$HOME/.cargo/bin:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="$HOME/.cargo/bin:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             export CLASH_RS_CI=true
             export CLASH_DOCKER_TEST="false"
             cargo test --workspace --exclude clash-ffi -F "plus"
@@ -192,6 +213,7 @@ jobs:
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="$HOME/.cargo/bin:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
           path: target/release/clash-rs
