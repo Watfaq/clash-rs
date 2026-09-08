@@ -1,0 +1,403 @@
+version: 2.1
+
+executors:
+  ubuntu-machine:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    environment:
+      RUST_TOOLCHAIN: "stable"
+      RUST_LOG: "clash_lib=TRACE"
+      RUSTC_BOOTSTRAP: "1"
+
+  windows-machine:
+    machine:
+      image: windows-server-2022-gui:current
+    resource_class: windows.medium
+    environment:
+      RUSTC_BOOTSTRAP: "1"
+
+  macos-machine:
+    macos:
+      xcode: "15.4.0"
+    resource_class: macos.m1.medium.gen1
+    environment:
+      RUSTC_BOOTSTRAP: "1"
+
+commands:
+  setup-rust:
+    description: "Install Rust stable toolchain"
+    steps:
+      - run:
+          name: "Install Rust"
+          command: |
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+              echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+            else
+              rustup default stable
+              rustup update stable
+              echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+            fi
+            rustc --version
+            cargo --version
+
+  setup-cross:
+    description: "Install cross cross-compilation tool"
+    steps:
+      - run:
+          name: "Install cross"
+          command: |
+            if ! command -v cross >/dev/null 2>&1; then
+              echo "Downloading cross binary..."
+              curl -sSL https://github.com/cross-rs/cross/releases/latest/download/cross-x86_64-unknown-linux-musl.tar.gz | sudo tar xzf - -C /usr/local/bin
+            fi
+            cross --version
+
+  restore-cargo-cache:
+    steps:
+      - restore_cache:
+          keys:
+            - cargo-cache-v1-{{ arch }}-{{ checksum "Cargo.lock" }}
+            - cargo-cache-v1-{{ arch }}-
+
+  save-cargo-cache:
+    steps:
+      - save_cache:
+          key: cargo-cache-v1-{{ arch }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - ~/.cargo/registry
+            - ~/.cargo/git
+
+jobs:
+  check-and-test:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - setup-rust
+      - restore-cargo-cache
+      - run:
+          name: "Install system dependencies"
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends cmake libclang-dev protobuf-compiler iperf3 iproute2
+      - run:
+          name: "Check formatting"
+          command: cargo fmt --all -- --check
+      - run:
+          name: "Clippy lint checks"
+          command: cargo clippy --workspace --all-targets --all-features
+      - run:
+          name: "Run workspace tests"
+          command: |
+            export CLASH_RS_CI=true
+            cargo test --workspace --exclude clash-ffi
+      - save-cargo-cache
+
+  proxy-throughput:
+    executor: ubuntu-machine
+    environment:
+      THROUGHPUT_RESULTS_FILE: "/tmp/throughput-results.json"
+      RUST_LOG: "clash_lib=info"
+    steps:
+      - checkout
+      - setup-rust
+      - restore-cargo-cache
+      - run:
+          name: "Install system dependencies"
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends cmake libclang-dev protobuf-compiler
+      - run:
+          name: "Build clash-rs release binary"
+          command: cargo build --release --bin clash-rs
+      - run:
+          name: "Pull test server docker images"
+          command: |
+            docker pull teddysun/shadowsocks-rust:alpine-1.22.0
+            docker pull gists/simple-obfs:latest
+            docker pull ghcr.io/ihciah/shadow-tls:latest
+            docker pull v2fly/v2fly-core:v4.45.2
+            docker pull p4gefau1t/trojan-go:latest
+            docker pull teddysun/xray:26.3.27
+            docker pull ghcr.io/sagernet/sing-box:v1.13.8
+            docker pull tobyxdd/hysteria:latest
+            docker pull ghcr.io/itsusinn/tuic-server:latest
+            docker pull ghcr.io/spongebob888/shadowquic:latest
+            docker pull docker.io/linuxserver/openssh-server:latest
+            docker pull nicolaka/netshoot:latest
+      - run:
+          name: "Download Country.mmdb"
+          command: |
+            mkdir -p clash-bin/tests/data/config
+            curl -fL https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb \
+              -o clash-bin/tests/data/config/Country.mmdb
+      - run:
+          name: "Run proxy throughput tests"
+          command: |
+            set -o pipefail
+            export CLASH_RS_CI="true"
+            RUSTFLAGS="--cfg docker_test --cfg throughput_test" \
+            cargo test -p clash-lib --release --all-features \
+              e2e_throughput \
+              -- --test-threads=4 --nocapture 2>&1 | tee throughput-test.log
+      - run:
+          name: "Format throughput results"
+          when: always
+          command: |
+            ENV_JSON=$(python3 bench/collect_env.py)
+            if [ -f "$THROUGHPUT_RESULTS_FILE" ]; then
+              python3 bench/format_throughput.py \
+                "$THROUGHPUT_RESULTS_FILE" \
+                --output throughput-comment.md \
+                --run-url "${CIRCLE_BUILD_URL:-}" \
+                --env-json "$ENV_JSON"
+            fi
+      - run:
+          name: "Post PR comment"
+          when: always
+          command: |
+            if [ -f throughput-comment.md ]; then
+              python3 scripts/ci/post_pr_comment.py \
+                --comment-file throughput-comment.md \
+                --identifier "Proxy Throughput Results"
+            fi
+      - store_artifacts:
+          path: /tmp/throughput-results.json
+          destination: throughput-results.json
+      - store_artifacts:
+          path: throughput-comment.md
+          destination: throughput-comment.md
+      - store_artifacts:
+          path: throughput-test.log
+          destination: throughput-test.log
+
+  tun-benchmark:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - setup-rust
+      - restore-cargo-cache
+      - run:
+          name: "Install system dependencies"
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends iperf3 iproute2 cmake libclang-dev
+      - run:
+          name: "Setup TUN device"
+          command: |
+            sudo modprobe tun
+            ls -la /dev/net/tun
+            sudo ip netns del benchns 2>/dev/null || true
+            sudo ip link del veth0 2>/dev/null || true
+            sudo ip link del clash-bench 2>/dev/null || true
+            sudo pkill -9 iperf3 2>/dev/null || true
+            sudo pkill -9 clash-rs 2>/dev/null || true
+      - run:
+          name: "Build clash-rs release binary"
+          command: cargo build --release --bin clash-rs --all-features
+      - run:
+          name: "Run TUN benchmark"
+          command: |
+            export CLASH_BINARY="$PWD/target/release/clash-rs"
+            sudo python3 bench/run_tun_benchmark.py \
+              --config bench/tun-benchmark.yaml \
+              --duration 10 \
+              --output benchmark-pr.json
+      - run:
+          name: "Compare benchmark results"
+          when: always
+          command: |
+            if [ -f "bench/baseline-tun-benchmark.json" ] && [ -f "benchmark-pr.json" ]; then
+              python3 bench/compare_results.py \
+                --current benchmark-pr.json \
+                --baseline bench/baseline-tun-benchmark.json \
+                --output benchmark-comment.md
+            fi
+      - run:
+          name: "Post benchmark comment"
+          when: always
+          command: |
+            if [ -f benchmark-comment.md ]; then
+              python3 scripts/ci/post_pr_comment.py \
+                --comment-file benchmark-comment.md \
+                --identifier "TUN Throughput Benchmark Results"
+            fi
+      - store_artifacts:
+          path: benchmark-pr.json
+          destination: benchmark-pr.json
+      - store_artifacts:
+          path: benchmark-comment.md
+          destination: benchmark-comment.md
+      - store_artifacts:
+          path: clash-rs-bench.log
+          destination: clash-rs-bench.log
+
+  build-linux:
+    executor: ubuntu-machine
+    parameters:
+      target_name:
+        type: string
+    steps:
+      - checkout
+      - setup-rust
+      - setup-cross
+      - restore-cargo-cache
+      - run:
+          name: "Build << parameters.target_name >>"
+          command: python3 scripts/ci/build.py --target-name << parameters.target_name >>
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - "*"
+
+  build-windows:
+    executor: windows-machine
+    parameters:
+      target_name:
+        type: string
+    steps:
+      - checkout
+      - run:
+          name: "Install Rust & NASM"
+          command: |
+            choco install -y nasm
+            rustup default stable
+            rustup update stable
+      - run:
+          name: "Build << parameters.target_name >>"
+          command: python scripts/ci/build.py --target-name << parameters.target_name >>
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - "*"
+
+  build-macos:
+    executor: macos-machine
+    parameters:
+      target_name:
+        type: string
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: "Build << parameters.target_name >>"
+          command: python3 scripts/ci/build.py --target-name << parameters.target_name >>
+      - persist_to_workspace:
+          root: dist
+          paths:
+            - "*"
+
+  publish-release:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - attach_workspace:
+          at: dist
+      - run:
+          name: "Install git-cliff"
+          command: |
+            curl -sSL https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-x86_64-unknown-linux-musl.tar.gz | sudo tar xzf - --strip-components=1 -C /usr/local/bin git-cliff
+      - run:
+          name: "Publish GitHub Release"
+          command: python3 scripts/ci/publish_release.py
+
+  publish-docker:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - attach_workspace:
+          at: dist
+      - run:
+          name: "Build and Push Multi-Arch Docker Image"
+          command: bash scripts/ci/docker-publish.sh
+
+workflows:
+  pr-pipeline:
+    jobs:
+      - check-and-test:
+          filters:
+            tags:
+              ignore: /^v.*/
+      - proxy-throughput:
+          filters:
+            tags:
+              ignore: /^v.*/
+      - tun-benchmark:
+          filters:
+            tags:
+              ignore: /^v.*/
+
+  release-pipeline:
+    jobs:
+      # Linux primary release targets
+      - build-linux:
+          matrix:
+            parameters:
+              target_name:
+                - "x86_64-unknown-linux-gnu"
+                - "x86_64-unknown-linux-musl"
+                - "aarch64-unknown-linux-gnu"
+                - "aarch64-unknown-linux-musl"
+                - "armv7-unknown-linux-gnueabi"
+                - "armv7-unknown-linux-gnueabihf"
+                - "armv7-unknown-linux-musleabihf"
+                - "i686-unknown-linux-gnu"
+                - "i686-unknown-linux-musl"
+                - "riscv64gc-unknown-linux-gnu"
+                - "mips-unknown-linux-musl"
+                - "mipsel-unknown-linux-musl"
+                - "x86_64-unknown-freebsd"
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+      # Windows release targets
+      - build-windows:
+          matrix:
+            parameters:
+              target_name:
+                - "x86_64-pc-windows-msvc"
+                - "i686-pc-windows-msvc"
+                - "aarch64-pc-windows-msvc"
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+      # macOS release targets
+      - build-macos:
+          matrix:
+            parameters:
+              target_name:
+                - "x86_64-apple-darwin"
+                - "aarch64-apple-darwin"
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+      # Release and Docker publishing (runs after builds complete)
+      - publish-release:
+          requires:
+            - build-linux
+            - build-windows
+            - build-macos
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+      - publish-docker:
+          requires:
+            - build-linux
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
