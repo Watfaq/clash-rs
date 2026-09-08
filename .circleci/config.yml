@@ -52,6 +52,13 @@ commands:
             fi
             export PATH="$HOME/.cargo/bin:$PATH"
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bash_profile 2>/dev/null || true
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
+            if ! command -v cmake >/dev/null 2>&1; then
+              if command -v brew >/dev/null 2>&1; then
+                brew install cmake protobuf || true
+              fi
+            fi
             rustup component add clippy rustfmt
             rustc --version
             cargo --version
@@ -62,44 +69,9 @@ commands:
       - run:
           name: "Install Rust and NASM"
           command: |
-            $ErrorActionPreference = "Stop"
-
-            # 1. Install NASM via Chocolatey if not present
-            if (!(Get-Command nasm -ErrorAction SilentlyContinue) -and !(Test-Path "C:\Program Files\NASM\nasm.exe")) {
-              echo "Installing NASM via Chocolatey..."
-              choco install -y nasm
-            }
-            $nasmDir = "C:\Program Files\NASM"
-
-            # 2. Check / Install Rust via rustup
-            $cargoBin = "$env:USERPROFILE\.cargo\bin"
-            if (!(Get-Command rustup -ErrorAction SilentlyContinue) -and !(Test-Path "$cargoBin\rustup.exe")) {
-              echo "Downloading rustup-init.exe..."
-              Invoke-WebRequest -Uri "https://win.rustup.rs/x86_64" -OutFile "rustup-init.exe"
-              echo "Running rustup-init..."
-              .\rustup-init.exe -y --default-toolchain stable
-              Remove-Item -Force rustup-init.exe
-            }
-
-            # 3. Add to Environment Path permanently for subsequent steps
-            $combinedNewPaths = "$cargoBin;$nasmDir"
-            $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-            if ($machinePath -notlike "*$cargoBin*") {
-              [Environment]::SetEnvironmentVariable("Path", "$combinedNewPaths;$machinePath", "Machine")
-            }
-            $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-            if ($userPath -notlike "*$cargoBin*") {
-              [Environment]::SetEnvironmentVariable("Path", "$combinedNewPaths;$userPath", "User")
-            }
-
-            # 4. Set PATH for current session
-            $env:Path = "$combinedNewPaths;$env:Path"
-
-            # 5. Configure rustup
-            rustup default stable
-            rustup component add clippy
-            rustc --version
-            cargo --version
+            powershell.exe -ExecutionPolicy Bypass -File scripts/ci/setup-windows.ps1
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            echo 'export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"' >> $BASH_ENV
 
   setup-cross:
     description: "Install cross cross-compilation tool"
@@ -177,19 +149,19 @@ jobs:
       - run:
           name: "Clippy lint checks (Windows)"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (Windows)"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
-            $env:CLASH_RS_CI = "true"
-            $env:CLASH_DOCKER_TEST = "false"
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CLASH_RS_CI="true"
+            export CLASH_DOCKER_TEST="false"
             cargo test --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Build clash-rs release binary (Windows)"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
           path: target/release/clash-rs.exe
@@ -203,16 +175,24 @@ jobs:
       - setup-rust
       - run:
           name: "Clippy lint checks (macOS)"
-          command: cargo clippy --workspace --exclude clash-ffi -F "plus"
+          command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
+            cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (macOS)"
           command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
             export CLASH_RS_CI=true
             export CLASH_DOCKER_TEST="false"
             cargo test --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Build clash-rs release binary (macOS)"
-          command: cargo build --release --bin clash-rs -F "plus"
+          command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
+            cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
           path: target/release/clash-rs
           destination: clash-rs-macos-arm64
@@ -399,11 +379,15 @@ jobs:
       - run:
           name: "Install cargo-llvm-cov (macOS)"
           command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
             curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-installer.sh | sh
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
       - run:
           name: "Run coverage collection (macOS)"
           command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="false"
             export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
@@ -412,6 +396,8 @@ jobs:
           name: "Upload to Codecov (macOS)"
           when: always
           command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
             if [ -f codecov-macos.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
               curl -Os https://cli.codecov.io/latest/macos/codecov
               chmod +x codecov
@@ -430,26 +416,27 @@ jobs:
       - run:
           name: "Install cargo-llvm-cov (Windows)"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
-            Invoke-WebRequest -Uri "https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-pc-windows-msvc.zip" -OutFile "cargo-llvm-cov.zip"
-            Expand-Archive -Path "cargo-llvm-cov.zip" -DestinationPath "$env:USERPROFILE\.cargo\bin" -Force
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-pc-windows-msvc.zip -o cargo-llvm-cov.zip
+            unzip -o cargo-llvm-cov.zip -d "$USERPROFILE/.cargo/bin"
             cargo llvm-cov --version
       - run:
           name: "Run coverage collection (Windows)"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
-            $env:CLASH_RS_CI = "true"
-            $env:CLASH_DOCKER_TEST = "false"
-            $env:RUST_LOG = "ts_control=debug,ts_runtime=debug,tailscale=debug"
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CLASH_RS_CI="true"
+            export CLASH_DOCKER_TEST="false"
+            export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
             cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov-windows.json
       - run:
           name: "Upload to Codecov (Windows)"
           when: always
           command: |
-            if (Test-Path "codecov-windows.json" -and $env:CODECOV_TOKEN) {
-              Invoke-WebRequest -Uri "https://cli.codecov.io/latest/windows/codecov.exe" -OutFile "codecov.exe"
-              .\codecov.exe upload-process --token "$env:CODECOV_TOKEN" -f "codecov-windows.json"
-            }
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            if [ -f codecov-windows.json ] && [ -n "$CODECOV_TOKEN" ]; then
+              curl -Os https://cli.codecov.io/latest/windows/codecov.exe
+              ./codecov.exe upload-process --token "$CODECOV_TOKEN" -f codecov-windows.json || true
+            fi
       - store_artifacts:
           path: codecov-windows.json
           destination: codecov-windows.json
@@ -487,7 +474,7 @@ jobs:
       - run:
           name: "Build << parameters.target_name >>"
           command: |
-            $env:Path = "$env:USERPROFILE\.cargo\bin;C:\Program Files\NASM;$env:Path"
+            export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             python scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
@@ -507,7 +494,10 @@ jobs:
       - setup-rust
       - run:
           name: "Build << parameters.target_name >>"
-          command: python3 scripts/ci/build.py --target-name << parameters.target_name >>
+          command: |
+            [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+            export PATH="$HOME/.cargo/bin:$PATH"
+            python3 scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
           paths:
