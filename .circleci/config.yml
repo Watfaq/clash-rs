@@ -67,6 +67,10 @@ commands:
               echo 'export PATH="/opt/homebrew/bin:$PATH"' >> $BASH_ENV
               echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.bash_profile 2>/dev/null || true
               echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
+              if [ -d "clash-dashboard" ]; then
+                echo "Pre-installing and building clash-dashboard for macOS..."
+                (cd clash-dashboard && export PATH="/opt/homebrew/bin:$PATH" && npm install && npm install @rolldown/binding-darwin-arm64@1.1.5 --no-save && npm run build) || true
+              fi
             fi
             rustup component add clippy rustfmt
             rustc --version
@@ -402,8 +406,8 @@ jobs:
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
-            curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-installer.sh | sh
-            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+            curl -sSL https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-aarch64-apple-darwin.tar.gz | tar xzf - -C "$HOME/.cargo/bin"
+            cargo llvm-cov --version
       - run:
           name: "Run coverage collection (macOS)"
           command: |

@@ -90,6 +90,12 @@ fn build_dashboard() -> anyhow::Result<()> {
         );
     }
 
+    // In CI or when dist already exists, skip running npm build again to avoid redundant Vite runs.
+    let dist_index = dashboard_dir.join("dist").join("index.html");
+    if std::env::var_os("CI").is_some() && dist_index.exists() {
+        return Ok(());
+    }
+
     // On Windows npm is a .cmd script, not a binary.
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
 
@@ -109,6 +115,17 @@ fn build_dashboard() -> anyhow::Result<()> {
             .status()
             .map_err(|e| anyhow::anyhow!("npm install failed (is Node.js installed?): {e}"))?;
         anyhow::ensure!(status.success(), "`npm install` failed with status {status}");
+    }
+
+    // Workaround for npm bug (npm/cli#4828): optionalDependencies are skipped when lockfile is cross-platform on macOS ARM64
+    if std::env::consts::OS == "macos" && std::env::consts::ARCH == "aarch64" {
+        let darwin_arm64_binding = dashboard_dir.join("node_modules/@rolldown/binding-darwin-arm64");
+        if !darwin_arm64_binding.exists() {
+            let _ = std::process::Command::new(npm)
+                .args(["install", "@rolldown/binding-darwin-arm64@1.1.5", "--no-save"])
+                .current_dir(&dashboard_dir)
+                .status();
+        }
     }
 
     // Run `npm run build`.
