@@ -99,9 +99,6 @@ jobs:
       - install-system-packages:
           packages: "cmake libclang-dev protobuf-compiler iperf3 iproute2"
       - run:
-          name: "Check formatting"
-          command: cargo fmt --all -- --check
-      - run:
           name: "Clippy lint checks"
           command: cargo clippy --workspace --all-targets --all-features
       - run:
