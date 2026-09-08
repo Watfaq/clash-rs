@@ -61,13 +61,12 @@ commands:
             git config --global url."https://github.com/".insteadOf "git@github.com:"
             git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
             export CARGO_NET_GIT_FETCH_WITH_CLI=true
-            if ! command -v cmake >/dev/null 2>&1; then
-              if command -v brew >/dev/null 2>&1; then
-                brew install cmake protobuf || true
-              fi
-            fi
             if command -v brew >/dev/null 2>&1; then
-              brew install node || brew upgrade node || true
+              brew install node cmake protobuf || brew upgrade node || true
+              export PATH="/opt/homebrew/bin:$PATH"
+              echo 'export PATH="/opt/homebrew/bin:$PATH"' >> $BASH_ENV
+              echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.bash_profile 2>/dev/null || true
+              echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc 2>/dev/null || true
             fi
             rustup component add clippy rustfmt
             rustc --version
@@ -196,14 +195,14 @@ jobs:
           name: "Clippy lint checks (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             export CLASH_RS_CI=true
             export CLASH_DOCKER_TEST="false"
@@ -212,7 +211,7 @@ jobs:
           name: "Build clash-rs release binary (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             cargo build --release --bin clash-rs -F "plus"
       - store_artifacts:
@@ -402,14 +401,14 @@ jobs:
           name: "Install cargo-llvm-cov (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-installer.sh | sh
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
       - run:
           name: "Run coverage collection (macOS)"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="false"
             export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
@@ -419,7 +418,7 @@ jobs:
           when: always
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             if [ -f codecov-macos.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
               curl -Os https://cli.codecov.io/latest/macos/codecov
               chmod +x codecov
@@ -518,7 +517,7 @@ jobs:
           name: "Build << parameters.target_name >>"
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
+            export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
             python3 scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist

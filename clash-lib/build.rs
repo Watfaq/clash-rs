@@ -98,28 +98,18 @@ fn build_dashboard() -> anyhow::Result<()> {
     // that the nodesource pre-build step may have created.
     let npm_cache = std::env::temp_dir().join("npm-cache");
 
-    // Run `npm ci` to install dependencies (no-op if already up to date).
-    // If `npm ci` fails (e.g. cross-platform optional dependency discrepancies in lockfile), fall back to `npm install`.
-    let ci_status = std::process::Command::new(npm)
-        .args(["ci", "--prefer-offline", "--cache"])
-        .arg(&npm_cache)
-        .current_dir(&dashboard_dir)
-        .status();
-
-    let status = match ci_status {
-        Ok(s) if s.success() => s,
-        _ => {
-            println!("cargo:warning=`npm ci` failed, falling back to `npm install`");
-            std::process::Command::new(npm)
-                .args(["install", "--prefer-offline", "--cache"])
-                .arg(&npm_cache)
-                .current_dir(&dashboard_dir)
-                .status()
-                .map_err(|e| anyhow::anyhow!("npm install failed (is Node.js installed?): {e}"))?
-        }
-    };
-
-    anyhow::ensure!(status.success(), "npm dependency installation failed with status {status}");
+    // Install dependencies if not already installed.
+    // Use `npm install` so npm correctly resolves platform-specific native optional dependencies (such as @rolldown/binding-*).
+    let node_modules = dashboard_dir.join("node_modules");
+    if !node_modules.exists() {
+        let status = std::process::Command::new(npm)
+            .args(["install", "--prefer-offline", "--cache"])
+            .arg(&npm_cache)
+            .current_dir(&dashboard_dir)
+            .status()
+            .map_err(|e| anyhow::anyhow!("npm install failed (is Node.js installed?): {e}"))?;
+        anyhow::ensure!(status.success(), "`npm install` failed with status {status}");
+    }
 
     // Run `npm run build`.
     let status = std::process::Command::new(npm)
