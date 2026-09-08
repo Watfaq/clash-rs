@@ -33,12 +33,16 @@ commands:
           command: |
             if ! command -v rustup >/dev/null 2>&1; then
               curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-              echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
             else
               rustup default stable
               rustup update stable
-              echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
             fi
+            if [ -f "$HOME/.cargo/env" ]; then
+              source "$HOME/.cargo/env"
+            fi
+            export PATH="$HOME/.cargo/bin:$PATH"
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+            rustup component add clippy rustfmt
             rustc --version
             cargo --version
 
