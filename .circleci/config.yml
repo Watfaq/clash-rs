@@ -1,5 +1,13 @@
 version: 2.1
 
+parameters:
+  run_version_bump:
+    type: boolean
+    default: false
+  version_type:
+    type: string
+    default: "minor"
+
 executors:
   ubuntu-machine:
     machine:
@@ -241,6 +249,46 @@ jobs:
           path: clash-rs-bench.log
           destination: clash-rs-bench.log
 
+  coverage:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - setup-rust
+      - restore-cargo-cache
+      - install-system-packages:
+          packages: "cmake libclang-dev protobuf-compiler"
+      - run:
+          name: "Install cargo-llvm-cov"
+          command: |
+            if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
+              echo "Downloading cargo-llvm-cov..."
+              curl -sSL https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz | sudo tar xzf - -C /usr/local/bin
+            fi
+            cargo llvm-cov --version
+      - run:
+          name: "Run coverage collection"
+          command: |
+            export CLASH_RS_CI="true"
+            export CLASH_DOCKER_TEST="true"
+            export CROSS_CONTAINER_OPTS="--network host"
+            export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
+            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov.json
+      - run:
+          name: "Upload to Codecov"
+          when: always
+          command: |
+            if [ -f codecov.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
+              echo "Uploading coverage to Codecov..."
+              curl -Os https://cli.codecov.io/latest/linux/codecov
+              chmod +x codecov
+              ./codecov upload-process --token "$CODECOV_TOKEN" -f codecov.json || true
+            else
+              echo "Notice: codecov.json generated. Set CODECOV_TOKEN in CircleCI settings to upload."
+            fi
+      - store_artifacts:
+          path: codecov.json
+          destination: codecov.json
+
   build-linux:
     executor: ubuntu-machine
     parameters:
@@ -320,8 +368,19 @@ jobs:
           name: "Build and Push Multi-Arch Docker Image"
           command: bash scripts/ci/docker-publish.sh
 
+  bump-version:
+    executor: ubuntu-machine
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: "Bump version and push tag"
+          command: |
+            python3 scripts/ci/bump_version.py << pipeline.parameters.version_type >> --commit --push
+
 workflows:
   pr-pipeline:
+    unless: << pipeline.parameters.run_version_bump >>
     jobs:
       - check-and-test:
           filters:
@@ -335,61 +394,73 @@ workflows:
           filters:
             tags:
               ignore: /^v.*/
+      - coverage:
+          filters:
+            tags:
+              ignore: /^v.*/
 
   release-pipeline:
+    unless: << pipeline.parameters.run_version_bump >>
     jobs:
-      # Linux primary release targets
+      # All 15 Linux, FreeBSD, and Android targets from target.toml
       - build-linux:
           matrix:
             parameters:
               target_name:
                 - "x86_64-unknown-linux-gnu"
+                - "x86_64-unknown-linux-gnu-static-crt"
+                - "i686-unknown-linux-gnu"
                 - "x86_64-unknown-linux-musl"
+                - "i686-unknown-linux-musl"
                 - "aarch64-unknown-linux-gnu"
                 - "aarch64-unknown-linux-musl"
                 - "armv7-unknown-linux-gnueabi"
                 - "armv7-unknown-linux-gnueabihf"
                 - "armv7-unknown-linux-musleabihf"
-                - "i686-unknown-linux-gnu"
-                - "i686-unknown-linux-musl"
                 - "riscv64gc-unknown-linux-gnu"
                 - "mips-unknown-linux-musl"
                 - "mipsel-unknown-linux-musl"
                 - "x86_64-unknown-freebsd"
+                - "x86_64-linux-android"
           filters:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
 
-      # Windows release targets
+      # All 6 Windows targets from target.toml
       - build-windows:
           matrix:
             parameters:
               target_name:
                 - "x86_64-pc-windows-msvc"
+                - "x86_64-pc-windows-msvc-static-crt"
                 - "i686-pc-windows-msvc"
+                - "i686-pc-windows-msvc-static-crt"
                 - "aarch64-pc-windows-msvc"
+                - "aarch64-pc-windows-msvc-static-crt"
           filters:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
 
-      # macOS release targets
+      # All 4 macOS targets from target.toml
       - build-macos:
           matrix:
             parameters:
               target_name:
                 - "x86_64-apple-darwin"
+                - "x86_64-apple-darwin-static-crt"
                 - "aarch64-apple-darwin"
+                - "aarch64-apple-darwin-static-crt"
           filters:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
 
-      # Release and Docker publishing (runs after builds complete)
+      # Release and Docker publishing
       - publish-release:
           requires:
             - build-linux
@@ -399,7 +470,7 @@ workflows:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
 
       - publish-docker:
           requires:
@@ -408,4 +479,9 @@ workflows:
             tags:
               only: /^v.*/
             branches:
-              ignore: /.*/
+              only: master
+
+  version-bump-workflow:
+    when: << pipeline.parameters.run_version_bump >>
+    jobs:
+      - bump-version
