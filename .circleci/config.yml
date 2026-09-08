@@ -36,7 +36,7 @@ executors:
 
 commands:
   setup-rust:
-    description: "Install Rust stable toolchain"
+    description: "Install Rust stable toolchain on Unix"
     steps:
       - run:
           name: "Install Rust"
@@ -53,6 +53,19 @@ commands:
             export PATH="$HOME/.cargo/bin:$PATH"
             echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
             rustup component add clippy rustfmt
+            rustc --version
+            cargo --version
+
+  setup-rust-windows:
+    description: "Setup Rust and tools on Windows"
+    steps:
+      - run:
+          name: "Install Rust and NASM"
+          command: |
+            choco install -y nasm
+            rustup default stable
+            rustup update stable
+            rustup component add clippy
             rustc --version
             cargo --version
 
@@ -98,7 +111,8 @@ commands:
             - ~/.cargo/git
 
 jobs:
-  check-and-test:
+  # Linux PR Check
+  check-linux:
     executor: ubuntu-machine
     steps:
       - checkout
@@ -116,6 +130,37 @@ jobs:
             cargo test --workspace --exclude clash-ffi
       - save-cargo-cache
 
+  # Windows PR Check
+  check-windows:
+    executor: windows-machine
+    steps:
+      - checkout
+      - setup-rust-windows
+      - run:
+          name: "Clippy lint checks (Windows)"
+          command: cargo clippy --workspace --exclude clash-ffi -F "plus"
+      - run:
+          name: "Run workspace tests (Windows)"
+          command: |
+            $env:CLASH_RS_CI = "true"
+            cargo test --workspace --exclude clash-ffi -F "plus"
+
+  # macOS PR Check
+  check-macos:
+    executor: macos-machine
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: "Clippy lint checks (macOS)"
+          command: cargo clippy --workspace --exclude clash-ffi -F "plus"
+      - run:
+          name: "Run workspace tests (macOS)"
+          command: |
+            export CLASH_RS_CI=true
+            cargo test --workspace --exclude clash-ffi -F "plus"
+
+  # Proxy E2E Throughput (Ubuntu Docker)
   proxy-throughput:
     executor: ubuntu-machine
     environment:
@@ -191,6 +236,7 @@ jobs:
           path: throughput-test.log
           destination: throughput-test.log
 
+  # TUN Throughput Benchmark (Ubuntu Root + Netns)
   tun-benchmark:
     executor: ubuntu-machine
     steps:
@@ -249,7 +295,8 @@ jobs:
           path: clash-rs-bench.log
           destination: clash-rs-bench.log
 
-  coverage:
+  # Coverage Linux (1:1 with coverage.yml ubuntu-latest)
+  coverage-linux:
     executor: ubuntu-machine
     steps:
       - checkout
@@ -266,29 +313,89 @@ jobs:
             fi
             cargo llvm-cov --version
       - run:
-          name: "Run coverage collection"
+          name: "Run coverage collection (Linux)"
           command: |
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="true"
             export CROSS_CONTAINER_OPTS="--network host"
             export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
-            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov.json
+            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov-linux.json
       - run:
           name: "Upload to Codecov"
           when: always
           command: |
-            if [ -f codecov.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
-              echo "Uploading coverage to Codecov..."
+            if [ -f codecov-linux.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
               curl -Os https://cli.codecov.io/latest/linux/codecov
               chmod +x codecov
-              ./codecov upload-process --token "$CODECOV_TOKEN" -f codecov.json || true
-            else
-              echo "Notice: codecov.json generated. Set CODECOV_TOKEN in CircleCI settings to upload."
+              ./codecov upload-process --token "$CODECOV_TOKEN" -f codecov-linux.json || true
             fi
       - store_artifacts:
-          path: codecov.json
-          destination: codecov.json
+          path: codecov-linux.json
+          destination: codecov-linux.json
 
+  # Coverage macOS (1:1 with coverage.yml macos-latest)
+  coverage-macos:
+    executor: macos-machine
+    steps:
+      - checkout
+      - setup-rust
+      - run:
+          name: "Install cargo-llvm-cov (macOS)"
+          command: |
+            curl -LsSf https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-installer.sh | sh
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run:
+          name: "Run coverage collection (macOS)"
+          command: |
+            export CLASH_RS_CI="true"
+            export CLASH_DOCKER_TEST="false"
+            export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
+            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov-macos.json
+      - run:
+          name: "Upload to Codecov (macOS)"
+          when: always
+          command: |
+            if [ -f codecov-macos.json ] && [ -n "${CODECOV_TOKEN:-}" ]; then
+              curl -Os https://cli.codecov.io/latest/macos/codecov
+              chmod +x codecov
+              ./codecov upload-process --token "$CODECOV_TOKEN" -f codecov-macos.json || true
+            fi
+      - store_artifacts:
+          path: codecov-macos.json
+          destination: codecov-macos.json
+
+  # Coverage Windows (1:1 with coverage.yml windows-latest)
+  coverage-windows:
+    executor: windows-machine
+    steps:
+      - checkout
+      - setup-rust-windows
+      - run:
+          name: "Install cargo-llvm-cov (Windows)"
+          command: |
+            Invoke-WebRequest -Uri "https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-pc-windows-msvc.zip" -OutFile "cargo-llvm-cov.zip"
+            Expand-Archive -Path "cargo-llvm-cov.zip" -DestinationPath "$env:USERPROFILE\.cargo\bin" -Force
+            cargo llvm-cov --version
+      - run:
+          name: "Run coverage collection (Windows)"
+          command: |
+            $env:CLASH_RS_CI = "true"
+            $env:CLASH_DOCKER_TEST = "false"
+            $env:RUST_LOG = "ts_control=debug,ts_runtime=debug,tailscale=debug"
+            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov-windows.json
+      - run:
+          name: "Upload to Codecov (Windows)"
+          when: always
+          command: |
+            if (Test-Path "codecov-windows.json" -and $env:CODECOV_TOKEN) {
+              Invoke-WebRequest -Uri "https://cli.codecov.io/latest/windows/codecov.exe" -OutFile "codecov.exe"
+              .\codecov.exe upload-process --token "$env:CODECOV_TOKEN" -f "codecov-windows.json"
+            }
+      - store_artifacts:
+          path: codecov-windows.json
+          destination: codecov-windows.json
+
+  # Release Build Jobs across all 25 targets
   build-linux:
     executor: ubuntu-machine
     parameters:
@@ -314,12 +421,7 @@ jobs:
         type: string
     steps:
       - checkout
-      - run:
-          name: "Install Rust & NASM"
-          command: |
-            choco install -y nasm
-            rustup default stable
-            rustup update stable
+      - setup-rust-windows
       - run:
           name: "Build << parameters.target_name >>"
           command: python scripts/ci/build.py --target-name << parameters.target_name >>
@@ -399,19 +501,40 @@ workflows:
   pr-pipeline:
     unless: << pipeline.parameters.run_version_bump >>
     jobs:
-      - check-and-test:
+      # Cross-platform tests: Linux, Windows, macOS
+      - check-linux:
           filters:
             tags:
               ignore: /^v.*/
+      - check-windows:
+          filters:
+            tags:
+              ignore: /^v.*/
+      - check-macos:
+          filters:
+            tags:
+              ignore: /^v.*/
+
+      # Cross-platform coverage: Linux, Windows, macOS (1:1 with coverage.yml)
+      - coverage-linux:
+          filters:
+            tags:
+              ignore: /^v.*/
+      - coverage-windows:
+          filters:
+            tags:
+              ignore: /^v.*/
+      - coverage-macos:
+          filters:
+            tags:
+              ignore: /^v.*/
+
+      # Linux-specific E2E Docker & TUN tests
       - proxy-throughput:
           filters:
             tags:
               ignore: /^v.*/
       - tun-benchmark:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - coverage:
           filters:
             tags:
               ignore: /^v.*/
