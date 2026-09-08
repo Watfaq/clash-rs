@@ -477,6 +477,8 @@ jobs:
       - setup-rust
       - setup-cross
       - restore-cargo-cache
+      - install-system-packages:
+          packages: "cmake libclang-dev protobuf-compiler"
       - run:
           name: "Build << parameters.target_name >>"
           command: python3 scripts/ci/build.py --target-name << parameters.target_name >>
@@ -500,6 +502,7 @@ jobs:
           name: "Build << parameters.target_name >>"
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             python scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
@@ -522,6 +525,7 @@ jobs:
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+            export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             python3 scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
@@ -586,51 +590,24 @@ jobs:
             git push origin "v$VERSION"
 
 workflows:
-  pr-pipeline:
+  clash-ci:
     unless: << pipeline.parameters.run_version_bump >>
     jobs:
-      # Cross-platform tests: Linux, Windows, macOS
-      - check-linux:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - check-windows:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - check-macos:
-          filters:
-            tags:
-              ignore: /^v.*/
+      # Cross-platform host tests: Linux, Windows, macOS
+      - check-linux
+      - check-windows
+      - check-macos
 
       # Cross-platform coverage: Linux, Windows, macOS (1:1 with coverage.yml)
-      - coverage-linux:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - coverage-windows:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - coverage-macos:
-          filters:
-            tags:
-              ignore: /^v.*/
+      - coverage-linux
+      - coverage-windows
+      - coverage-macos
 
       # Linux-specific E2E Docker & TUN tests
-      - proxy-throughput:
-          filters:
-            tags:
-              ignore: /^v.*/
-      - tun-benchmark:
-          filters:
-            tags:
-              ignore: /^v.*/
+      - proxy-throughput
+      - tun-benchmark
 
-  release-pipeline:
-    unless: << pipeline.parameters.run_version_bump >>
-    jobs:
-      # All 15 Linux, FreeBSD, and Android targets from target.toml
+      # All 15 Linux, FreeBSD, and Android targets from target.toml (1:1 with GHA matrix)
       - build-linux:
           matrix:
             parameters:
@@ -650,13 +627,8 @@ workflows:
                 - "mipsel-unknown-linux-musl"
                 - "x86_64-unknown-freebsd"
                 - "x86_64-linux-android"
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              only: master
 
-      # All 6 Windows targets from target.toml
+      # All 6 Windows targets from target.toml (1:1 with GHA matrix)
       - build-windows:
           matrix:
             parameters:
@@ -667,13 +639,8 @@ workflows:
                 - "i686-pc-windows-msvc-static-crt"
                 - "aarch64-pc-windows-msvc"
                 - "aarch64-pc-windows-msvc-static-crt"
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              only: master
 
-      # All 4 macOS targets from target.toml
+      # All 4 macOS targets from target.toml (1:1 with GHA matrix)
       - build-macos:
           matrix:
             parameters:
@@ -682,13 +649,8 @@ workflows:
                 - "x86_64-apple-darwin-static-crt"
                 - "aarch64-apple-darwin"
                 - "aarch64-apple-darwin-static-crt"
-          filters:
-            tags:
-              only: /^v.*/
-            branches:
-              only: master
 
-      # Release and Docker publishing
+      # Release and Docker publishing (only on master push or release tags v*)
       - publish-release:
           requires:
             - build-linux
