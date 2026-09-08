@@ -374,9 +374,26 @@ jobs:
       - checkout
       - setup-rust
       - run:
-          name: "Bump version and push tag"
+          name: "Configure Git"
           command: |
-            python3 scripts/ci/bump_version.py << pipeline.parameters.version_type >> --commit --push
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+      - run:
+          name: "Install cargo-edit"
+          command: cargo install cargo-edit
+      - run:
+          name: "Bump version"
+          command: cargo set-version --bump << pipeline.parameters.version_type >>
+      - run:
+          name: "Commit, tag and push"
+          command: |
+            VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "clash-rs") | .version')
+            echo "New version: v$VERSION"
+            git add Cargo.toml clash-bin/Cargo.toml clash-dns/Cargo.toml clash-doc/Cargo.toml clash-ffi/Cargo.toml clash-lib/Cargo.toml clash-netstack/Cargo.toml Cargo.lock
+            git commit -m "chore: bump version to v$VERSION"
+            git tag "v$VERSION"
+            git push origin master
+            git push origin "v$VERSION"
 
 workflows:
   pr-pipeline:
