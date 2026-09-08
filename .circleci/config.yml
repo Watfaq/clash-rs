@@ -128,6 +128,12 @@ jobs:
           command: |
             export CLASH_RS_CI=true
             cargo test --workspace --exclude clash-ffi
+      - run:
+          name: "Build clash-rs release binary"
+          command: cargo build --release --bin clash-rs -F "plus"
+      - store_artifacts:
+          path: target/release/clash-rs
+          destination: clash-rs-linux-amd64
       - save-cargo-cache
 
   # Windows PR Check
@@ -144,6 +150,12 @@ jobs:
           command: |
             $env:CLASH_RS_CI = "true"
             cargo test --workspace --exclude clash-ffi -F "plus"
+      - run:
+          name: "Build clash-rs release binary (Windows)"
+          command: cargo build --release --bin clash-rs -F "plus"
+      - store_artifacts:
+          path: target/release/clash-rs.exe
+          destination: clash-rs-windows-amd64.exe
 
   # macOS PR Check
   check-macos:
@@ -159,6 +171,12 @@ jobs:
           command: |
             export CLASH_RS_CI=true
             cargo test --workspace --exclude clash-ffi -F "plus"
+      - run:
+          name: "Build clash-rs release binary (macOS)"
+          command: cargo build --release --bin clash-rs -F "plus"
+      - store_artifacts:
+          path: target/release/clash-rs
+          destination: clash-rs-macos-arm64
 
   # Proxy E2E Throughput (Ubuntu Docker)
   proxy-throughput:
@@ -413,6 +431,9 @@ jobs:
           root: dist
           paths:
             - "*"
+      - store_artifacts:
+          path: dist
+          destination: dist
 
   build-windows:
     executor: windows-machine
@@ -429,6 +450,9 @@ jobs:
           root: dist
           paths:
             - "*"
+      - store_artifacts:
+          path: dist
+          destination: dist
 
   build-macos:
     executor: macos-machine
@@ -445,6 +469,9 @@ jobs:
           root: dist
           paths:
             - "*"
+      - store_artifacts:
+          path: dist
+          destination: dist
 
   publish-release:
     executor: ubuntu-machine
@@ -459,6 +486,9 @@ jobs:
       - run:
           name: "Publish GitHub Release"
           command: python3 scripts/ci/publish_release.py
+      - store_artifacts:
+          path: dist
+          destination: release-assets
 
   publish-docker:
     executor: ubuntu-machine
