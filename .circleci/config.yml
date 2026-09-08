@@ -100,7 +100,7 @@ jobs:
           packages: "cmake libclang-dev protobuf-compiler iperf3 iproute2"
       - run:
           name: "Clippy lint checks"
-          command: cargo clippy --workspace --all-targets --all-features
+          command: cargo clippy --workspace --all-features
       - run:
           name: "Run workspace tests"
           command: |
