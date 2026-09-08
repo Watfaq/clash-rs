@@ -9,6 +9,8 @@ executors:
       RUST_TOOLCHAIN: "stable"
       RUST_LOG: "clash_lib=TRACE"
       RUSTC_BOOTSTRAP: "1"
+      DEBIAN_FRONTEND: "noninteractive"
+      NEEDRESTART_MODE: "a"
 
   windows-machine:
     machine:
@@ -58,6 +60,20 @@ commands:
             fi
             cross --version
 
+  install-system-packages:
+    description: "Install system packages non-interactively without prompt hanging"
+    parameters:
+      packages:
+        type: string
+    steps:
+      - run:
+          name: "Install system dependencies: << parameters.packages >>"
+          command: |
+            sudo mkdir -p /etc/needrestart/conf.d
+            echo '$nrconf{restart} = "a";' | sudo tee /etc/needrestart/conf.d/no-prompt.conf >/dev/null 2>&1 || true
+            sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y --no-install-recommends << parameters.packages >>
+
   restore-cargo-cache:
     steps:
       - restore_cache:
@@ -80,11 +96,8 @@ jobs:
       - checkout
       - setup-rust
       - restore-cargo-cache
-      - run:
-          name: "Install system dependencies"
-          command: |
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends cmake libclang-dev protobuf-compiler iperf3 iproute2
+      - install-system-packages:
+          packages: "cmake libclang-dev protobuf-compiler iperf3 iproute2"
       - run:
           name: "Check formatting"
           command: cargo fmt --all -- --check
@@ -107,11 +120,8 @@ jobs:
       - checkout
       - setup-rust
       - restore-cargo-cache
-      - run:
-          name: "Install system dependencies"
-          command: |
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends cmake libclang-dev protobuf-compiler
+      - install-system-packages:
+          packages: "cmake libclang-dev protobuf-compiler"
       - run:
           name: "Build clash-rs release binary"
           command: cargo build --release --bin clash-rs
@@ -182,11 +192,8 @@ jobs:
       - checkout
       - setup-rust
       - restore-cargo-cache
-      - run:
-          name: "Install system dependencies"
-          command: |
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends iperf3 iproute2 cmake libclang-dev
+      - install-system-packages:
+          packages: "iperf3 iproute2 cmake libclang-dev"
       - run:
           name: "Setup TUN device"
           command: |
