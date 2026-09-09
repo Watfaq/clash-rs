@@ -98,7 +98,7 @@ impl ProxySetProvider {
                     }
                     hc.update(input).await;
                     tokio::spawn(async move {
-                        hc.check().await;
+                        hc.check(false).await;
                     });
                 })
             },
@@ -303,7 +303,7 @@ impl ProxyProvider for ProxySetProvider {
     }
 
     async fn healthcheck(&self) {
-        self.hc.check().await;
+        self.hc.check(false).await;
     }
 }
 
