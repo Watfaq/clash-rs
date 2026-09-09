@@ -196,17 +196,18 @@ impl AsyncRead for GrpcStream {
             let to_read = std::cmp::min(buf.remaining(), self.payload_len);
             let to_read = std::cmp::min(to_read, self.buffer.len());
 
-            if to_read == 0 {
-                assert!(buf.remaining() > 0);
+            if to_read > 0 {
+                let data = self.buffer.split_to(to_read);
 
-                return Poll::Pending;
+                self.payload_len -= to_read;
+                buf.put_slice(&data[..]);
+                return Poll::Ready(Ok(()));
             }
-
-            let data = self.buffer.split_to(to_read);
-
-            self.payload_len -= to_read;
-            buf.put_slice(&data[..]);
-            return Poll::Ready(Ok(()));
+            // to_read == 0 (buf.remaining() > 0 per AsyncRead contract):
+            // we parsed the gRPC/protobuf header but the payload hasn't
+            // arrived in the buffer yet.  Fall through to poll_data below
+            // so the waker gets registered.  Returning Poll::Pending here
+            // without registering a waker would deadlock the task forever.
         }
 
         match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {

@@ -665,8 +665,14 @@ async fn create_components(
         dns_resolver.clone(),
         config.general.mode,
         statistics_manager.clone(),
-        config.experimental.and_then(|e| e.tcp_buffer_size),
+        config.experimental.as_ref().and_then(|e| e.tcp_buffer_size),
     ));
+
+    if let Some(ref exp) = config.experimental
+        && let Some(cap) = exp.closed_flows_cap
+    {
+        crate::app::dispatcher::set_closed_flows_cap(cap);
+    }
 
     debug!("initializing authenticator");
     let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));

@@ -100,12 +100,26 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             payload.put_slice(b"\r\n");
             payload.put_slice(data);
 
-            if written.is_none() {
+            if let Some(w) = *written {
+                payload.advance(w);
+            } else {
                 *written = Some(0);
             }
 
             while !payload.is_empty() {
                 let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
+                if n == 0 {
+                    // poll_write returning Ok(0) means the stream is closed
+                    // (per AsyncWrite contract). Without this check, the loop
+                    // would spin forever since payload.advance(0) makes no
+                    // progress. Mirror std::io::Write::write_all behavior.
+                    *pkt_container = None;
+                    *written = None;
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write whole trojan udp packet: stream closed",
+                    )));
+                }
                 *written.as_mut().unwrap() += n;
                 payload.advance(n);
 
@@ -384,5 +398,108 @@ impl Stream for OutboundDatagramTrojan {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
+
+    use futures::{SinkExt, StreamExt};
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+    use super::*;
+
+    struct ChunkedStream {
+        buf: Vec<u8>,
+        chunk_size: usize,
+    }
+
+    impl AsyncWrite for ChunkedStream {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            let to_write = std::cmp::min(buf.len(), self.chunk_size);
+            self.buf.extend_from_slice(&buf[..to_write]);
+            Poll::Ready(Ok(to_write))
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncRead for ChunkedStream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    impl crate::proxy::ProxyStream for ChunkedStream {}
+
+    #[tokio::test]
+    async fn test_trojan_datagram_sink_partial_writes() {
+        let stream: AnyStream = Box::new(ChunkedStream {
+            buf: Vec::new(),
+            chunk_size: 3,
+        });
+        let remote_addr: SocksAddr = "1.1.1.1:443".parse().unwrap();
+        let mut sink = OutboundDatagramTrojan::new(stream, remote_addr.clone());
+
+        let dst_addr: SocksAddr = "8.8.8.8:53".parse().unwrap();
+        let payload = b"hello trojan udp payload with enough length";
+        let packet = UdpPacket {
+            data: payload.to_vec(),
+            src_addr: remote_addr.clone(),
+            dst_addr: dst_addr.clone(),
+            inbound_user: None,
+        };
+
+        sink.send(packet).await.expect("send must succeed");
+    }
+
+    #[tokio::test]
+    async fn test_trojan_datagram_roundtrip() {
+        let (client_io, server_io) = tokio::io::duplex(4096);
+        let remote_addr: SocksAddr = "1.1.1.1:443".parse().unwrap();
+        let mut client =
+            OutboundDatagramTrojan::new(Box::new(client_io), remote_addr.clone());
+        let mut server =
+            OutboundDatagramTrojan::new(Box::new(server_io), remote_addr.clone());
+
+        let dst_addr: SocksAddr = "8.8.8.8:53".parse().unwrap();
+        let test_payload = b"roundtrip trojan udp packet data";
+        let packet = UdpPacket {
+            data: test_payload.to_vec(),
+            src_addr: remote_addr.clone(),
+            dst_addr: dst_addr.clone(),
+            inbound_user: None,
+        };
+
+        client.send(packet).await.expect("send should succeed");
+
+        let received = server.next().await.expect("should receive packet");
+        assert_eq!(received.data, test_payload);
+        assert_eq!(received.dst_addr, dst_addr);
+        assert_eq!(received.src_addr, remote_addr);
     }
 }

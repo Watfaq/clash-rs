@@ -107,9 +107,73 @@ pub struct Snapshot {
 
 type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
 
+/// Lightweight record stored in the `closed_flows` ring buffer.
+/// Unlike `TrackerInfo`, this does NOT hold `session_holder` (Session) or
+/// `proxy_chain_holder` (ProxyChain), which are the biggest memory consumers
+/// per connection. This prevents the ring buffer from retaining large objects
+/// after connections close, which was the root cause of "memory keeps growing
+/// after speed test stops".
+///
+/// Fields are stored as concrete types (not trait objects) so callers can
+/// access them directly without downcasting.
+#[derive(Serialize, Clone)]
+pub struct ClosedFlowInfo {
+    #[serde(rename = "id")]
+    pub uuid: uuid::Uuid,
+    #[serde(rename = "upload")]
+    pub upload_total: u64,
+    #[serde(rename = "download")]
+    pub download_total: u64,
+    #[serde(rename = "start")]
+    pub start_time: chrono::DateTime<Utc>,
+    #[serde(rename = "chains")]
+    pub proxy_chain: Vec<String>,
+    #[serde(rename = "rule")]
+    pub rule: String,
+    #[serde(rename = "rulePayload")]
+    pub rule_payload: String,
+    /// Pre-extracted from Session for /flows API consumption.
+    pub host: String,
+    pub destination_port: u16,
+    pub network: String,
+    pub source_ip: String,
+    pub country: Option<String>,
+    pub asn: Option<String>,
+}
+
+impl ClosedFlowInfo {
+    /// Create from a `TrackerInfo` by snapshotting atomic counters and
+    /// extracting concrete fields from session_holder. The heavy
+    /// `session_holder` and `proxy_chain_holder` are NOT carried over.
+    pub async fn from_tracker_info(info: &TrackerInfo) -> Self {
+        let chain = info.proxy_chain_holder.snapshot().await;
+        Self {
+            uuid: info.uuid,
+            upload_total: info.upload_total.load(Ordering::Acquire),
+            download_total: info.download_total.load(Ordering::Acquire),
+            start_time: info.start_time,
+            proxy_chain: chain,
+            rule: info.rule.clone(),
+            rule_payload: info.rule_payload.clone(),
+            host: info.session_holder.destination.host(),
+            destination_port: info.session_holder.destination.port(),
+            network: match info.session_holder.network {
+                crate::session::Network::Tcp => "tcp".to_string(),
+                crate::session::Network::Udp => "udp".to_string(),
+            },
+            source_ip: info.session_holder.source.ip().to_string(),
+            country: info.session_holder.country.clone(),
+            asn: info.session_holder.asn.clone(),
+        }
+    }
+}
+
 pub struct Manager {
     connections: Arc<Mutex<ConnectionMap>>,
-    closed_flows: Arc<Mutex<VecDeque<Arc<TrackerInfo>>>>,
+    /// Ring buffer of recently closed connections for the /flows API.
+    /// Uses `ClosedFlowInfo` (lightweight) instead of `Arc<TrackerInfo>`
+    /// to avoid retaining `Session` and `ProxyChain` after close.
+    closed_flows: Arc<Mutex<VecDeque<ClosedFlowInfo>>>,
     upload_temp: AtomicU64,
     download_temp: AtomicU64,
     upload_blip: AtomicU64,
@@ -119,6 +183,24 @@ pub struct Manager {
     /// Bytes accumulated from **closed** connections, keyed by inbound_user.
     /// Drained (and reset) by [`Manager::drain_user_stats`].
     user_period_stats: Arc<Mutex<HashMap<String, UserTraffic>>>,
+}
+
+/// Default capacity of the `closed_flows` ring buffer.
+/// Can be overridden via `experimental.closed-flows-cap` in config.
+const DEFAULT_CLOSED_FLOWS_CAP: usize = 50;
+
+/// Global closed_flows capacity. Uses AtomicUsize so it can be
+/// updated on config reload (unlike OnceLock which is set-once).
+static CLOSED_FLOWS_CAP_CONFIG: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(DEFAULT_CLOSED_FLOWS_CAP);
+
+/// Set the global closed_flows capacity. Called during config loading.
+pub fn set_closed_flows_cap(cap: usize) {
+    CLOSED_FLOWS_CAP_CONFIG.store(cap, std::sync::atomic::Ordering::Release);
+}
+
+fn closed_flows_cap() -> usize {
+    CLOSED_FLOWS_CAP_CONFIG.load(std::sync::atomic::Ordering::Acquire)
 }
 
 impl Manager {
@@ -143,7 +225,6 @@ impl Manager {
 
     pub async fn track(&self, item: Tracked, close_notify: Sender<()>) {
         let mut connections = self.connections.lock().await;
-
         connections.insert(item.id(), (item, close_notify));
     }
 
@@ -157,11 +238,21 @@ impl Manager {
         let closed_flows = self.closed_flows.clone();
 
         tokio::spawn(async move {
-            let mut connections = connections.lock().await;
-            if let Some((tracked, _)) = connections.remove(&id) {
-                let info = tracked.tracker_info();
-                // Atomically take the remaining user-accounting bytes.
-                // upload_total/download_total are left intact for /connections.
+            // Phase 1: hold connections lock only to remove the entry.
+            // We must NOT acquire user_period_stats or closed_flows while
+            // holding connections, because drain_user_stats acquires
+            // user_period_stats -> connections (reverse order = AB-BA
+            // deadlock).
+            let info = {
+                let mut connections = connections.lock().await;
+                connections
+                    .remove(&id)
+                    .map(|(tracked, _)| tracked.tracker_info())
+            };
+            // --- connections lock released ---
+
+            if let Some(info) = info {
+                // Phase 2: update user stats (no connections lock held).
                 let upload = info.user_upload.swap(0, Ordering::AcqRel);
                 let download = info.user_download.swap(0, Ordering::AcqRel);
                 if let Some(ref user) = info.session_holder.inbound_user
@@ -175,10 +266,18 @@ impl Manager {
                     entry.download += download;
                 }
 
-                // Push to the closed_flows ring buffer (cap 1000).
+                // Phase 3: push lightweight ClosedFlowInfo to closed_flows.
+                // This avoids retaining session_holder and proxy_chain_holder
+                // in the ring buffer, which was the root cause of memory
+                // growing after speed test stops.
+                let flow = ClosedFlowInfo::from_tracker_info(&info).await;
+                // info (Arc<TrackerInfo>) is dropped here — no more references
+                // to the heavy Session/ProxyChain from the ring buffer.
+                drop(info);
                 let mut ring = closed_flows.lock().await;
-                ring.push_back(info);
-                if ring.len() > 1000 {
+                let cap = closed_flows_cap();
+                ring.push_back(flow);
+                while ring.len() > cap {
                     ring.pop_front();
                 }
             }
@@ -196,8 +295,8 @@ impl Manager {
             .collect()
     }
 
-    /// Return a snapshot of recently closed connections (up to 1000 entries).
-    pub async fn closed_flows_snapshot(&self) -> Vec<Arc<TrackerInfo>> {
+    /// Return a snapshot of recently closed connections.
+    pub async fn closed_flows_snapshot(&self) -> Vec<ClosedFlowInfo> {
         let ring = self.closed_flows.lock().await;
         ring.iter().cloned().collect()
     }
