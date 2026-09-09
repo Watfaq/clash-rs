@@ -130,6 +130,11 @@ def run_build(target_cfg: dict, dist_dir: Path, dry_run: bool = False, run_tests
     build_std = target_cfg.get("build-std", False)
     skip_test = target_cfg.get("skip-test", False)
 
+    # Ensure target standard library is installed via rustup before cargo builds
+    if tool == "cargo" and not build_std:
+        print(f"Ensuring rustup target '{target_triple}' is installed...")
+        subprocess.run(["rustup", "target", "add", target_triple], check=False)
+
     print(f"\n=======================================================")
     print(f"Building: {release_name}")
     print(f"Target:   {target_triple}")

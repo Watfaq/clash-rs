@@ -24,10 +24,14 @@ executors:
   windows-machine:
     machine:
       image: windows-server-2022-gui:current
-    resource_class: windows.medium
+    resource_class: windows.large
     environment:
       RUSTC_BOOTSTRAP: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      CARGO_PROFILE_TEST_DEBUG: "1"
+      CARGO_PROFILE_DEV_DEBUG: "1"
+      _NT_SYMBOL_PATH: ""
+      RUSTFLAGS: "-C link-arg=/DEBUG:FASTLINK"
 
   macos-machine:
     macos:
@@ -71,6 +75,13 @@ commands:
                 echo "Pre-installing and building clash-dashboard for macOS..."
                 (cd clash-dashboard && export PATH="/opt/homebrew/bin:$PATH" && npm install && npm install @rolldown/binding-darwin-arm64@1.1.5 --no-save && npm run build) || true
               fi
+            elif [ -d "clash-dashboard" ] && [ ! -f "clash-dashboard/dist/index.html" ]; then
+              if command -v npm >/dev/null 2>&1; then
+                (cd clash-dashboard && npm install && npm run build) || true
+              fi
+            fi
+            if [ "$(uname -s)" = "Darwin" ]; then
+              rustup target add x86_64-apple-darwin aarch64-apple-darwin || true
             fi
             rustup component add clippy rustfmt
             rustc --version
@@ -86,9 +97,18 @@ commands:
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             echo 'export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"' >> $BASH_ENV
             echo 'export CARGO_NET_GIT_FETCH_WITH_CLI=true' >> $BASH_ENV
+            echo 'export CARGO_PROFILE_TEST_DEBUG=1' >> $BASH_ENV
+            echo 'export CARGO_PROFILE_DEV_DEBUG=1' >> $BASH_ENV
+            echo 'export _NT_SYMBOL_PATH=""' >> $BASH_ENV
+            echo 'export RUSTFLAGS="-C link-arg=/DEBUG:FASTLINK"' >> $BASH_ENV
             git config --global url."https://github.com/".insteadOf "git@github.com:"
             git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
             export CARGO_NET_GIT_FETCH_WITH_CLI=true
+            export CARGO_PROFILE_TEST_DEBUG=1
+            export CARGO_PROFILE_DEV_DEBUG=1
+            export _NT_SYMBOL_PATH=""
+            export RUSTFLAGS="-C link-arg=/DEBUG:FASTLINK"
+            rustup target add i686-pc-windows-msvc aarch64-pc-windows-msvc || true
 
   setup-cross:
     description: "Install cross cross-compilation tool"
@@ -173,14 +193,16 @@ jobs:
             cargo clippy --workspace --exclude clash-ffi -F "plus"
       - run:
           name: "Run workspace tests (Windows)"
+          no_output_timeout: 30m
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="false"
-            cargo test --workspace --exclude clash-ffi -F "plus"
+            cargo test --workspace --exclude clash-ffi -F "plus" -j 2
       - run:
           name: "Build clash-rs release binary (Windows)"
+          no_output_timeout: 30m
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
@@ -447,12 +469,13 @@ jobs:
             cargo llvm-cov --version
       - run:
           name: "Run coverage collection (Windows)"
+          no_output_timeout: 30m
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             export CLASH_RS_CI="true"
             export CLASH_DOCKER_TEST="false"
             export RUST_LOG="ts_control=debug,ts_runtime=debug,tailscale=debug"
-            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov-windows.json
+            cargo llvm-cov --workspace --exclude clash-ffi -F "plus" -j 2 --codecov --output-path codecov-windows.json
       - run:
           name: "Upload to Codecov (Windows)"
           when: always
@@ -481,6 +504,7 @@ jobs:
           packages: "cmake libclang-dev protobuf-compiler"
       - run:
           name: "Build << parameters.target_name >>"
+          no_output_timeout: 30m
           command: python3 scripts/ci/build.py --target-name << parameters.target_name >>
       - persist_to_workspace:
           root: dist
@@ -500,6 +524,7 @@ jobs:
       - setup-rust-windows
       - run:
           name: "Build << parameters.target_name >>"
+          no_output_timeout: 30m
           command: |
             export PATH="$USERPROFILE/.cargo/bin:/c/Program Files/NASM:$PATH"
             export CARGO_NET_GIT_FETCH_WITH_CLI="true"
@@ -522,6 +547,7 @@ jobs:
       - setup-rust
       - run:
           name: "Build << parameters.target_name >>"
+          no_output_timeout: 30m
           command: |
             [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
             export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
