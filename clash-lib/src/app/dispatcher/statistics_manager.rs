@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, atomic::Ordering},
+    sync::{Arc, Weak, atomic::Ordering},
 };
 
 use chrono::Utc;
@@ -122,7 +122,7 @@ pub struct Snapshot {
     memory: usize,
 }
 
-type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
+type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Option<Sender<()>>)>;
 
 /// Lightweight record stored in the `closed_flows` ring buffer.
 /// Unlike `TrackerInfo`, this does NOT hold `session_holder` (Session) or
@@ -209,8 +209,9 @@ pub struct Manager {
     /// Number of new connections rejected due to memory pressure (for stats).
     mem_pressure_rejects: AtomicU64,
     /// DNS resolver for clearing DNS caches under memory pressure.
-    /// Injected after construction via [`Manager::set_dns_resolver`].
-    dns_resolver: RwLock<Option<ThreadSafeDNSResolver>>,
+    /// Stored as a `Weak` reference to allow the resolver graph to be dropped
+    /// immediately when `RuntimeComponents` are replaced during reload.
+    dns_resolver: RwLock<Option<Weak<dyn crate::app::dns::ClashResolver>>>,
     /// Hard-mode trigger ratio (e.g. 2.0 = trigger at 2x limit).
     /// Stored as the multiplier * 100 (200 = 2.0x) to fit in AtomicU64.
     /// 0 = Hard mode disabled (user prefers OOM kill over connection drop).
@@ -344,7 +345,7 @@ impl Manager {
     /// Called once during startup after both the resolver and manager exist.
     pub async fn set_dns_resolver(&self, r: ThreadSafeDNSResolver) {
         let mut guard = self.dns_resolver.write().await;
-        *guard = Some(r);
+        *guard = Some(Arc::downgrade(&r));
     }
 
     pub async fn track(&self, item: Tracked, close_notify: Sender<()>) {
@@ -369,7 +370,7 @@ impl Manager {
         }
 
         let mut connections = self.connections.lock().await;
-        connections.insert(item.id(), (item, close_notify));
+        connections.insert(item.id(), (item, Some(close_notify)));
     }
 
     /// Untrack a connection.
@@ -481,8 +482,10 @@ impl Manager {
 
         tokio::spawn(async move {
             let mut connections = connections.lock().await;
-            if let Some((_, close_notify)) = connections.remove(&id) {
-                let _ = close_notify.send(());
+            if let Some((_, close_notify_opt)) = connections.get_mut(&id) {
+                if let Some(close_notify) = close_notify_opt.take() {
+                    let _ = close_notify.send(());
+                }
             }
         });
     }
@@ -491,8 +494,10 @@ impl Manager {
         let connections = self.connections.clone();
 
         let mut connections = connections.lock().await;
-        for (_, (_, close_notify)) in connections.drain() {
-            let _ = close_notify.send(());
+        for (_, close_notify_opt) in connections.values_mut() {
+            if let Some(close_notify) = close_notify_opt.take() {
+                let _ = close_notify.send(());
+            }
         }
     }
 
@@ -664,15 +669,15 @@ impl Manager {
                 }
             }
 
-            // 2. Clear DNS caches (reverse_lookup_cache)
-            // Fix(2026-08-04): clone resolver ref before .await to avoid
+            // 2. Clear DNS caches (reverse_lookup_cache & lru_cache)
+            // Fix(2026-08-04): upgrade Weak resolver ref before .await to avoid
             // holding the read lock across the async boundary, which can
             // deadlock set_dns_resolver().
             {
                 let guard = self.dns_resolver.read().await;
-                let resolver_opt = guard.clone();
+                let resolver_opt = guard.as_ref().and_then(|w| w.upgrade());
                 drop(guard);
-                if let Some(r) = resolver_opt.as_ref() {
+                if let Some(r) = resolver_opt {
                     r.clear_cache().await;
                 }
             }
@@ -758,49 +763,28 @@ impl Manager {
                         / HARD_CLOSE_FRACTION_DEN)
                         .max(1) as usize;
 
-                    // Remove the chosen IDs from the map and collect their
-                    // close notifiers.  The lock is released at the end of
-                    // this block.
-                    let mut pending: Vec<(Tracked, Sender<()>)> =
-                        Vec::with_capacity(to_close);
+                    // Take the close notifiers WITHOUT removing the connection
+                    // entries from the map. When the connection tasks receive
+                    // close_notify, they terminate and invoke `untrack(id)`
+                    // naturally on drop, which finalizes their full byte counts
+                    // in /flows and /user-stats after traffic has completely
+                    // stopped.
+                    let mut pending: Vec<Sender<()>> = Vec::with_capacity(to_close);
                     for (id, ..) in candidates.into_iter().take(to_close) {
-                        if let Some((tracked, close_notify)) =
-                            connections.remove(&id)
+                        if let Some((_, close_notify_opt)) = connections.get_mut(&id)
                         {
-                            pending.push((tracked, close_notify));
+                            if let Some(close_notify) = close_notify_opt.take() {
+                                pending.push(close_notify);
+                            }
                         }
                     }
                     (count, to_close, pending)
                 };
                 // --- Lock released ---
 
-                // --- Phase 2: signal closure outside the lock & process
-                // accounting ---
+                // --- Phase 2: signal closure outside the lock ---
                 let mut closed = 0u64;
-                for (tracked, close_notify) in pending_close.drain(..) {
-                    let t = tracked.tracker_info();
-                    let flow = ClosedFlowInfo::from_tracker_info(&t).await;
-
-                    if let Some(user) = t.session_holder.inbound_user.clone() {
-                        let up = t.user_upload.load(Ordering::Acquire);
-                        let down = t.user_download.load(Ordering::Acquire);
-                        if up > 0 || down > 0 {
-                            let mut user_stats = self.user_period_stats.lock().await;
-                            let entry = user_stats.entry(user).or_default();
-                            entry.upload += up;
-                            entry.download += down;
-                        }
-                    }
-
-                    {
-                        let mut ring = self.closed_flows.lock().await;
-                        let cap = closed_flows_cap();
-                        ring.push_back(flow);
-                        while ring.len() > cap {
-                            ring.pop_front();
-                        }
-                    }
-
+                for close_notify in pending_close.drain(..) {
                     let _ = close_notify.send(());
                     closed += 1;
                 }

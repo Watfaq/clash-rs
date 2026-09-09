@@ -429,6 +429,10 @@ impl RuntimeComponents {
         self.tun_runner.shutdown();
         self.dns_listener.shutdown();
         self.inbound_manager.shutdown();
+        let stats = self.statistics_manager.clone();
+        tokio::spawn(async move {
+            stats.stop().await;
+        });
     }
 }
 
