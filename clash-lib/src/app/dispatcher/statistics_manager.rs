@@ -736,6 +736,9 @@ impl Manager {
                     // downloads).
                     let mut candidates: Vec<(uuid::Uuid, u64, bool)> = connections
                         .iter()
+                        .filter(|(_, (_, close_notify_opt))| {
+                            close_notify_opt.is_some()
+                        })
                         .map(|(id, (tracked, _))| {
                             let info = tracked.tracker_info();
                             let bytes = info.upload_total.load(Ordering::Relaxed)
@@ -770,12 +773,14 @@ impl Manager {
                     // in /flows and /user-stats after traffic has completely
                     // stopped.
                     let mut pending: Vec<Sender<()>> = Vec::with_capacity(to_close);
-                    for (id, ..) in candidates.into_iter().take(to_close) {
+                    for (id, ..) in candidates {
+                        if pending.len() >= to_close {
+                            break;
+                        }
                         if let Some((_, close_notify_opt)) = connections.get_mut(&id)
+                            && let Some(close_notify) = close_notify_opt.take()
                         {
-                            if let Some(close_notify) = close_notify_opt.take() {
-                                pending.push(close_notify);
-                            }
+                            pending.push(close_notify);
                         }
                     }
                     (count, to_close, pending)
